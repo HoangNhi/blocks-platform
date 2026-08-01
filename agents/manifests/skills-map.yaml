@@ -1,0 +1,61 @@
+skills:
+  - skill: using-superpowers
+    protocol: agents/protocol/core.md
+    purpose: Khoi dong workflow tham chieu
+    required: true
+    fallback: Doc core.md va superpowers-compat.md
+  - skill: brainstorming
+    protocol: agents/protocol/development-workflow.md
+    purpose: Kham pha va chot thiet ke
+    required: true
+    fallback: Doc development-workflow.md
+  - skill: writing-plans
+    protocol: agents/protocol/development-workflow.md
+    purpose: Viet implementation plan
+    required: true
+    fallback: Doc development-workflow.md
+  - skill: executing-plans
+    protocol: agents/protocol/development-workflow.md
+    purpose: Thuc thi theo plan da duyet
+    required: true
+    fallback: Doc development-workflow.md
+  - skill: verification-before-completion
+    protocol: agents/protocol/verification.md
+    purpose: Xac minh truoc khi closeout
+    required: true
+    fallback: Doc verification.md
+  - skill: subagent-driven-development
+    protocol: agents/protocol/development-workflow.md
+    purpose: Thuc thi tac vu bang subagent va review 2 buoc
+    required: true
+    fallback: Doc development-workflow.md
+  - skill: test-driven-development
+    protocol: agents/protocol/tdd-debugging.md
+    purpose: Chu trinh RED-GREEN-REFACTOR
+    required: true
+    fallback: Doc tdd-debugging.md
+  - skill: systematic-debugging
+    protocol: agents/protocol/tdd-debugging.md
+    purpose: Quy trinh go loi co he thong
+    required: true
+    fallback: Doc tdd-debugging.md
+  - skill: using-git-worktrees
+    protocol: agents/protocol/branch-workflow.md
+    purpose: Tao va quan ly workspace doc lap
+    required: true
+    fallback: Doc branch-workflow.md
+  - skill: finishing-a-development-branch
+    protocol: agents/protocol/branch-workflow.md
+    purpose: Dong nhanh sau khi hoan tat
+    required: true
+    fallback: Doc branch-workflow.md
+  - skill: requesting-code-review
+    protocol: agents/protocol/development-workflow.md
+    purpose: Yeu cau review code tu agent hoac nguoi dung
+    required: true
+    fallback: Doc development-workflow.md
+  - skill: receiving-code-review
+    protocol: agents/protocol/development-workflow.md
+    purpose: Phan hoi lai danh gia code
+    required: true
+    fallback: Doc development-workflow.md

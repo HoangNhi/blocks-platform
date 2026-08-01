@@ -1,0 +1,96 @@
+{
+    "version":  2,
+    "repositories":  {
+                         "agent-skills":  {
+                                              "url":  "https://github.com/addyosmani/agent-skills.git",
+                                              "commit":  "7829ffd90d973b6325f5f12f1b1226dcace74443"
+                                          },
+                         "browser-use":  {
+                                             "url":  "https://github.com/browser-use/browser-use.git",
+                                             "commit":  "f0aa3a8bb03779c71a5aa262d389e3bfe6b77cdc"
+                                         },
+                         "caveman":  {
+                                         "url":  "https://github.com/JuliusBrussee/caveman.git",
+                                         "commit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0"
+                                     },
+                         "impeccable":  {
+                                            "url":  "https://github.com/pbakaus/impeccable.git",
+                                            "commit":  "1cf7d7ab0f1ac0bb3319fd20be389a3009f4037d"
+                                        },
+                         "obsidian-skills":  {
+                                                 "url":  "https://github.com/kepano/obsidian-skills.git",
+                                                 "commit":  "a1dc48e68138490d522c04cbf5822214c6eb1202"
+                                             },
+                         "superpowers":  {
+                                             "url":  "https://github.com/obra/superpowers.git",
+                                             "commit":  "3dcbd5c4b48e02263fbf4a3c01e3fe4f81d584d9"
+                                         },
+                         "taste-skill":  {
+                                             "url":  "https://github.com/Leonxlnx/taste-skill.git",
+                                             "commit":  "e988add20dab0fa97d7a76781c48961c8184288e"
+                                         },
+                         "ui-ux-pro-max-skill":  {
+                                                     "url":  "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git",
+                                                     "commit":  "4857a2c5ef989794751a0f66b8545a4a49566286"
+                                                 }
+                     },
+    "skills":  {
+                   "cavecrew":  {
+                                    "source":  "JuliusBrussee/caveman",
+                                    "sourceType":  "gitlink",
+                                    "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                    "canonicalPath":  "agents/skills/caveman/skills/cavecrew",
+                                    "skillFileSha256":  "f1ce6b651c9431cc248061471bf247787c2491c0b02b912691fc8f690f01be04"
+                                },
+                   "caveman":  {
+                                   "source":  "Blocks override",
+                                   "sourceType":  "repository",
+                                   "sourceCommit":  null,
+                                   "canonicalPath":  "agents/skills/blocks-skills/skills/caveman",
+                                   "skillFileSha256":  "2ce11c37750d6f0ed534cadae88e44866d572123b31f781c19c7b9f21c23df4e",
+                                   "upstreamCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0"
+                               },
+                   "caveman-commit":  {
+                                          "source":  "JuliusBrussee/caveman",
+                                          "sourceType":  "gitlink",
+                                          "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                          "canonicalPath":  "agents/skills/caveman/skills/caveman-commit",
+                                          "skillFileSha256":  "54d5ca0894ecab0c74361d0077b71ff4e0bb60c67546880c1807bc8406ea7aab"
+                                      },
+                   "caveman-compress":  {
+                                            "source":  "JuliusBrussee/caveman",
+                                            "sourceType":  "gitlink",
+                                            "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                            "canonicalPath":  "agents/skills/caveman/skills/caveman-compress",
+                                            "skillFileSha256":  "208475f3dcdd425f5452551b2b6acb8c1879e19edbbad47450113904e5f9732e"
+                                        },
+                   "caveman-help":  {
+                                        "source":  "JuliusBrussee/caveman",
+                                        "sourceType":  "gitlink",
+                                        "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                        "canonicalPath":  "agents/skills/caveman/skills/caveman-help",
+                                        "skillFileSha256":  "c6fea66aacc891b9595aae54b2c8335c322e61f83ad8693e24d3b3ab8603849a"
+                                    },
+                   "caveman-review":  {
+                                          "source":  "JuliusBrussee/caveman",
+                                          "sourceType":  "gitlink",
+                                          "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                          "canonicalPath":  "agents/skills/caveman/skills/caveman-review",
+                                          "skillFileSha256":  "f5fcb5ec7cb461bfd95a6f5eb6dbe624967057dce7992e71213bcd3462ace742"
+                                      },
+                   "caveman-stats":  {
+                                         "source":  "JuliusBrussee/caveman",
+                                         "sourceType":  "gitlink",
+                                         "sourceCommit":  "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0",
+                                         "canonicalPath":  "agents/skills/caveman/skills/caveman-stats",
+                                         "skillFileSha256":  "7d6ba2ee3fb9b1629b6e95b326a0559f758d881d2ba826120fdfd625f578218d"
+                                     },
+                   "ui-ux-pro-max":  {
+                                         "source":  "nextlevelbuilder/ui-ux-pro-max-skill snapshot",
+                                         "sourceType":  "repository",
+                                         "sourceCommit":  "b7e3af80f6e331f6fb456667b82b12cade7c9d35",
+                                         "canonicalPath":  "agents/skills/blocks-skills/skills/ui-ux-pro-max",
+                                         "skillFileSha256":  "e6488a10ee36834104818db0a5d7c1ec7a2ead085705e0782c8ac6a414c2aef8"
+                                     }
+               }
+}

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+option csharp_namespace = "Blocks.FileService.Protos";
+
+package file;
+
+import "google/protobuf/wrappers.proto";
+
+service FileProto {
+  rpc UploadData (UploadDataRequest) returns (UploadDataResponse);
+  rpc DeleteData (DeleteDataRequest) returns (DeleteDataResponse);
+  rpc UploadAvatar (UploadAvatarRequest) returns (UploadAvatarResponse);
+}
+
+message UploadDataRequest {
+  string related_id = 1;
+  string service_path = 2;
+  string folder_name = 3;
+  string temp_folder = 4;
+}
+
+message UploadDataResponse {
+  repeated ModelAttachmentProto attachments = 1;
+}
+
+message ModelAttachmentProto {
+  string id = 1;
+  int32 reference_type = 2;
+  string related_id = 3;
+  string file_name = 4;
+  string file_extension = 5;
+  google.protobuf.DoubleValue file_size = 6;
+  string file_url = 7;
+  string full_file_name = 8;
+}
+
+message DeleteDataRequest {
+  repeated string file_paths = 1;
+}
+
+message DeleteDataResponse {
+  bool success = 1;
+}
+
+message UploadAvatarRequest {
+  string folderUploadId = 1;
+  string oldImage = 2;
+}
+
+message UploadAvatarResponse {
+  string newImage = 1;
+}

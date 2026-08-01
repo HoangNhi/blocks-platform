@@ -1,0 +1,10 @@
+name: tradelab_research
+version: 0.1.0
+description: Bounded backtest-only TradeLab research tools for isolated pilot profiles.
+author: ZOO
+kind: standalone
+platforms:
+  - linux
+provides_tools:
+  - tradelab_research_status
+  - tradelab_submit_experiment

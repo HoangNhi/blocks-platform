@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+option csharp_namespace = "Blocks.SystemService.Contracts.Grpc";
+
+package system;
+
+service SystemProto {
+  rpc CheckPermission (CheckPermissionRequest) returns (CheckActionResponse);
+  rpc GetUsersByIds (GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
+  rpc GetUsersByUsernames (GetUsersByUsernamesRequest) returns (GetUsersByUsernamesResponse);
+  rpc GetUsersByIdsPaged (GetUsersByIdsPagedRequest) returns (GetUsersByIdsPagedResponse);
+}
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string controller = 2;
+  int32 action = 3;
+}
+
+message CheckActionResponse {
+  bool success = 1;
+}
+
+message GetUsersByIdsRequest {
+  repeated string user_ids = 1;
+}
+
+message UserSummary {
+  string id = 1;
+  string fullname = 2;
+  string avatar = 3;
+  string username = 4;
+  bool is_actived = 5;
+  string email = 6;
+}
+
+message GetUsersByIdsResponse {
+  repeated UserSummary users = 1;
+}
+
+message GetUsersByUsernamesRequest {
+  repeated string usernames = 1;
+}
+
+message GetUsersByUsernamesResponse {
+  repeated UserSummary users = 1;
+}
+
+message GetUsersByIdsPagedRequest {
+  repeated string user_ids = 1;
+  string text_search = 2;
+  int32 page_index = 3;
+  int32 page_size = 4;
+}
+
+message GetUsersByIdsPagedResponse {
+  repeated UserSummary users = 1;
+  int32 page_index = 2;
+  int32 page_size = 3;
+  int32 total_row = 4;
+}

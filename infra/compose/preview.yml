@@ -1,0 +1,72 @@
+services:
+  system-service:
+    build:
+      context: .
+      dockerfile: services/system-service/Blocks.SystemService/Dockerfile
+    image: ${PREVIEW_IMAGE_PREFIX:-blocks-preview}/system-service:${PREVIEW_TAG:-local}
+    ports:
+      - "${SYSTEM_SERVICE_PORT:-15001}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+      DISABLE_HTTPS_REDIRECTION: "true"
+      Jwt__Key: ${SYSTEM_JWT_KEY:?SYSTEM_JWT_KEY required}
+    depends_on:
+      - postgres
+
+  file-service:
+    build:
+      context: .
+      dockerfile: services/file-service/Blocks.FileService/Dockerfile
+    image: ${PREVIEW_IMAGE_PREFIX:-blocks-preview}/file-service:${PREVIEW_TAG:-local}
+    ports:
+      - "${FILE_SERVICE_PORT:-15002}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+      DISABLE_HTTPS_REDIRECTION: "true"
+      Jwt__Key: ${SYSTEM_JWT_KEY:?SYSTEM_JWT_KEY required}
+    depends_on:
+      - system-service
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Blocks.ApiGateway/Dockerfile
+    image: ${PREVIEW_IMAGE_PREFIX:-blocks-preview}/api-gateway:${PREVIEW_TAG:-local}
+    ports:
+      - "${API_GATEWAY_PORT:-15000}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+    depends_on:
+      - system-service
+      - file-service
+
+  web:
+    build:
+      context: apps/web/Blocks.Web
+      dockerfile: Dockerfile
+    image: ${PREVIEW_IMAGE_PREFIX:-blocks-preview}/web:${PREVIEW_TAG:-local}
+    ports:
+      - "${WEB_PORT:-13000}:80"
+    depends_on:
+      - api-gateway
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-blocks_preview}
+      POSTGRES_USER: ${POSTGRES_USER:-blocks}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-blocks_preview_data}

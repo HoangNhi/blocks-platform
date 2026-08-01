@@ -1,0 +1,24 @@
+[submodule "agents/skills/agent-skills"]
+	path = agents/skills/agent-skills
+	url = https://github.com/addyosmani/agent-skills.git
+[submodule "agents/skills/browser-use"]
+	path = agents/skills/browser-use
+	url = https://github.com/browser-use/browser-use.git
+[submodule "agents/skills/caveman"]
+	path = agents/skills/caveman
+	url = https://github.com/JuliusBrussee/caveman.git
+[submodule "agents/skills/impeccable"]
+	path = agents/skills/impeccable
+	url = https://github.com/pbakaus/impeccable.git
+[submodule "agents/skills/obsidian-skills"]
+	path = agents/skills/obsidian-skills
+	url = https://github.com/kepano/obsidian-skills.git
+[submodule "agents/skills/superpowers"]
+	path = agents/skills/superpowers
+	url = https://github.com/obra/superpowers.git
+[submodule "agents/skills/taste-skill"]
+	path = agents/skills/taste-skill
+	url = https://github.com/Leonxlnx/taste-skill.git
+[submodule "agents/skills/ui-ux-pro-max-skill"]
+	path = agents/skills/ui-ux-pro-max-skill
+	url = https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git

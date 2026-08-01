@@ -1,0 +1,306 @@
+version: 1
+entries:
+  - source_repo: superpowers
+    source_skill_path: skills/using-superpowers
+    publish_mode: family
+    family_id: superpowers
+    target_name: using-superpowers
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/brainstorming
+    publish_mode: family
+    family_id: superpowers
+    target_name: brainstorming
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/writing-plans
+    publish_mode: family
+    family_id: superpowers
+    target_name: writing-plans
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/executing-plans
+    publish_mode: family
+    family_id: superpowers
+    target_name: executing-plans
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/subagent-driven-development
+    publish_mode: family
+    family_id: superpowers
+    target_name: subagent-driven-development
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/requesting-code-review
+    publish_mode: family
+    family_id: superpowers
+    target_name: requesting-code-review
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/receiving-code-review
+    publish_mode: family
+    family_id: superpowers
+    target_name: receiving-code-review
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/verification-before-completion
+    publish_mode: family
+    family_id: superpowers
+    target_name: verification-before-completion
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/systematic-debugging
+    publish_mode: family
+    family_id: superpowers
+    target_name: systematic-debugging
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/test-driven-development
+    publish_mode: family
+    family_id: superpowers
+    target_name: test-driven-development
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/dispatching-parallel-agents
+    publish_mode: family
+    family_id: superpowers
+    target_name: dispatching-parallel-agents
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/using-git-worktrees
+    publish_mode: family
+    family_id: superpowers
+    target_name: using-git-worktrees
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/finishing-a-development-branch
+    publish_mode: family
+    family_id: superpowers
+    target_name: finishing-a-development-branch
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: superpowers
+    source_skill_path: skills/writing-skills
+    publish_mode: family
+    family_id: superpowers
+    target_name: writing-skills
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: obsidian-skills
+    source_skill_path: skills/obsidian-markdown
+    publish_mode: standalone
+    target_name: obsidian-markdown
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: obsidian-skills
+    source_skill_path: skills/obsidian-bases
+    publish_mode: standalone
+    target_name: obsidian-bases
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: obsidian-skills
+    source_skill_path: skills/obsidian-cli
+    publish_mode: standalone
+    target_name: obsidian-cli
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: obsidian-skills
+    source_skill_path: skills/defuddle
+    publish_mode: standalone
+    target_name: defuddle
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: obsidian-skills
+    source_skill_path: skills/json-canvas
+    publish_mode: standalone
+    target_name: json-canvas
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: browser-use
+    source_skill_path: skills/browser-use
+    publish_mode: standalone
+    target_name: browser-use
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: browser-use
+    source_skill_path: skills/remote-browser
+    publish_mode: standalone
+    target_name: remote-browser
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: browser-use
+    source_skill_path: skills/open-source
+    publish_mode: standalone
+    target_name: open-source
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: browser-use
+    source_skill_path: skills/cloud
+    publish_mode: standalone
+    target_name: cloud
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: browser-use
+    source_skill_path: skills/x402
+    publish_mode: standalone
+    target_name: x402
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/taste-skill
+    publish_mode: standalone
+    target_name: taste-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/taste-skill-v1
+    publish_mode: standalone
+    target_name: taste-skill-v1
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/brandkit
+    publish_mode: standalone
+    target_name: brandkit
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/redesign-skill
+    publish_mode: standalone
+    target_name: redesign-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/output-skill
+    publish_mode: standalone
+    target_name: output-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/minimalist-skill
+    publish_mode: standalone
+    target_name: minimalist-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/brutalist-skill
+    publish_mode: standalone
+    target_name: brutalist-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/soft-skill
+    publish_mode: standalone
+    target_name: soft-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/image-to-code-skill
+    publish_mode: standalone
+    target_name: image-to-code-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/imagegen-frontend-web
+    publish_mode: standalone
+    target_name: imagegen-frontend-web
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/imagegen-frontend-mobile
+    publish_mode: standalone
+    target_name: imagegen-frontend-mobile
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/gpt-tasteskill
+    publish_mode: standalone
+    target_name: gpt-tasteskill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: taste-skill
+    source_skill_path: skills/stitch-skill
+    publish_mode: standalone
+    target_name: stitch-skill
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: agent-skills
+    source_skill_path: skills/frontend-ui-engineering
+    publish_mode: standalone
+    target_name: frontend-ui-engineering
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: blocks-skills
+    source_skill_path: skills/blocks-ui-workflow
+    publish_mode: standalone
+    target_name: blocks-ui-workflow
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: impeccable
+    source_skill_path: plugin/skills/impeccable
+    publish_mode: patched
+    target_name: impeccable
+    targets: codex,agy,claude,hermes
+    status: experimental
+    rewrite_rules: runtime-root-prefix
+
+  - source_repo: caveman
+    source_skill_path: skills/cavecrew
+    publish_mode: standalone
+    target_name: cavecrew
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: blocks-skills
+    source_skill_path: skills/caveman
+    publish_mode: standalone
+    target_name: caveman
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: caveman
+    source_skill_path: skills/caveman-commit
+    publish_mode: standalone
+    target_name: caveman-commit
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: caveman
+    source_skill_path: skills/caveman-compress
+    publish_mode: standalone
+    target_name: caveman-compress
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: caveman
+    source_skill_path: skills/caveman-help
+    publish_mode: standalone
+    target_name: caveman-help
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: caveman
+    source_skill_path: skills/caveman-review
+    publish_mode: standalone
+    target_name: caveman-review
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: caveman
+    source_skill_path: skills/caveman-stats
+    publish_mode: standalone
+    target_name: caveman-stats
+    targets: codex,agy,claude,hermes
+    status: active
+  - source_repo: blocks-skills
+    source_skill_path: skills/ui-ux-pro-max
+    publish_mode: standalone
+    target_name: ui-ux-pro-max
+    targets: codex,agy,claude,hermes
+    status: active

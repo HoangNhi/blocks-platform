@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.78"]
+    },
+    "ripple": {
+      "command": "npx",
+      "args": ["-y", "@ytsuda/ripple@0.14.1"]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["-y", "shadcn@4.16.1", "mcp"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@monotool/context7-mcp@1.0.6"]
+    }
+  }
+}

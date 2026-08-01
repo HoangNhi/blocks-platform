@@ -1,0 +1,55 @@
+description: Blocks Codex workflow quick eval
+
+providers:
+  - id: exec:node providers/codex-exec-provider.cjs
+    config:
+      workingDir: D:/Workspace/Personal/Blocks
+      codexPath: C:/Users/Adonis/AppData/Roaming/npm/codex.cmd
+      schemaPath: tests/agent-workflow-evals/schemas/workflow-output.schema.json
+      timeoutMs: 600000
+
+prompts:
+  - |-
+      Evaluate the Blocks Codex workflow response for this request.
+
+      Follow AGENTS.md in the Blocks workspace.
+      This quick eval is read-only. Do not edit files, run migrations, start services, or create artifacts.
+      Prefer targeted source-of-truth reads before broad search.
+      If the user request names a skill, follow that skill's Domain Routing and include the relevant reference files in sourceOfTruth.
+      For optimize-research-workflow workflow reviews, include references/agent-workflow-review.md, scripts/extract-codex-sessions.py, scripts/summarize-session-index.py, session_index.jsonl, latest workflow-review.md, extractor, bounded, raw, output, selected snippets, tool-output tokens, and ask before applying changes. Use these exact phrases instead of synonyms when relevant.
+      Return JSON only, matching the configured schema.
+
+      User request:
+      {{user_request}}
+
+      Requirements:
+      - Set caseId exactly to "{{case_id}}".
+      - Classify the task.
+      - Name the exact source-of-truth files or folders you would read.
+      - Name the tools you would use and the order.
+      - State the evidence rule for the task.
+      - State runtime closeout status requirements when relevant.
+      - State forbidden actions for this read-only eval.
+      - Include final response sections required by AGENTS.md.
+      - Return JSON only.
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://assertions/workflow-output.cjs
+
+tests:
+  - vars:
+      case_id: extractor-first-workflow-review
+      user_request: |-
+        Use optimize-research-workflow to review Codex workflow from latest workflow-review.md to now. Research and plan only.
+      expected_terms: optimize-research-workflow|latest workflow-review.md|extractor|extract-codex-sessions.py|summarize-session-index.py|session_index.jsonl|raw session JSONL|ask|Summary|Files Changed|Context Used|Testing|Notes
+      max_command_items: 12
+
+  - vars:
+      case_id: workflow-token-budget-tool-choice
+      user_request: |-
+        Plan a workflow review window from the latest review to now. Focus on token waste and wrong context. Do not apply changes.
+      expected_terms: latest workflow-review.md|extractor|bounded|output|raw|selected snippets|tool-output tokens|ask before applying|Summary|Files Changed|Context Used|Testing|Notes
+      max_command_items: 12

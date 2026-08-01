@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build-and-test:
+    name: Build and Test (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore Blocks.slnx
+      - run: dotnet build Blocks.slnx -c Release --no-restore
+      - run: dotnet test Blocks.slnx -c Release --no-build --verbosity normal
+
+  verify-agent-assets:
+    name: Verify Agent Assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Generate skill catalogs
+        shell: pwsh
+        run: ./agents/tools/skills/sync-agent-skills.ps1 -RepoRoot . -HermesSkillsRoot $env:RUNNER_TEMP/hermes-skills
+      - name: Verify skill catalogs
+        shell: pwsh
+        run: ./agents/tools/skills/check-agent-skills.ps1 -RepoRoot . -HermesSkillsRoot $env:RUNNER_TEMP/hermes-skills
+
+  test-agent-workflow:
+    name: Test Agent Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: 3.12
+      - name: Install test dependencies
+        run: python -m pip install pytest
+      - name: Provide PowerShell command compatibility
+        run: sudo ln -sf /usr/bin/pwsh /usr/local/bin/powershell
+      - name: Run agent workflow tests
+        run: python -m pytest -q -p no:cacheprovider tests/agent-workflow
+
+  test-python-services:
+    name: Test Python Services
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/tradelab_test
+      TRADELAB_TEST_DATABASE_RESET: "true"
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: tradelab_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tradelab_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: 3.12
+      - name: Install uv
+        run: python -m pip install uv==0.11.30
+      - name: Sync assistant service
+        working-directory: services/assistant-service
+        run: uv sync --locked --python 3.12
+      - name: Check assistant Ruff
+        working-directory: services/assistant-service
+        run: uv run --python 3.12 --locked ruff check .
+      - name: Test assistant service
+        working-directory: services/assistant-service
+        run: uv run --python 3.12 --locked pytest -q
+      - name: Sync TradeLab service
+        working-directory: plugins/tradelab/service
+        run: uv sync --locked --python 3.12
+      - name: Create TradeLab test schema
+        working-directory: plugins/tradelab/service
+        run: >-
+          uv run --python 3.12 --locked python -c
+          "from tradelab_api.db.models import Base; from tradelab_api.db.session import apply_schema_compatibility, get_engine; Base.metadata.create_all(bind=get_engine()); apply_schema_compatibility()"
+      - name: Check TradeLab Ruff
+        working-directory: plugins/tradelab/service
+        run: uv run --python 3.12 --locked ruff check .
+      - name: Test TradeLab service
+        working-directory: plugins/tradelab/service
+        run: uv run --python 3.12 --locked pytest -q
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web/Blocks.Web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.0
+          cache: npm
+          cache-dependency-path: apps/web/Blocks.Web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  boundary:
+    name: Verify Public Boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: 3.12
+      - run: python -m pip install pytest
+      - run: python -m pytest -q -p no:cacheprovider tests/agent-workflow/test_publication_boundary.py

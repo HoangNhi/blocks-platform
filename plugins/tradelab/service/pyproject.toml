@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradelab-api"
+version = "0.1.0"
+description = "TradeLab FastAPI service"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+  "pydantic-settings",
+  "sqlalchemy",
+  "psycopg[binary]",
+  "httpx",
+  "pandas",
+  "numpy",
+  "python-dateutil",
+  "pytest",
+  "pytest-asyncio",
+  "ruff",
+  "cryptography>=48.0.0",
+]
+
+[project.scripts]
+tradelab-seed-baseline = "tradelab_api.tools.seed_baseline:main"
+tradelab-clean-test-data = "tradelab_api.tools.cleanup_test_data:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

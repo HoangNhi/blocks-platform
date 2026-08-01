@@ -1,0 +1,8 @@
+**
+!apps/
+!apps/web/
+!apps/web/Blocks.Web/
+!apps/web/Blocks.Web/**
+apps/web/Blocks.Web/node_modules/
+apps/web/Blocks.Web/dist/
+apps/web/Blocks.Web/output/

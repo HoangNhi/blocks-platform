@@ -1,0 +1,61 @@
+services:
+  system-service:
+    build:
+      context: .
+      dockerfile: services/system-service/Blocks.SystemService/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/blocks-system-service:${TAG:-latest}
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      - postgres
+
+  file-service:
+    build:
+      context: .
+      dockerfile: services/file-service/Blocks.FileService/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/blocks-file-service:${TAG:-latest}
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      - system-service
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Blocks.ApiGateway/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/blocks-api-gateway:${TAG:-latest}
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      - system-service
+      - file-service
+
+  web:
+    build:
+      context: apps/web/Blocks.Web
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/blocks-web:${TAG:-latest}
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: blocks
+      POSTGRES_USER: ${POSTGRES_USER:-blocks}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

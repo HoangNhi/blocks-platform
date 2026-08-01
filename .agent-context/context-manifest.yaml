@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "project": "Blocks",
+  "maxBytes": 262144,
+  "externalVault": {
+    "env": "OBSIDIAN_VAULT_PATH",
+    "access": "read-only"
+  },
+  "canonical": [
+    "AGENTS.md",
+    "README.md",
+    "docs/README.md",
+    "docs/architecture/overview.md",
+    "docs/decisions/active-decisions.md"
+  ],
+  "areas": {
+    "core-service": {
+      "repository": [
+        "docs/architecture/services/system-service.md",
+        "docs/architecture/services/api-gateway.md",
+        "docs/architecture/services/shared.md",
+        "docs/runbooks/local-development.md"
+      ],
+      "external": [
+        "architecture/active-decisions.md",
+        "services/system-service/README.md",
+        "services/api-gateway/README.md"
+      ]
+    },
+    "tradelab": {
+      "repository": [
+        "docs/architecture/plugins/tradelab.md",
+        "docs/runbooks/tradelab-research-prompt.md",
+        "docs/runbooks/local-development.md"
+      ],
+      "external": [
+        "02-plugins/tradelab/README.md",
+        "02-plugins/tradelab/technical-decisions.md"
+      ]
+    },
+    "ai-video": {
+      "repository": [
+        "docs/architecture/plugins/ai-video-production.md"
+      ],
+      "external": [
+        "02-plugins/ai-video-production/README.md",
+        "02-plugins/ai-video-production/tasks/index.md"
+      ]
+    },
+    "infrastructure": {
+      "repository": [
+        "docs/architecture/infrastructure.md",
+        "docs/runbooks/local-development.md",
+        "docs/runbooks/agent-context.md"
+      ],
+      "external": [
+        "architecture/active-decisions.md"
+      ]
+    },
+    "file-service": {
+      "repository": [
+        "docs/architecture/services/file-service.md"
+      ],
+      "external": [
+        "services/file-service/README.md"
+      ]
+    },
+    "shared": {
+      "repository": [
+        "docs/architecture/services/shared.md"
+      ],
+      "external": [
+        "services/shared/README.md"
+      ]
+    },
+    "web": {
+      "repository": [
+        "docs/architecture/services/web.md"
+      ],
+      "external": [
+        "apps/web/README.md"
+      ]
+    },
+    "assistant": {
+      "repository": [
+        "docs/architecture/services/assistant-service.md"
+      ],
+      "external": [
+        "services/assistant-service/README.md"
+      ]
+    },
+    "agent-workflow": {
+      "repository": [
+        "docs/runbooks/agent-context.md"
+      ],
+      "external": [
+        "agent-workflow/index.md"
+      ]
+    },
+    "cross-service": {
+      "repository": [
+        "docs/architecture/overview.md"
+      ],
+      "external": [
+        "cross-service/index.md"
+      ]
+    }
+  }
+}

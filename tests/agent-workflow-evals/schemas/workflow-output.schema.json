@@ -1,0 +1,59 @@
+{
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string"
+    },
+    "classification": {
+      "type": "string"
+    },
+    "sourceOfTruth": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "plannedTools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidenceRule": {
+      "type": "string"
+    },
+    "runtimeCloseout": {
+      "type": "string"
+    },
+    "forbiddenActions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "finalResponseSections": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "caseId",
+    "classification",
+    "sourceOfTruth",
+    "plannedTools",
+    "evidenceRule",
+    "runtimeCloseout",
+    "forbiddenActions",
+    "finalResponseSections",
+    "notes"
+  ],
+  "additionalProperties": false
+}

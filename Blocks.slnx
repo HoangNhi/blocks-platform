@@ -1,0 +1,18 @@
+<Solution>
+  <Project Path="platform/apphost/Blocks.AppHost/Blocks.AppHost.csproj" />
+  <Project Path="services/file-service/Blocks.FileService/Blocks.FileService.csproj" />
+  <Project Path="services/api-gateway/Blocks.ApiGateway/Blocks.ApiGateway.csproj" />
+  <Project Path="platform/service-defaults/Blocks.ServiceDefaults/Blocks.ServiceDefaults.csproj" />
+  <Project Path="platform/shared/Blocks.Shared/Blocks.Shared.csproj" />
+  <Project Path="services/system-service/Blocks.SystemService/Blocks.SystemService.csproj" />
+  <Project Path="tests/api-gateway/Blocks.ApiGateway.Tests/Blocks.ApiGateway.Tests.csproj" />
+  <Project Path="tests/file-service/Blocks.FileService.Tests/Blocks.FileService.Tests.csproj" />
+  <Project Path="tests/system-service/Blocks.SystemService.Tests/Blocks.SystemService.Tests.csproj" />
+  <Project Path="plugins/ai-video-production/service/Blocks.AiVideoService/Blocks.AiVideoService.csproj" />
+  <Project Path="plugins/ai-video-production/service/Blocks.AiVideoImporter/Blocks.AiVideoImporter.csproj" />
+  <Project Path="tests/ai-video-production/Blocks.AiVideoService.Tests/Blocks.AiVideoService.Tests.csproj" />
+  <Project Path="apps/web/Blocks.Web/Blocks.Web.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+</Solution>

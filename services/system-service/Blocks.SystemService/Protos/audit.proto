@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option csharp_namespace = "Blocks.SystemService.Contracts.Grpc";
+
+package audit;
+
+service AuditProto {
+  rpc WriteAuditLog (WriteAuditLogRequest) returns (WriteAuditLogReply);
+}
+
+message WriteAuditLogRequest {
+  string user_id = 1;
+  string user_name = 2;
+  string action = 3;
+  string entity_name = 4;
+  string entity_id = 5;
+  string old_values = 6;
+  string new_values = 7;
+  string ip_address = 8;
+  string service_name = 9;
+  bool is_success = 10;
+  string error_message = 11;
+}
+
+message WriteAuditLogReply {
+  bool success = 1;
+  string message = 2;
+}

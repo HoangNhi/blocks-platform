@@ -1,0 +1,222 @@
+<mxfile>
+<diagram name="Blocks AWS Architecture">
+<mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+
+<!-- CLIENT LAYER -->
+<mxCell id="g-client" value="🌐 Client" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="20" y="20" width="240" height="220"/>
+</mxCell>
+<mxCell id="c-route53" value="Route 53" parent="g-client" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="200" height="40"/>
+</mxCell>
+<mxCell id="c-waf" value="AWS WAF" parent="g-client" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="90" width="200" height="40"/>
+</mxCell>
+<mxCell id="c-cloudfront" value="CloudFront CDN" parent="g-client" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="140" width="200" height="40"/>
+</mxCell>
+
+<!-- FRONTEND -->
+<mxCell id="g-frontend" value="Frontend" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="340" y="20" width="240" height="120"/>
+</mxCell>
+<mxCell id="c-s3-web" value="S3 Bucket&lt;br&gt;React SPA (Vite)" parent="g-frontend" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="200" height="50"/>
+</mxCell>
+
+<!-- CI/CD -->
+<mxCell id="g-cicd" value="CI/CD" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="660" y="20" width="240" height="140"/>
+</mxCell>
+<mxCell id="c-ga" value="GitHub Actions" parent="g-cicd" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="200" height="40"/>
+</mxCell>
+<mxCell id="c-ecr" value="Amazon ECR&lt;br&gt;Container Registry" parent="g-cicd" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="90" width="200" height="40"/>
+</mxCell>
+
+<!-- COMPUTE -->
+<mxCell id="g-compute" value="Compute — ECS Fargate" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="20" y="260" width="880" height="360"/>
+</mxCell>
+<mxCell id="c-alb" value="ALB&lt;br&gt;HTTP/2 + gRPC" parent="g-compute" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="180" height="45"/>
+</mxCell>
+
+<mxCell id="g-services" value="Service Cluster" parent="g-compute" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;strokeWidth=1.5;fontStyle=1;fontSize=12;startSize=25;verticalAlign=top;">
+<mxGeometry x="240" y="40" width="620" height="210"/>
+</mxCell>
+<mxCell id="c-gw" value="API Gateway&lt;br&gt;YARP .NET 10" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="20" y="40" width="150" height="50"/>
+</mxCell>
+<mxCell id="c-as" value="Assistant Service&lt;br&gt;FastAPI (AI Chat)" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="240" y="40" width="150" height="50"/>
+</mxCell>
+<mxCell id="c-ts" value="TradeLab Service&lt;br&gt;FastAPI (Backtest)" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="450" y="40" width="150" height="50"/>
+</mxCell>
+<mxCell id="c-ss" value="System Service&lt;br&gt;.NET 10 (Auth/RBAC)" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="20" y="120" width="150" height="50"/>
+</mxCell>
+<mxCell id="c-fs" value="File Service&lt;br&gt;.NET 10 (Upload)" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="240" y="120" width="150" height="50"/>
+</mxCell>
+<mxCell id="c-tr" value="TradeLab Runner&lt;br&gt;Python SDK" parent="g-services" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="450" y="120" width="150" height="50"/>
+</mxCell>
+
+<!-- EDGES inside Compute -->
+<mxCell id="e-alb-gw" parent="g-compute" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="200" y="62"/>
+<mxPoint x="260" y="80"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-gw-as" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="170" y="65"/>
+<mxPoint x="240" y="65"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-gw-ts" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="170" y="65"/>
+<mxPoint x="450" y="65"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-gw-ss" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="95" y="90"/>
+<mxPoint x="95" y="120"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-gw-fs" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="170" y="65"/>
+<mxPoint x="315" y="145"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-ts-tr" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="525" y="90"/>
+<mxPoint x="525" y="120"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-ss-fs" value="gRPC" parent="g-services" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;dashed=1;">
+<mxGeometry relative="1">
+<mxPoint x="170" y="145"/>
+<mxPoint x="240" y="145"/>
+</mxGeometry>
+</mxCell>
+
+<!-- DATA LAYER -->
+<mxCell id="g-data" value="Data Layer" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="20" y="660" width="640" height="180"/>
+</mxCell>
+<mxCell id="c-rds1" value="RDS PostgreSQL&lt;br&gt;System DB (users, roles, menus)" parent="g-data" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2E8B57;strokeColor=#1A5C38;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="20" y="40" width="180" height="55"/>
+</mxCell>
+<mxCell id="c-rds2" value="RDS PostgreSQL&lt;br&gt;TradeLab DB (strategies, datasets)" parent="g-data" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2E8B57;strokeColor=#1A5C38;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="230" y="40" width="180" height="55"/>
+</mxCell>
+<mxCell id="c-s3-data" value="S3 Bucket&lt;br&gt;File uploads / attachments" parent="g-data" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2E8B57;strokeColor=#1A5C38;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="440" y="40" width="180" height="55"/>
+</mxCell>
+
+<!-- AI LAYER -->
+<mxCell id="g-ai" value="AI / ML" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="940" y="20" width="200" height="130"/>
+</mxCell>
+<mxCell id="c-bedrock" value="Amazon Bedrock&lt;br&gt;LLM Inference" parent="g-ai" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="160" height="50"/>
+</mxCell>
+
+<!-- OBSERVABILITY -->
+<mxCell id="g-mon" value="Observability" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#FF9900;strokeWidth=2;fontStyle=1;fontSize=14;startSize=30;verticalAlign=top;">
+<mxGeometry x="940" y="180" width="200" height="130"/>
+</mxCell>
+<mxCell id="c-cw" value="CloudWatch&lt;br&gt;Logs / Metrics / Alarms" parent="g-mon" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="40" width="160" height="40"/>
+</mxCell>
+<mxCell id="c-xray" value="X-Ray Tracing" parent="g-mon" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="85" width="160" height="35"/>
+</mxCell>
+
+<!-- CROSS-BOUNDARY EDGES -->
+<mxCell id="e-cf-s3web" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;dashed=1;">
+<mxGeometry relative="1">
+<mxPoint x="260" y="180"/>
+<mxPoint x="340" y="75"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-cf-alb" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="260" y="190"/>
+<mxPoint x="60" y="300"/>
+</mxGeometry>
+</mxCell>
+
+<mxCell id="e-ss-rds1" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2E8B57;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="285" y="470"/>
+<mxPoint x="115" y="660"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-ts-rds2" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2E8B57;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="545" y="430"/>
+<mxPoint x="345" y="660"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-fs-s3" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2E8B57;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="460" y="470"/>
+<mxPoint x="560" y="660"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-as-bedrock" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;">
+<mxGeometry relative="1">
+<mxPoint x="415" y="390"/>
+<mxPoint x="940" y="55"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-ecr-svc" value="pull" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;dashed=1;">
+<mxGeometry relative="1">
+<mxPoint x="760" y="110"/>
+<mxPoint x="540" y="300"/>
+</mxGeometry>
+</mxCell>
+<mxCell id="e-svc-cw" parent="1" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=1.5;dashed=1;">
+<mxGeometry relative="1">
+<mxPoint x="650" y="540"/>
+<mxPoint x="940" y="215"/>
+</mxGeometry>
+</mxCell>
+
+<!-- LEGEND -->
+<mxCell id="legend" value="Legend" parent="1" vertex="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999;strokeWidth=1;fontStyle=1;fontSize=12;startSize=25;verticalAlign=top;">
+<mxGeometry x="940" y="340" width="200" height="150"/>
+</mxCell>
+<mxCell id="l-aws" value="AWS Service" parent="legend" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#232F3E;fontColor=#232F3E;fontStyle=1;fontSize=11;">
+<mxGeometry x="20" y="35" width="120" height="20"/>
+</mxCell>
+<mxCell id="l-app" value="App Component" parent="legend" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E90FF;strokeColor=#0E5A8A;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="20" y="60" width="120" height="20"/>
+</mxCell>
+<mxCell id="l-data" value="Data Store" parent="legend" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2E8B57;strokeColor=#1A5C38;fontColor=#FFFFFF;fontSize=10;">
+<mxGeometry x="20" y="85" width="120" height="20"/>
+</mxCell>
+<mxCell id="l-edge-solid" value="——  HTTP / API" parent="legend" vertex="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;">
+<mxGeometry x="20" y="110" width="120" height="15"/>
+</mxCell>
+<mxCell id="l-edge-dashed" value="- -  gRPC / Async" parent="legend" vertex="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;">
+<mxGeometry x="20" y="125" width="120" height="15"/>
+</mxCell>
+
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

@@ -1,0 +1,105 @@
+services:
+  system-service:
+    image: ${SYSTEM_SERVICE_IMAGE:?SYSTEM_SERVICE_IMAGE is required}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-system-service
+    restart: unless-stopped
+    ports:
+      - ${SYSTEM_SERVICE_PORT:-5001}:8080
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+      ConnectionStrings__System: ${SYSTEM_DATABASE_URL:?SYSTEM_DATABASE_URL is required}
+      Jwt__Key: ${SYSTEM_JWT_KEY:?SYSTEM_JWT_KEY is required}
+    volumes:
+      - ${FILE_STORAGE_PATH}:/app/wwwroot
+
+  assistant-service:
+    image: ${ASSISTANT_SERVICE_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-assistant-service
+    restart: unless-stopped
+    ports:
+      - ${ASSISTANT_SERVICE_PORT:-5003}:8080
+    environment:
+      ASSISTANT_LLM_PROVIDER: ${ASSISTANT_LLM_PROVIDER:-ollama}
+      ASSISTANT_LLM_MODEL: ${ASSISTANT_LLM_MODEL:-qwen3.5:2b-q4_K_M}
+      ASSISTANT_LLM_BASE_URL: ${ASSISTANT_LLM_BASE_URL:-http://host.docker.internal:11434}
+      ASSISTANT_LLM_CONTEXT_TOKENS: ${ASSISTANT_LLM_CONTEXT_TOKENS:-4096}
+      ASSISTANT_LLM_TIMEOUT_SECONDS: ${ASSISTANT_LLM_TIMEOUT_SECONDS:-60}
+
+  tradelabservice:
+    image: ${TRADELAB_SERVICE_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-tradelabservice
+    restart: unless-stopped
+    ports:
+      - ${TRADELAB_SERVICE_PORT:-8011}:8080
+    environment:
+      DATABASE_URL: ${TRADELAB_DATABASE_URL}
+      SEED_BASELINE_ON_STARTUP: ${SEED_BASELINE_ON_STARTUP:-true}
+      SEED_BASELINE_CREATED_BY: ${SEED_BASELINE_CREATED_BY:-example}
+      TRADELAB_ENVIRONMENT: ${TRADELAB_ENVIRONMENT:-production}
+      TRADELAB_LOCAL_FILL_ENABLED: false
+      TRADELAB_LOCAL_PAPER_ENGINE_ENABLED: false
+      TRADELAB_BACKGROUND_FILL_SCHEDULER_ENABLED: false
+      TRADELAB_PAPER_SCHEDULER_ENABLED: false
+
+  api-gateway:
+    image: ${API_GATEWAY_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-api-gateway
+    restart: unless-stopped
+    ports:
+      - ${API_GATEWAY_PORT:-5000}:8080
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+      ReverseProxy__Clusters__system-cluster__Destinations__systemservice__Address: http://system-service:8080/
+      ReverseProxy__Clusters__files-cluster__Destinations__fileservice__Address: http://file-service:8080/
+      ReverseProxy__Clusters__tradelab-cluster__Destinations__tradelabservice__Address: http://tradelabservice:8080/
+      ReverseProxy__Clusters__assistant-cluster__Destinations__assistantservice__Address: http://assistant-service:8080/
+    depends_on:
+      - system-service
+      - file-service
+      - tradelabservice
+      - assistant-service
+
+  file-service:
+    image: ${FILE_SERVICE_IMAGE:?FILE_SERVICE_IMAGE is required}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-file-service
+    restart: unless-stopped
+    ports:
+      - ${FILE_SERVICE_PORT:-5002}:8080
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      PORT: 8080
+      Jwt__Key: ${SYSTEM_JWT_KEY:?SYSTEM_JWT_KEY is required}
+    volumes:
+      - ${FILE_STORAGE_PATH:?FILE_STORAGE_PATH is required}:/app/wwwroot
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-caddy
+    restart: unless-stopped
+    ports:
+      - ${HTTP_PORT:-80}:80
+      - ${HTTPS_PORT:-443}:443
+      - ${HTTPS_PORT:-443}:443/udp
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+  web:
+    image: ${WEB_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME:-blocks-example}-web
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${WEB_PORT:-3000}:80
+    depends_on:
+      - api-gateway
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,49 @@
+workflows:
+  - type: architecture-change
+    context_area: cross-service
+    protocols:
+      - agents/protocol/core.md
+      - agents/protocol/context-routing.md
+      - agents/protocol/development-workflow.md
+    artifacts:
+      - spec.md
+      - plan.md
+      - execution.md
+    scripts:
+      - agents/tools/get-context.ps1
+  - type: tradelab-status
+    context_area: tradelab
+    protocols:
+      - agents/protocol/context-routing.md
+      - agents/protocol/tradelab-workflow.md
+    artifacts: []
+    scripts:
+      - agents/tools/get-context.ps1
+      - agents/tools/bounded-search.ps1
+    verification: not-applicable-unless-runtime-evidence-needed
+  - type: ui-runtime-change
+    protocols:
+      - agents/protocol/context-routing.md
+      - agents/protocol/verification.md
+    artifacts:
+      - plan.md
+      - execution.md
+      - review.md
+    scripts:
+      - agents/tools/verify-runtime.ps1
+    verification: apphost-browser-required
+  - type: agent-workflow-change
+    context_area: agent-workflow
+    protocols:
+      - agents/protocol/core.md
+      - agents/protocol/context-routing.md
+      - agents/protocol/review-workflow.md
+    artifacts:
+      - spec.md
+      - plan.md
+      - execution.md
+      - review.md
+    scripts:
+      - agents/tools/get-context.ps1
+      - agents/tools/new-task.ps1
+    verification: docs-or-workflow

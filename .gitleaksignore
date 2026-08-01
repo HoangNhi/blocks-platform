@@ -1,0 +1,6 @@
+# Reviewed upstream submodule baselines; rescan when pinned commits change
+/repo/agents/skills/browser-use/browser_use/mcp/server.py:generic-api-key:19
+/repo/agents/skills/browser-use/browser_use/telemetry/service.py:generic-api-key:21
+/repo/agents/skills/browser-use/browser_use/tokens/service.py:generic-api-key:387
+/repo/agents/skills/browser-use/tests/ci/security/test_sensitive_data.py:generic-api-key:379
+/repo/agents/skills/superpowers/tests/brainstorm-server/ws-protocol.test.js:generic-api-key:53

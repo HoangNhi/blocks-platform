@@ -1,0 +1,7 @@
+pdcaflow.pw {
+	reverse_proxy web:80
+}
+
+www.pdcaflow.pw {
+	redir https://pdcaflow.pw{uri} permanent
+}
