@@ -65,10 +65,12 @@ license. No source is re-licensed by Blocks.
 
 ## Scope Note
 
-The eight repositories are reviewed for Task 8 and remain absent from this
-pre-Git tree until Task 10 recreates approved public HTTPS submodules at the
-listed paths and exact commits. Do not treat `skills-lock.json` as replacing
-this review; it will be regenerated from the final Git links during Task 10.
+The eight repositories are included as public HTTPS Git submodules at the
+listed paths and pinned commits. The root repository records Git links; the
+upstream contents remain in their source repositories. Clone with
+`--recurse-submodules`, or run `git submodule update --init --recursive` in an
+existing checkout. `skills-lock.json` records the approved Git-link commits and
+canonical skill hashes.
 
 ## browser-use
 

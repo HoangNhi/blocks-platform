@@ -26,6 +26,19 @@ Install the .NET SDK, Node.js, Python 3.12, Docker, and `uv`. Resolve local
 credentials from environment variables or the local secret store. Never commit
 secrets or production configuration.
 
+Clone the repository with its pinned skill submodules:
+
+```powershell
+git clone --recurse-submodules https://github.com/HoangNhi/blocks-platform.git blocks-platform
+Set-Location .\blocks-platform
+```
+
+For an existing checkout, initialize or refresh submodules with:
+
+```powershell
+git submodule update --init --recursive
+```
+
 Read these files first:
 
 - `AGENTS.md`
