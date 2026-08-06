@@ -28,6 +28,30 @@ def test_settings_default_to_vps_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().assistant_llm_model == "qwen3.5:2b-q4_K_M"
 
 
+def test_settings_load_default_env_local_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ASSISTANT_LLM_MODEL", raising=False)
+    (tmp_path / ".env.local").write_text(
+        "ASSISTANT_LLM_MODEL=local-file-model" + chr(10),
+        encoding="utf-8",
+    )
+
+    assert Settings().assistant_llm_model == "local-file-model"
+
+
+def test_settings_environment_overrides_env_local_file(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env.local").write_text(
+        "ASSISTANT_LLM_MODEL=local-file-model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASSISTANT_LLM_MODEL", "environment-model")
+
+    assert Settings().assistant_llm_model == "environment-model"
+
+
 @pytest.mark.asyncio
 async def test_stream_ollama_assistant_reply_yields_content_chunks() -> None:
     def handler(request: httpx.Request) -> httpx.Response:

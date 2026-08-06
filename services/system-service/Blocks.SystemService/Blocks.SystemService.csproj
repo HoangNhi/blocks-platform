@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Blocks.SystemService</RootNamespace>
-    <UserSecretsId>653689e4-0bcc-4a26-bed1-37fde1379670</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

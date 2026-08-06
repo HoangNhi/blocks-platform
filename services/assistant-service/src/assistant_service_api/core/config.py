@@ -4,7 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="", case_sensitive=False, extra="ignore"
+        env_prefix="",
+        case_sensitive=False,
+        extra="ignore",
+        env_file=".env.local",
+        env_file_encoding="utf-8",
     )
 
     assistant_llm_provider: str = Field(default="ollama")

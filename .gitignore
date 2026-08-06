@@ -364,12 +364,8 @@ MigrationBackup/
 FodyWeavers.xsd
 .gemini
 .worktrees/
-/platform/apphost/Blocks.AppHost/appsettings.Development.json
+**/appsettings.Development.json
 /platform/apphost/Blocks.AppHost/aspire-manifest.json
-/services/file-service/Blocks.FileService/appsettings.Development.json
-/services/file-service/Blocks.FileService/appsettings.Production.json
-/services/system-service/Blocks.SystemService/appsettings.Development.json
-/services/system-service/Blocks.SystemService/appsettings.Production.json
 /plugins/tradelab/service/.env.local
 
 # Generated agent skill and runtime outputs

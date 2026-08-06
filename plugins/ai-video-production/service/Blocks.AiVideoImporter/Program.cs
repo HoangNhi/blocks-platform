@@ -1,11 +1,9 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Blocks.AiVideoService.Importing;
 using Blocks.AiVideoService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -59,35 +57,26 @@ public static class Program
             return 1;
         }
 
-        // Set up configuration
-        var configBuilder = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("appsettings.json", optional: true)
-            .AddJsonFile("appsettings.Development.json", optional: true)
-            .AddEnvironmentVariables();
+        var builder = Host.CreateApplicationBuilder();
+        var configuration = builder.Configuration;
 
-        var configuration = configBuilder.Build();
-
-        string? connectionString = configuration.GetConnectionString("AiVideo");
+        string? connectionString = configuration["ConnectionStrings:AiVideo"];
         if (string.IsNullOrEmpty(connectionString))
         {
             Console.Error.WriteLine("validation_error: Database connection string 'AiVideo' not found in configuration under ConnectionStrings:AiVideo.");
             return 1;
         }
 
-        // Setup DI
-        var services = new ServiceCollection();
-        
-        services.AddDbContext<AiVideoDbContext>(options =>
+        builder.Services.AddDbContext<AiVideoDbContext>(options =>
             options.UseNpgsql(connectionString, x => x.MigrationsAssembly(typeof(AiVideoDbContext).Assembly.FullName)));
 
-        services.Configure<ImportSourceOptions>(configuration.GetSection(ImportSourceOptions.SectionName));
-        services.AddSingleton<IImportSourceRegistry, ImportSourceRegistry>();
-        services.AddSingleton<ILegacyTracerEvidenceReader, LegacyTracerEvidenceReader>();
-        services.AddSingleton<ITargetEvidenceReader, TargetEvidenceReader>();
-        services.AddScoped<IEvidenceImporter, EvidenceImporter>();
+        builder.Services.Configure<ImportSourceOptions>(configuration.GetSection(ImportSourceOptions.SectionName));
+        builder.Services.AddSingleton<IImportSourceRegistry, ImportSourceRegistry>();
+        builder.Services.AddSingleton<ILegacyTracerEvidenceReader, LegacyTracerEvidenceReader>();
+        builder.Services.AddSingleton<ITargetEvidenceReader, TargetEvidenceReader>();
+        builder.Services.AddScoped<IEvidenceImporter, EvidenceImporter>();
 
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = builder.Services.BuildServiceProvider();
 
         try
         {

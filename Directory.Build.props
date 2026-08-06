@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="ExcludeDevelopmentSettingsFromPublish" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish
+        Remove="@(ResolvedFileToPublish)"
+        Condition="'%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Development.json'"
+      />
+    </ItemGroup>
+  </Target>
+</Project>

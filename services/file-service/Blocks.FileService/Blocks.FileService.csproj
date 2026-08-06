@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Blocks.FileService</RootNamespace>
-    <UserSecretsId>e78a9f53-91e0-4ede-8baa-e39b6fce216d</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,4 @@
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/.env.local
+**/.env.*.local
