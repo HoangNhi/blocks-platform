@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/tradelab"
     )
+    system_service_base_url: str = Field(default="http://systemservice")
     binance_base_url: str = Field(default="https://api.binance.com")
     runner_python_path: str = Field(default=sys.executable)
     tradelab_runner_root: str | None = Field(default=None)

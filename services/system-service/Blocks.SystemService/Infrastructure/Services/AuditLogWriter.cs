@@ -24,18 +24,21 @@ public class AuditLogWriter : IAuditLogWriter
             var context = scope.ServiceProvider.GetRequiredService<SystemContext>();
             var referenceGuard = scope.ServiceProvider.GetRequiredService<ISystemReferenceGuard>();
 
-            var resolvedUserId = await referenceGuard.TryResolveExistingUserIdAsync(auditLog.UserId);
-            if (!resolvedUserId.HasValue)
+            if (auditLog.UserId.HasValue)
             {
-                _logger.LogWarning(
-                    "Skipping audit log for {Action} on {Entity} because user {UserId} is not a valid FK target",
-                    auditLog.Action,
-                    auditLog.EntityName,
-                    auditLog.UserId);
-                return;
-            }
+                var resolvedUserId = await referenceGuard.TryResolveExistingUserIdAsync(auditLog.UserId.Value);
+                if (!resolvedUserId.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Skipping audit log for {Action} on {Entity} because user {UserId} is not a valid FK target",
+                        auditLog.Action,
+                        auditLog.EntityName,
+                        auditLog.UserId);
+                    return;
+                }
 
-            auditLog.UserId = resolvedUserId.Value;
+                auditLog.UserId = resolvedUserId.Value;
+            }
             context.AuditLogs.Add(auditLog);
             await context.SaveChangesAsync();
         }

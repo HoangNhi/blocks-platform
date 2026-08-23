@@ -11,6 +11,8 @@ public partial class Menu
 
     public string Name { get; set; } = null!;
 
+    public string PermissionKey { get; set; } = null!;
+
     public Guid SystemGroupId { get; set; }
 
     public int Sort { get; set; }

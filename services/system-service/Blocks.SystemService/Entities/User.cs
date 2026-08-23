@@ -37,5 +37,9 @@ public partial class User
 
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 
+    public virtual ICollection<WorkspaceMember> WorkspaceMemberships { get; set; } = new List<WorkspaceMember>();
+
+    public virtual ICollection<Invitation> ConsumedInvitations { get; set; } = new List<Invitation>();
+
     public virtual Role Role { get; set; } = null!;
 }

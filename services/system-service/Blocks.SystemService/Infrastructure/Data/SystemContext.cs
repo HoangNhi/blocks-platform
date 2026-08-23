@@ -14,6 +14,10 @@ public partial class SystemContext : DbContext
 
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
 
+    public virtual DbSet<InstanceSetting> InstanceSettings { get; set; }
+
+    public virtual DbSet<Invitation> Invitations { get; set; }
+
     public virtual DbSet<Menu> Menus { get; set; }
 
     public virtual DbSet<Permission> Permissions { get; set; }
@@ -25,6 +29,10 @@ public partial class SystemContext : DbContext
     public virtual DbSet<SystemGroup> SystemGroups { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+
+    public virtual DbSet<Workspace> Workspaces { get; set; }
+
+    public virtual DbSet<WorkspaceMember> WorkspaceMembers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -90,6 +98,74 @@ public partial class SystemContext : DbContext
                 .HasConstraintName("FK_AuditLog_User");
         });
 
+        modelBuilder.Entity<InstanceSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("instance_setting_pk");
+
+            entity.ToTable("instance_setting");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("id");
+            entity.Property(e => e.RegistrationMode)
+                .HasMaxLength(32)
+                .HasColumnName("registration_mode");
+            entity.Property(e => e.DefaultRegistrationRoleId).HasColumnName("default_registration_role_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(now() AT TIME ZONE 'UTC'::text)")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasMaxLength(255).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255).HasColumnName("updated_by");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false).HasColumnName("is_deleted");
+            entity.HasIndex(e => e.IsActive, "instance_setting_active_singleton_unique")
+                .IsUnique()
+                .HasFilter("is_active AND NOT is_deleted");
+
+            entity.HasOne(e => e.DefaultRegistrationRole).WithMany(e => e.RegistrationSettings)
+                .HasForeignKey(e => e.DefaultRegistrationRoleId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("instance_setting_default_registration_role_fk");
+        });
+
+        modelBuilder.Entity<Invitation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("invitation_pk");
+
+            entity.ToTable("invitation");
+
+            entity.HasIndex(e => e.TokenHash, "invitation_token_hash_unique").IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.TokenHash).HasMaxLength(128).HasColumnName("token_hash");
+            entity.Property(e => e.ExpiresAt).HasColumnType("timestamp without time zone").HasColumnName("expires_at");
+            entity.Property(e => e.ConsumedAt).HasColumnType("timestamp without time zone").HasColumnName("consumed_at");
+            entity.Property(e => e.ConsumedBy).HasColumnName("consumed_by");
+            entity.Property(e => e.TargetWorkspaceId).HasColumnName("target_workspace_id");
+            entity.Property(e => e.RegistrationRoleId).HasColumnName("registration_role_id");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(now() AT TIME ZONE 'UTC'::text)").HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasMaxLength(255).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255).HasColumnName("updated_by");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false).HasColumnName("is_deleted");
+
+            entity.HasOne(e => e.TargetWorkspace).WithMany(e => e.Invitations)
+                .HasForeignKey(e => e.TargetWorkspaceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("invitation_target_workspace_fk");
+            entity.HasOne(e => e.RegistrationRole).WithMany(e => e.Invitations)
+                .HasForeignKey(e => e.RegistrationRoleId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("invitation_registration_role_fk");
+            entity.HasOne(e => e.Consumer).WithMany(e => e.ConsumedInvitations)
+                .HasForeignKey(e => e.ConsumedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("invitation_consumed_by_fk");
+        });
+
         modelBuilder.Entity<Menu>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("menu_pk");
@@ -125,6 +201,10 @@ public partial class SystemContext : DbContext
                 .HasDefaultValue(true)
                 .HasColumnName("is_show_menu");
             entity.Property(e => e.Name).HasColumnName("name");
+            entity.Property(e => e.PermissionKey)
+                .HasMaxLength(255)
+                .HasColumnName("permission_key");
+            entity.HasIndex(e => e.PermissionKey, "menu_permission_key_unique").IsUnique();
             entity.Property(e => e.Sort)
                 .HasDefaultValue(0)
                 .HasColumnName("sort");
@@ -239,6 +319,16 @@ public partial class SystemContext : DbContext
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");
             entity.Property(e => e.Name).HasColumnName("name");
+            entity.Property(e => e.Key)
+                .HasMaxLength(100)
+                .HasColumnName("key");
+            entity.Property(e => e.IsSystem)
+                .HasDefaultValue(false)
+                .HasColumnName("is_system");
+            entity.Property(e => e.IsRegistrationEligible)
+                .HasDefaultValue(false)
+                .HasColumnName("is_registration_eligible");
+            entity.HasIndex(e => e.Key, "role_key_unique").IsUnique();
             entity.Property(e => e.UpdatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
@@ -285,6 +375,51 @@ public partial class SystemContext : DbContext
                 .HasConstraintName("FK_SystemGroup_SystemGroup");
         });
 
+        modelBuilder.Entity<Workspace>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("workspace_pk");
+
+            entity.ToTable("workspace");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.Name).HasMaxLength(255).HasColumnName("name");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(now() AT TIME ZONE 'UTC'::text)").HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasMaxLength(255).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255).HasColumnName("updated_by");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false).HasColumnName("is_deleted");
+        });
+
+        modelBuilder.Entity<WorkspaceMember>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("workspace_member_pk");
+
+            entity.ToTable("workspace_member");
+
+            entity.HasIndex(e => new { e.WorkspaceId, e.UserId }, "workspace_member_workspace_user_unique").IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Role).HasMaxLength(32).HasColumnName("role");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(now() AT TIME ZONE 'UTC'::text)").HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasMaxLength(255).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255).HasColumnName("updated_by");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false).HasColumnName("is_deleted");
+
+            entity.HasOne(e => e.Workspace).WithMany(e => e.Members)
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("workspace_member_workspace_fk");
+            entity.HasOne(e => e.User).WithMany(e => e.WorkspaceMemberships)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("workspace_member_user_fk");
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("user_pk");
@@ -322,7 +457,6 @@ public partial class SystemContext : DbContext
             entity.Property(e => e.Username)
                 .HasMaxLength(255)
                 .HasColumnName("username");
-
             entity.HasOne(d => d.Role).WithMany(p => p.Users)
                 .HasForeignKey(d => d.RoleId)
                 .OnDelete(DeleteBehavior.ClientSetNull)

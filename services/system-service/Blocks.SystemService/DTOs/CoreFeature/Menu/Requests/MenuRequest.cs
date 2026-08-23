@@ -12,6 +12,8 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Menu.Requests
 
         public string Name { get; set; } = null!;
 
+        public string PermissionKey { get; set; } = null!;
+
         public Guid SystemGroupId { get; set; }
 
         public new int Sort { get; set; }
@@ -39,6 +41,8 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Menu.Requests
                 .NotEmpty().WithMessage("Tên menu không được để trống");
             RuleFor(x => x.Controller)
                 .NotEmpty().WithMessage("Controller không được để trống");
+            RuleFor(x => x.PermissionKey)
+                .NotEmpty().WithMessage("Mã quyền không được để trống");
             RuleFor(x => x.SystemGroupId)
                 .NotEmpty().WithMessage("Nhóm hệ thống không được để trống");
         }

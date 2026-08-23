@@ -8,6 +8,8 @@ from sqlalchemy.engine import make_url
 
 from tradelab_api.db.models import Base
 from tradelab_api.db.session import get_engine
+from tradelab_api.core.authorization import FunctionalAuthorizationResult
+from tradelab_api.main import app
 
 
 def _truncate_test_database() -> None:
@@ -29,3 +31,15 @@ def isolate_postgresql_test():
 
     _truncate_test_database()
     yield
+
+
+class AllowAllAuthorizationClient:
+    async def check(self, *_args: object, **_kwargs: object) -> FunctionalAuthorizationResult:
+        return FunctionalAuthorizationResult(True, True, True)
+
+
+@pytest.fixture(autouse=True)
+def allow_legacy_api_tests_to_reach_handlers():
+    app.state.system_authorization_client = AllowAllAuthorizationClient()
+    yield
+    app.state.system_authorization_client = AllowAllAuthorizationClient()

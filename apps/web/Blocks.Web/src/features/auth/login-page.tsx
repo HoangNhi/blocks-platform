@@ -1,30 +1,47 @@
-import { useState, type FormEvent } from "react"
-import { Navigate, useLocation, useNavigate } from "react-router"
+import { useEffect, useState, type FormEvent } from "react"
+import { Link, Navigate, useLocation, useNavigate } from "react-router"
 import { ShieldCheck } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageState } from "@/components/platform/page-state"
+import { createApiClient } from "@/lib/api/client"
+import { createAuthApi } from "./auth-api"
+import { createBrowserTokenStore } from "./token-store"
 
 import { useAuth } from "./auth-context"
+
+const tokenStore = createBrowserTokenStore()
+const authApi = createAuthApi(createApiClient({
+  baseUrl: import.meta.env.VITE_API_BASE_URL ?? "/",
+  getAccessToken: tokenStore.getAccessToken,
+}))
 
 type LoginLocationState = {
   from?: {
     pathname?: string
   }
+  registrationSuccess?: boolean
+  username?: string
 }
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login, status, currentUser, error, clearError } = useAuth()
-  const [username, setUsername] = useState("")
+  const state = location.state as LoginLocationState | null
+  const [username, setUsername] = useState(state?.username ?? "")
   const [password, setPassword] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [registrationAvailable, setRegistrationAvailable] = useState(false)
 
-  const state = location.state as LoginLocationState | null
+  useEffect(() => {
+    void authApi.getRegistrationAvailability()
+      .then((result) => setRegistrationAvailable(result.isAvailable))
+      .catch(() => setRegistrationAvailable(false))
+  }, [])
   const destination = state?.from?.pathname ?? "/"
 
   if (status === "authenticated" && currentUser) {
@@ -121,6 +138,12 @@ export function LoginPage() {
                 />
               </label>
 
+              {state?.registrationSuccess ? (
+                <Alert role="status">
+                  <AlertTitle>Tài khoản đã được tạo</AlertTitle>
+                  <AlertDescription>Nhập mật khẩu để đăng nhập bằng tài khoản mới.</AlertDescription>
+                </Alert>
+              ) : null}
               {formError || error ? (
                 <Alert variant="destructive">
                   <AlertTitle>Không thể đăng nhập</AlertTitle>
@@ -135,6 +158,11 @@ export function LoginPage() {
               >
                 {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
               </Button>
+              {registrationAvailable ? (
+                <Button asChild variant="link" className="justify-center">
+                  <Link to="/register">Tạo tài khoản mới</Link>
+                </Button>
+              ) : null}
             </form>
           </div>
         </section>

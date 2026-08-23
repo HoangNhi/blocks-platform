@@ -14,6 +14,8 @@ const { mockAdminApi } = vi.hoisted(() => ({
     createRole: vi.fn(),
     updateRole: vi.fn(),
     deleteRoles: vi.fn(),
+    getPermissionsByRole: vi.fn(),
+    updatePermissions: vi.fn(),
   },
 }))
 
@@ -50,27 +52,35 @@ describe("RolesPage", () => {
     mockAdminApi.createRole.mockReset()
     mockAdminApi.updateRole.mockReset()
     mockAdminApi.deleteRoles.mockReset()
+    mockAdminApi.getPermissionsByRole.mockReset()
+    mockAdminApi.updatePermissions.mockReset()
+    mockAdminApi.getPermissionsByRole.mockResolvedValue([])
+    mockAdminApi.updatePermissions.mockResolvedValue(true)
   })
 
   it("mở dialog tạo mới, lưu và thêm tiếp, rồi giữ dialog mở với form rỗng", async () => {
     mockAdminApi.getRoles
       .mockResolvedValueOnce({
         data: [
-          {
-            id: "role-1",
-            name: "Administrator",
-            isActived: true,
-          },
+           {
+             id: "role-1",
+             name: "Administrator",
+             key: "administrator",
+             isSystem: true,
+             isActived: true,
+           },
         ],
         totalRow: 1,
       })
       .mockResolvedValueOnce({
         data: [
-          {
-            id: "role-1",
-            name: "Administrator",
-            isActived: true,
-          },
+           {
+             id: "role-1",
+             name: "Administrator",
+             key: "administrator",
+             isSystem: true,
+             isActived: true,
+           },
           {
             id: "role-2",
             name: "Editor",
@@ -90,10 +100,11 @@ describe("RolesPage", () => {
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByText("Administrator")
+    await screen.findByRole("cell", { name: "Administrator" })
 
     await user.click(screen.getByRole("button", { name: /^Thêm$/i }))
     await user.type(screen.getByRole("textbox", { name: /tên vai trò/i }), "Editor")
+    await user.type(screen.getByRole("textbox", { name: /mã vai trò ổn định/i }), "editor")
     await user.click(screen.getByRole("button", { name: /^Lưu và thêm tiếp$/i }))
 
     await waitFor(() => {
@@ -118,11 +129,13 @@ describe("RolesPage", () => {
     mockAdminApi.getRoles
       .mockResolvedValueOnce({
         data: [
-          {
-            id: "role-1",
-            name: "Administrator",
-            isActived: true,
-          },
+           {
+             id: "role-1",
+             name: "Administrator",
+             key: "administrator",
+             isSystem: true,
+             isActived: true,
+           },
         ],
         totalRow: 1,
       })
@@ -140,6 +153,8 @@ describe("RolesPage", () => {
     mockAdminApi.getRoleById.mockResolvedValue({
       id: "role-1",
       name: "Administrator",
+      key: "administrator",
+      isSystem: true,
       folderUpload: "folder-role-1",
       isActived: true,
     })
@@ -154,7 +169,7 @@ describe("RolesPage", () => {
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByText("Administrator")
+    await screen.findByRole("cell", { name: "Administrator" })
 
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
     await user.click(await screen.findByRole("menuitem", { name: /sửa/i }))
@@ -172,7 +187,7 @@ describe("RolesPage", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull()
   })
-  it("hiển thị hành động phân quyền cho từng vai trò và dẫn tới Permission Matrix đúng vai trò", async () => {
+  it("hiển thị Roles & Permissions trong cùng quy trình vai trò", async () => {
     mockAdminApi.getRoles.mockResolvedValue({
       data: [
         {
@@ -187,13 +202,11 @@ describe("RolesPage", () => {
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByText("Administrator")
+    await screen.findByRole("cell", { name: "Administrator" })
 
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
 
-    const permissionAction = await screen.findByRole("menuitem", { name: /phân quyền/i })
-    expect(permissionAction.getAttribute("href")).toBe(
-      "/system/identity/permissions?roleId=role-1",
-    )
+    const permissionAction = await screen.findByRole("menuitem", { name: /roles & permissions/i })
+    expect(permissionAction.getAttribute("href")).toBeNull()
   })
 })

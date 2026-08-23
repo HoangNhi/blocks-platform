@@ -7,6 +7,7 @@ export type SystemGroupRecord = {
 
 export type SystemMenuRecord = {
   id: string
+  permissionKey?: string | null
   controller: string
   name: string
   systemGroupId: string

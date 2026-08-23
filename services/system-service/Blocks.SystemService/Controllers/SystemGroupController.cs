@@ -22,7 +22,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpPost, Route("get-list")]
-        [AttributePermission(Action = ActionType.VIEW)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.VIEW)]
         public async Task<IActionResult> GetList(GetListPagingRequest request)
         {
             var result = await _service.GetList(request);
@@ -30,7 +30,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpGet, Route("get-by-id")]
-        [AttributePermission(Action = ActionType.VIEW)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.VIEW)]
         public async Task<IActionResult> GetById([FromQuery] GetByIdRequest request)
         {
             var result = await _service.GetById(request);
@@ -38,7 +38,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpPost("insert")]
-        [AttributePermission(Action = ActionType.ADD)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.ADD)]
         public async Task<IActionResult> Insert([FromBody] SystemGroupRequest request)
         {
             var result = await _service.Insert(request);
@@ -46,7 +46,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpPut, Route("update")]
-        [AttributePermission(Action = ActionType.UPDATE)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.UPDATE)]
         public async Task<IActionResult> Update(SystemGroupRequest request)
         {
             var result = await _service.Update(request);
@@ -54,7 +54,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpDelete, Route("delete-list")]
-        [AttributePermission(Action = ActionType.DELETE)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.DELETE)]
         public async Task<IActionResult> DeleteList([FromBody] DeleteListRequest request)
         {
             var result = await _service.DeleteList(request);
@@ -62,7 +62,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpGet, Route("get-all-combobox")]
-        [AttributePermission(Action = ActionType.NONE)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.NONE)]
         public async Task<IActionResult> GetAllForCombobox()
         {
             var result = await _service.GetAllForCombobox();
@@ -70,7 +70,7 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpGet, Route("get-all-not-parent-combobox")]
-        [AttributePermission(Action = ActionType.NONE)]
+        [AttributePermission(PermissionKey = "admin.permissions", Action = ActionType.NONE)]
         public async Task<IActionResult> GetAllNotParentForCombobox()
         {
             var result = await _service.GetAllNotParentForCombobox();

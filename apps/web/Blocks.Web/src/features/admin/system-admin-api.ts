@@ -4,7 +4,9 @@ import type { PagingRequest } from "@/lib/api/types"
 import type {
   AuditLogPagingRequest,
   ComboboxOption,
+  InvitationCreateRequest,
   MenuUpsertRequest,
+  RegistrationSettings,
   RoleUpsertRequest,
   SystemGroupUpsertRequest,
   UserUpsertRequest,
@@ -29,6 +31,37 @@ type SystemAdminApiOptions = Pick<ApiClient, "request">
 
 export function createSystemAdminApi(client: SystemAdminApiOptions) {
   return {
+    getRegistrationSettings: async () => {
+      const response = await client.request<unknown>("/api/system/RegistrationAdmin/settings")
+      const record = response as Record<string, unknown>
+      return {
+        registrationMode: (record.registrationMode ?? record.RegistrationMode ?? "admin_provisioned") as RegistrationSettings["registrationMode"],
+        defaultRegistrationRoleId: (record.defaultRegistrationRoleId ?? record.DefaultRegistrationRoleId ?? null) as string | null,
+      }
+    },
+    updateRegistrationSettings: async (body: RegistrationSettings) => {
+      const response = await client.request<unknown>('/api/system/RegistrationAdmin/settings', {
+        method: 'PUT',
+        body,
+      })
+      const record = response as Record<string, unknown>
+      return {
+        registrationMode: (record.registrationMode ?? record.RegistrationMode ?? body.registrationMode) as RegistrationSettings["registrationMode"],
+        defaultRegistrationRoleId: (record.defaultRegistrationRoleId ?? record.DefaultRegistrationRoleId ?? body.defaultRegistrationRoleId) as string | null,
+      }
+    },
+    createInvitation: async (body: InvitationCreateRequest) => {
+      const response = await client.request<unknown>('/api/system/RegistrationAdmin/invitations', {
+        method: 'POST',
+        body,
+      })
+      const record = response as Record<string, unknown>
+      return {
+        id: String(record.id ?? record.Id ?? ""),
+        expiresAt: String(record.expiresAt ?? record.ExpiresAt ?? body.expiresAt),
+        token: String(record.token ?? record.Token ?? ""),
+      }
+    },
     getUsers: async (body: PagingRequest) =>
       normalizePagingResponse(
         await client.request<unknown>("/api/system/User/get-list", {

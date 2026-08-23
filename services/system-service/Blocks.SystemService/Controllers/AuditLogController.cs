@@ -21,7 +21,7 @@ public class AuditLogController : BaseController<AuditLogController>
     }
 
     [HttpPost, Route("get-list")]
-    [AttributePermission(Action = ActionType.VIEW)]
+    [AttributePermission(PermissionKey = "admin.audit", Action = ActionType.VIEW)]
     public async Task<IActionResult> GetList(AuditLogGetListRequest request)
     {
         var result = await _service.GetList(request);
@@ -29,7 +29,7 @@ public class AuditLogController : BaseController<AuditLogController>
     }
 
     [HttpGet, Route("get-by-id")]
-    [AttributePermission(Action = ActionType.VIEW)]
+    [AttributePermission(PermissionKey = "admin.audit", Action = ActionType.VIEW)]
     public async Task<IActionResult> GetById([FromQuery] GetByIdRequest request)
     {
         var result = await _service.GetById(request);
@@ -37,7 +37,7 @@ public class AuditLogController : BaseController<AuditLogController>
     }
 
     [HttpGet, Route("get-entity-names")]
-    [AttributePermission(Action = ActionType.VIEW)]
+    [AttributePermission(PermissionKey = "admin.audit", Action = ActionType.VIEW)]
     public async Task<IActionResult> GetEntityNames()
     {
         var result = await _service.GetDistinctEntityNames();
@@ -45,7 +45,7 @@ public class AuditLogController : BaseController<AuditLogController>
     }
 
     [HttpGet, Route("get-actions")]
-    [AttributePermission(Action = ActionType.VIEW)]
+    [AttributePermission(PermissionKey = "admin.audit", Action = ActionType.VIEW)]
     public async Task<IActionResult> GetActions()
     {
         var result = await _service.GetDistinctActions();

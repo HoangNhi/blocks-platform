@@ -1,16 +1,21 @@
 using Blocks.Shared.DTOs.Base;
+using Blocks.SystemService.Configs;
 using Blocks.SystemService.Controllers.Base;
 using Blocks.Shared.Common;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Dtos;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Requests;
 using Blocks.SystemService.DTOs.CoreFeature.RefreshToken.Dtos;
 using Blocks.SystemService.DTOs.CoreFeature.RefreshToken.Requests;
+using Blocks.SystemService.DTOs.CoreFeature.Registration.Dtos;
+using Blocks.SystemService.DTOs.CoreFeature.Registration.Requests;
 using Blocks.SystemService.Entities;
 using Blocks.SystemService.Infrastructure.Services;
 using Blocks.SystemService.Infrastructure.Validation;
 using Blocks.SystemService.Services.CoreFeature.Auth;
+using Blocks.SystemService.Services.CoreFeature.Registration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Blocks.SystemService.Controllers
 {
@@ -21,12 +26,58 @@ namespace Blocks.SystemService.Controllers
         private readonly IAuthService _service;
         private readonly IAuditLogWriter _auditWriter;
         private readonly ISystemReferenceGuard _referenceGuard;
+        private readonly RegistrationService _registrationService;
 
-        public AuthController(IAuthService service, IAuditLogWriter auditWriter, ISystemReferenceGuard referenceGuard)
+        public AuthController(
+            IAuthService service,
+            IAuditLogWriter auditWriter,
+            ISystemReferenceGuard referenceGuard,
+            RegistrationService registrationService)
         {
             _service = service;
             _auditWriter = auditWriter;
             _referenceGuard = referenceGuard;
+            _registrationService = registrationService;
+        }
+
+        [HttpGet, Route("registration-availability")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetRegistrationAvailability()
+        {
+            var result = await _registrationService.GetAvailabilityAsync(HttpContext.RequestAborted);
+            return Ok(new BaseResponse<RegistrationAvailabilityResponse> { Data = result, Success = true });
+        }
+
+        [HttpPost, Route("bootstrap")]
+        [EnableRateLimiting(RegistrationOptions.BootstrapPolicy)]
+        [AllowAnonymous]
+        public async Task<IActionResult> Bootstrap(RegisterRequest request)
+        {
+            var configuredSecret = ResolveBootstrapSecret(
+                Environment.GetEnvironmentVariable("Bootstrap__Secret"),
+                HttpContext.RequestServices.GetRequiredService<IConfiguration>().GetSection("Bootstrap")["Secret"]);
+            var suppliedSecret = Request.Headers["X-Blocks-Bootstrap-Secret"].ToString();
+            var result = await _registrationService.BootstrapAsync(
+                request,
+                GetClientIpAddress() ?? string.Empty,
+                configuredSecret ?? string.Empty,
+                suppliedSecret,
+                HttpContext.RequestAborted);
+            return Ok(new BaseResponse<RegistrationResponse> { Data = result, Success = true, Message = "Bootstrap tài khoản quản trị thành công" });
+        }
+
+        public static string ResolveBootstrapSecret(string? environmentSecret, string? configuredSecret)
+        {
+            return string.IsNullOrWhiteSpace(environmentSecret) ? configuredSecret ?? string.Empty : environmentSecret;
+        }
+
+        [HttpPost, Route("register")]
+        [EnableRateLimiting(RegistrationOptions.RegistrationPolicy)]
+        [AllowAnonymous]
+        public async Task<IActionResult> Register(RegisterRequest request)
+        {
+            var result = await _registrationService.RegisterAsync(request, GetClientIpAddress() ?? string.Empty, HttpContext.RequestAborted);
+            return Ok(new BaseResponse<RegistrationResponse> { Data = result, Success = true, Message = "Đăng ký tài khoản thành công" });
         }
 
         [HttpPost, Route("login")]

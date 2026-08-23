@@ -59,12 +59,18 @@ if (appHostSmokeMode)
         .WithEnvironment("Jwt__Issuer", "BlocksSmoke")
         .WithEnvironment("Jwt__Audience", "BlocksSmoke")
         .WithEnvironment("Jwt__Expiry", "1")
-        .WithEnvironment("Jwt__ExpireRefreshToken", "1");
+        .WithEnvironment("Jwt__ExpireRefreshToken", "1")
+        .WithEnvironment("Bootstrap__Secret", GetRequiredEnvironmentVariable("BLOCKS_SMOKE_BOOTSTRAP_SECRET"));
 }
+
+fileService.WithReference(systemService);
+fileService.WithEnvironment("SystemService__BaseUrl", systemService.GetEndpoint("http"));
 
 var tradeLabService = builder
     .AddUvicornApp("tradelabservice", "../../../plugins/tradelab/service", "tradelab_api.main:app")
     .WithUv(args: ["sync", "--python", "3.12"])
+    .WithReference(systemService)
+    .WithEnvironment("SYSTEM_SERVICE_BASE_URL", systemService.GetEndpoint("http"))
     .WithHttpHealthCheck("/health");
 
 if (appHostSmokeMode)
@@ -124,7 +130,10 @@ if (appHostSmokeMode)
 
 var aiVideoService = builder
     .AddProject<Projects.Blocks_AiVideoService>("aivideoservice")
+    .WithReference(systemService)
     .WithHttpHealthCheck("/health");
+
+aiVideoService.WithEnvironment("SystemService__BaseUrl", systemService.GetEndpoint("http"));
 
 if (appHostSmokeMode)
 {

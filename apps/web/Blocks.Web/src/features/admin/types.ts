@@ -48,9 +48,32 @@ export type UserUpsertRequest = {
   sort?: number | null
 }
 
+export type RegistrationMode = "open" | "invite_only" | "admin_provisioned"
+
+export type RegistrationSettings = {
+  registrationMode: RegistrationMode
+  defaultRegistrationRoleId: string | null
+}
+
+export type InvitationCreateRequest = {
+  expiresAt: string
+  targetWorkspaceId?: string | null
+  registrationRoleId?: string | null
+}
+
+export type InvitationResponse = {
+  id: string
+  expiresAt: string
+  token: string
+}
+
 export type RoleModel = BaseModel & {
   id: string
   name: string
+  key?: string | null
+  isSystem?: boolean
+  isRegistrationEligible?: boolean
+  isDefaultRegistrationRole?: boolean
 }
 
 export type RoleDetailModel = RoleModel & {
@@ -60,6 +83,8 @@ export type RoleDetailModel = RoleModel & {
 export type RoleUpsertRequest = {
   id: string
   name: string
+  key: string
+  isRegistrationEligible: boolean
   folderUpload: string
   isActived?: boolean
   isEdit?: boolean
@@ -69,6 +94,7 @@ export type RoleUpsertRequest = {
 export type MenuModel = BaseModel & {
   id: string
   controller: string
+  permissionKey?: string | null
   name: string
   systemGroupId: string
   systemGroup?: string | null
@@ -90,6 +116,7 @@ export type MenuUpsertRequest = {
   id: string
   controller: string
   name: string
+  permissionKey: string
   systemGroupId: string
   sort?: number | null
   canView: boolean
@@ -129,6 +156,7 @@ export type PermissionMenuModel = {
   id: string
   roleId: string
   menuId: string
+  permissionKey?: string | null
   name?: string | null
   isViewed: boolean
   isAdded: boolean

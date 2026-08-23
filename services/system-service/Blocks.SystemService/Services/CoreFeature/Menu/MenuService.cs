@@ -7,6 +7,7 @@ using Blocks.SystemService.Infrastructure.Data;
 using Blocks.SystemService.Infrastructure.Validation;
 using AutoDependencyRegistration.Attributes;
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace Blocks.SystemService.Services.CoreFeature.Menu
@@ -45,13 +46,14 @@ namespace Blocks.SystemService.Services.CoreFeature.Menu
         public async Task<ModelMenu> Insert(MenuRequest request)
         {
             var data = _context.Menus.Where(x =>
-                x.Name == request.Name && x.SystemGroupId == request.SystemGroupId
+                (x.Name == request.Name && x.SystemGroupId == request.SystemGroupId
+                    || x.PermissionKey == request.PermissionKey)
                 && !x.IsDeleted
             );
 
             if (data.Any())
             {
-                throw new BusinessException("Tên menu đã tồn tại trong nhóm này");
+                throw new BusinessException("Tên menu hoặc mã quyền đã tồn tại");
             }
 
             var add = _mapper.Map<Entities.Menu>(request);
@@ -72,12 +74,13 @@ namespace Blocks.SystemService.Services.CoreFeature.Menu
         public async Task<ModelMenu> Update(MenuRequest request)
         {
             var data = _context.Menus.Where(x =>
-                x.Name == request.Name && x.SystemGroupId == request.SystemGroupId
+                (x.Name == request.Name && x.SystemGroupId == request.SystemGroupId
+                    || x.PermissionKey == request.PermissionKey)
                 && !x.IsDeleted && x.Id != request.Id);
 
             if (data.Any())
             {
-                throw new BusinessException("Tên menu đã tồn tại trong nhóm này");
+                throw new BusinessException("Tên menu hoặc mã quyền đã tồn tại");
             }
 
             var update = await _context.Menus.FindAsync(request.Id);
@@ -142,6 +145,25 @@ namespace Blocks.SystemService.Services.CoreFeature.Menu
             };
 
             var result = await _context.ExecuteFunction<List<ModelMenuGetListPaging>>("fn_menu_getbyuser", parameters);
+            var menuIds = result.Select(menu => menu.Id).ToList();
+            if (menuIds.Count == 0)
+            {
+                return result;
+            }
+
+            var permissionKeys = await _context.Menus
+                .AsNoTracking()
+                .Where(menu => menuIds.Contains(menu.Id))
+                .ToDictionaryAsync(menu => menu.Id, menu => menu.PermissionKey);
+
+            foreach (var menu in result)
+            {
+                if (permissionKeys.TryGetValue(menu.Id, out var permissionKey))
+                {
+                    menu.PermissionKey = permissionKey;
+                }
+            }
+
             return result;
         }
     }

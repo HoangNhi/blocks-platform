@@ -2,22 +2,19 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { LoaderCircle, ShieldCheck } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageState } from "@/components/platform/page-state";
-import { AccessDeniedPage } from "@/features/auth/access-denied-page";
-import { AuthProvider, useAuth } from "@/features/auth/auth-context";
 import { LoginPage } from "@/features/auth/login-page";
+import { RegistrationPage } from "@/features/auth/registration-page";
+import { AuthProvider, useAuth } from "@/features/auth/auth-context";
 import { ProtectedRoute } from "@/features/auth/protected-route";
 import { PlatformOverview } from "@/features/dashboard/platform-overview";
 import { useNavigationData } from "@/features/navigation/navigation-hooks";
 import { RouteStubPage } from "@/features/platform/route-stub-page";
 import { ApiError } from "@/lib/api/api-error";
+import { SystemOverviewPage } from "@/features/admin/pages/system-overview-page";
 
-const PluginReadinessPage = lazy(() =>
-  import("@/features/plugins/plugin-readiness-page").then((module) => ({
-    default: module.PluginReadinessPage,
-  })),
-);
 const AuditLogPage = lazy(() =>
   import("@/features/admin/pages/audit-log-page").then((module) => ({
     default: module.AuditLogPage,
@@ -27,12 +24,6 @@ const AuditLogPage = lazy(() =>
 const MenusPage = lazy(() =>
   import("@/features/admin/pages/menus-page").then((module) => ({
     default: module.MenusPage,
-  })),
-);
-
-const PermissionMatrixPage = lazy(() =>
-  import("@/features/admin/pages/permission-matrix-page").then((module) => ({
-    default: module.PermissionMatrixPage,
   })),
 );
 
@@ -111,6 +102,15 @@ function ShellRoute() {
     }
   }, [error, logout]);
 
+  if (status === "forbidden" || (error instanceof ApiError && error.isForbidden)) {
+    return (
+      <Alert role="alert" variant="destructive" className="m-4">
+        <AlertTitle>Truy cập bị từ chối</AlertTitle>
+        <AlertDescription>Bạn không có quyền xem nội dung này. Hãy liên hệ quản trị viên để được cấp quyền phù hợp.</AlertDescription>
+      </Alert>
+    );
+  }
+
   if (status !== "authenticated" || !currentUser) {
     return (
       <PageState
@@ -129,10 +129,6 @@ function ShellRoute() {
         description="Đang lấy cây menu của người dùng hiện tại."
       />
     );
-  }
-
-  if (error instanceof ApiError && error.isForbidden) {
-    return <AccessDeniedPage />;
   }
 
   if (error instanceof ApiError && error.isUnauthorized) {
@@ -168,7 +164,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/403" element={<AccessDeniedPage />} />
+          <Route path="/register" element={<RegistrationPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<ShellRoute />}>
               <Route index element={<PlatformOverview />} />
@@ -192,12 +188,7 @@ function App() {
               />
               <Route
                 path="/system/overview"
-                element={
-                  <RouteStubPage
-                    title="System Overview"
-                    description="Chưa kết nối. Các trang quản trị hệ thống vẫn chưa được triển khai."
-                  />
-                }
+                element={<SystemOverviewPage />}
               />
               <Route
                 path="/system/audit-log"
@@ -218,55 +209,6 @@ function App() {
               <Route
                 path="/system/identity/system-groups"
                 element={renderLazyRoute(<SystemGroupsPage />)}
-              />
-              <Route
-                path="/system/identity/permissions"
-                element={renderLazyRoute(<PermissionMatrixPage />)}
-              />
-              <Route
-                path="/services/files/library"
-                element={
-                  <RouteStubPage
-                    title="File Library"
-                    description="Dịch vụ chỉ lưu trữ. Tải tệp được dùng bởi các biểu mẫu tính năng qua File Service API; một thư viện tệp độc lập không nằm trong giai đoạn này."
-                  />
-                }
-              />
-              <Route
-                path="/services/files/storage-providers"
-                element={
-                  <RouteStubPage
-                    title="Storage Providers"
-                    description="Dịch vụ chỉ lưu trữ. Quản lý nhà cung cấp không nằm trong hợp đồng File Service hiện tại."
-                  />
-                }
-              />
-              <Route
-                path="/plugins/installed"
-                element={renderLazyRoute(
-                  <PluginReadinessPage
-                    title="Installed Plugins"
-                    description="Sổ đăng ký plugin chưa được kết nối. Tuyến này ở chế độ sẵn sàng cho đến khi có hợp đồng runtime thực sự."
-                  />,
-                )}
-              />
-              <Route
-                path="/plugins/activity"
-                element={renderLazyRoute(
-                  <PluginReadinessPage
-                    title="Plugin Activity"
-                    description="Hoạt động runtime chưa được kết nối. Tuyến này vẫn là một bề mặt sẵn sàng cho đến khi có hợp đồng hoạt động từ backend."
-                  />,
-                )}
-              />
-              <Route
-                path="/plugins/manifests"
-                element={renderLazyRoute(
-                  <PluginReadinessPage
-                    title="Plugin Manifests"
-                    description="Kiểm tra manifest chưa được kết nối. Tuyến này không tự bịa dữ liệu registry hoặc manifest."
-                  />,
-                )}
               />
               <Route
                 path="/plugins/tradelab"

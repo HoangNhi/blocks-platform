@@ -56,6 +56,7 @@ function normalizeMenuRecord(menu: SystemMenuRecord): SystemMenuRecord {
 
   return {
     id: pickApiValue<string>(record, "id", "Id"),
+    permissionKey: pickApiValue<string | null | undefined>(record, "permissionKey", "PermissionKey"),
     controller: pickApiValue<string>(record, "controller", "Controller"),
     name: pickApiValue<string>(record, "name", "Name"),
     systemGroupId: pickApiValue<string>(
@@ -402,12 +403,20 @@ function buildGroupNode(
   )
   const childMenus = sortMenus(menusByGroupId.get(group.id) ?? [])
     .map<NavNode | null>((menu) => {
-      const routeEntry = getRouteCatalogEntryForMenu(menu.controller, menu.name)
-      if (!routeEntry) {
-        return null
-      }
+       if (!canReachMenu(menu)) {
+         return null
+       }
 
-      return {
+       const routeEntry = getRouteCatalogEntryForMenu(
+         menu.permissionKey,
+         menu.controller,
+         menu.name,
+       )
+       if (!routeEntry) {
+         return null
+       }
+
+       return {
         id: menu.id,
         title: routeEntry.title ?? menu.name,
         kind: "menu",
@@ -446,6 +455,18 @@ function buildGroupNode(
     status: "active",
     children,
   }
+}
+
+export function collectUnknownSystemMenus(
+  menus: SystemMenuRecord[],
+): SystemMenuRecord[] {
+  return menus
+    .map(normalizeMenuRecord)
+    .filter(
+      (menu) =>
+        canReachMenu(menu) &&
+        !getRouteCatalogEntryForMenu(menu.permissionKey, menu.controller, menu.name),
+    )
 }
 
 export function adaptSystemNavigation({

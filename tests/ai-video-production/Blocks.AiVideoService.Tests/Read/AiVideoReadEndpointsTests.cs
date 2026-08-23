@@ -13,8 +13,10 @@ using Blocks.AiVideoService.Domain;
 using Blocks.AiVideoService.Read;
 using Blocks.AiVideoService.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -38,7 +40,6 @@ public class AiVideoReadEndpointsTests : IClassFixture<WebApplicationFactory<Pro
             builder.UseSetting("Jwt:Issuer", TestIssuer);
             builder.UseSetting("Jwt:Audience", TestAudience);
             builder.UseSetting("Jwt:Key", TestKey);
-            builder.UseSetting("AiVideoAccess:ViewRoleIds:0", AllowedRoleId);
             builder.ConfigureTestServices(services =>
             {
                 var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<AiVideoDbContext>));
@@ -49,6 +50,14 @@ public class AiVideoReadEndpointsTests : IClassFixture<WebApplicationFactory<Pro
 
                 services.AddDbContext<AiVideoDbContext>(options =>
                     options.UseInMemoryDatabase("AiVideoEndpointsTest"));
+                services.RemoveAll<SystemFunctionalAuthorizationClient>();
+                services.AddSingleton<SystemFunctionalAuthorizationClient>(serviceProvider =>
+                    new SystemFunctionalAuthorizationClient(
+                        new HttpClient(new SystemAuthorizationHandler())
+                        {
+                            BaseAddress = new Uri("http://systemservice")
+                        },
+                        serviceProvider.GetRequiredService<IHttpContextAccessor>()));
             });
         });
     }
@@ -156,7 +165,7 @@ public class AiVideoReadEndpointsTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
-    public async Task GetRuns_Returns403Envelope_WhenRoleNotAllowlisted()
+    public async Task GetRuns_Returns403Envelope_WhenAuthorityDeniesPermission()
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
@@ -170,6 +179,28 @@ public class AiVideoReadEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         Assert.NotNull(envelope);
         Assert.False(envelope.Success);
         Assert.Equal("FORBIDDEN", envelope.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetRuns_Returns503_WhenAuthorityIsUnavailable()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<SystemFunctionalAuthorizationClient>();
+                services.AddSingleton<SystemFunctionalAuthorizationClient>(serviceProvider =>
+                    new SystemFunctionalAuthorizationClient(
+                        new HttpClient(new UnavailableAuthorizationHandler())
+                        {
+                            BaseAddress = new Uri("http://systemservice")
+                        },
+                        serviceProvider.GetRequiredService<IHttpContextAccessor>()));
+            }));
+        var client = CreateAuthorizedClient(factory);
+
+        var response = await client.GetAsync("/api/ai-video/runs");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
     [Fact]
@@ -240,5 +271,33 @@ public class AiVideoReadEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         Assert.True(postResponse.StatusCode == HttpStatusCode.MethodNotAllowed || postResponse.StatusCode == HttpStatusCode.NotFound);
         Assert.True(putResponse.StatusCode == HttpStatusCode.MethodNotAllowed || putResponse.StatusCode == HttpStatusCode.NotFound);
         Assert.True(deleteResponse.StatusCode == HttpStatusCode.MethodNotAllowed || deleteResponse.StatusCode == HttpStatusCode.NotFound);
+    }
+
+    private sealed class SystemAuthorizationHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var token = request.Headers.Authorization?.Parameter;
+            var role = token is null
+                ? null
+                : new JwtSecurityTokenHandler().ReadJwtToken(token).Claims.FirstOrDefault(claim => claim.Type == "role")?.Value;
+            var allowed = role != "22222222-2222-2222-2222-222222222222";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new
+                {
+                    Success = true,
+                    Data = new { HasPermission = allowed }
+                })
+            });
+        }
+    }
+
+    private sealed class UnavailableAuthorizationHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        }
     }
 }

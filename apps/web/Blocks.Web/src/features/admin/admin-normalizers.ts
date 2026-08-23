@@ -117,6 +117,10 @@ export function normalizeRole(row: unknown): RoleModel {
     ...baseModel,
     id: text(pick(record, "id", "Id")),
     name: text(pick(record, "name", "Name")),
+    key: nullableText(pick(record, "key", "Key")),
+    isSystem: boolValue(pick(record, "isSystem", "IsSystem")),
+    isRegistrationEligible: boolValue(pick(record, "isRegistrationEligible", "IsRegistrationEligible")),
+    isDefaultRegistrationRole: boolValue(pick(record, "isDefaultRegistrationRole", "IsDefaultRegistrationRole")),
   }
 }
 
@@ -135,10 +139,12 @@ export function normalizeMenu(row: unknown): MenuModel {
 
   return {
     ...baseModel,
-    id: text(pick(record, "id", "Id")),
-    controller: text(pick(record, "controller", "Controller")),
-    name: text(pick(record, "name", "Name")),
-    systemGroupId: text(pick(record, "systemGroupId", "SystemGroupId")),
+     id: text(pick(record, "id", "Id")),
+     controller: text(pick(record, "controller", "Controller")),
+     name: text(pick(record, "name", "Name")),
+     permissionKey: text(pick(record, "permissionKey", "PermissionKey")),
+     systemGroupId: text(pick(record, "systemGroupId", "SystemGroupId")),
+
     systemGroup: nullableText(pick(record, "systemGroup", "SystemGroup")),
     sort: numberValue(pick(record, "sort", "Sort")),
     canView: boolValue(pick(record, "canView", "CanView")),
@@ -225,11 +231,13 @@ export function normalizeComboboxOption(row: unknown): ComboboxOption {
 
 export function normalizePermission(row: unknown): PermissionMenuModel {
   const record = asRecord(row)
+  const permissionKey = pick(record, "permissionKey", "PermissionKey")
 
   return {
     id: text(pick(record, "id", "Id")),
     roleId: text(pick(record, "roleId", "RoleId")),
     menuId: text(pick(record, "menuId", "MenuId")),
+    ...(permissionKey === undefined ? {} : { permissionKey: nullableText(permissionKey) }),
     name: nullableText(pick(record, "name", "Name")),
     isViewed: boolValue(pick(record, "isViewed", "IsViewed")),
     isAdded: boolValue(pick(record, "isAdded", "IsAdded")),

@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -30,7 +29,6 @@ public static class AiVideoAccessPolicies
                     ValidIssuer = configuration["Jwt:Issuer"],
                     ValidAudience = configuration["Jwt:Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                    NameClaimType = JwtRegisteredClaimNames.UniqueName,
                     ClockSkew = TimeSpan.Zero
                 };
                 options.Events = new JwtBearerEvents
@@ -51,23 +49,21 @@ public static class AiVideoAccessPolicies
                 };
             });
 
-        var allowedRoleIds = configuration
-            .GetSection("AiVideoAccess:ViewRoleIds")
-            .Get<string[]>()?
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-
         services.AddAuthorization(options =>
         {
             options.AddPolicy(View, policy =>
             {
                 policy.RequireAuthenticatedUser();
-                if (allowedRoleIds.Count > 0)
-                {
-                    policy.RequireAssertion(context =>
-                        context.User.FindAll("role").Any(claim => allowedRoleIds.Contains(claim.Value)));
-                }
             });
+        });
+
+        services.AddHttpContextAccessor();
+        services.AddHttpClient<SystemFunctionalAuthorizationClient>(client =>
+        {
+            client.BaseAddress = new Uri(
+                configuration["SystemService:BaseUrl"] ?? "http://systemservice",
+                UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(2);
         });
 
         return services;

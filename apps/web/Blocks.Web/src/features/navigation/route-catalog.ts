@@ -1,14 +1,11 @@
 import {
-  Activity,
   Blocks,
   Bot,
   Database,
-  FileArchive,
+
   LayoutGrid,
   ListTree,
-  LockKeyhole,
   ScrollText,
-  Settings,
   UserRound,
   UsersRound,
 } from "lucide-react"
@@ -29,7 +26,7 @@ export type RouteCatalogEntry = {
 
 const routeCatalog: RouteCatalogEntry[] = [
   {
-    key: "systemoverview",
+    key: "admin.registration",
     route: "/system/overview",
     title: "System Overview",
     ownerKey: "system-service",
@@ -38,8 +35,9 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["system overview", "tổng quan hệ thống", "tong quan he thong"],
   },
   {
-    key: "hermes",
+    key: "workspace.home",
     route: "/system/hermes/overview",
+    accessRoutes: ["/"],
     title: "Hermes Overview",
     ownerKey: "system-service",
     icon: Blocks,
@@ -47,7 +45,7 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["hermes overview", "tổng quan hermes", "tong quan hermes"],
   },
   {
-    key: "auditlog",
+    key: "admin.audit",
     route: "/system/audit-log",
     title: "Audit Log",
     ownerKey: "system-service",
@@ -56,7 +54,7 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["audit log", "nhật ký", "nhat ky", "nhật ký hệ thống", "nhat ky he thong"],
   },
   {
-    key: "user",
+    key: "admin.users",
     route: "/system/identity/users",
     title: "Users",
     ownerKey: "system-service",
@@ -65,17 +63,16 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["users", "user", "tài khoản", "tai khoan", "người dùng", "nguoi dung", "user management"],
   },
   {
-    key: "role",
+    key: "admin.roles",
     route: "/system/identity/roles",
     title: "Roles",
     ownerKey: "system-service",
     icon: UsersRound,
     capability: "view",
-    accessRoutes: ["/system/identity/permissions"],
     aliases: ["roles", "role", "vai trò", "vai tro", "role management"],
   },
   {
-    key: "menu",
+    key: "admin.plugins",
     route: "/system/identity/menus",
     title: "Menus",
     ownerKey: "system-service",
@@ -84,7 +81,7 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["menus", "menu", "quản lý menu", "quan ly menu"],
   },
   {
-    key: "systemgroup",
+    key: "admin.permissions",
     route: "/system/identity/system-groups",
     title: "System Groups",
     ownerKey: "system-service",
@@ -92,62 +89,9 @@ const routeCatalog: RouteCatalogEntry[] = [
     capability: "view",
     aliases: ["systemgroup", "systemgroups", "system groups", "nhóm hệ thống", "nhom he thong"],
   },
+
   {
-    key: "permissionmatrix",
-    route: "/system/identity/permissions",
-    title: "Permission Matrix",
-    ownerKey: "system-service",
-    icon: LockKeyhole,
-    capability: "view",
-    aliases: ["permissionmatrix", "permission matrix", "phân quyền", "phan quyen", "quyền", "quyen"],
-  },
-  {
-    key: "filelibrary",
-    route: "/services/files/library",
-    title: "Library",
-    ownerKey: "file-service",
-    icon: FileArchive,
-    capability: "view",
-    aliases: ["file library", "library", "thư viện", "thu vien"],
-  },
-  {
-    key: "storageproviders",
-    route: "/services/files/storage-providers",
-    title: "Storage Providers",
-    ownerKey: "file-service",
-    icon: Settings,
-    capability: "view",
-    aliases: ["storage providers", "storage", "nhà cung cấp lưu trữ", "nha cung cap luu tru"],
-  },
-  {
-    key: "installedplugins",
-    route: "/plugins/installed",
-    title: "Installed Plugins",
-    ownerKey: "plugin-runtime",
-    icon: LayoutGrid,
-    capability: "view",
-    aliases: ["installed plugins", "plugins", "plugin đã cài", "plugin da cai"],
-  },
-  {
-    key: "pluginactivity",
-    route: "/plugins/activity",
-    title: "Plugin Activity",
-    ownerKey: "plugin-runtime",
-    icon: Activity,
-    capability: "view",
-    aliases: ["plugin activity", "activity", "hoạt động plugin", "hoat dong plugin"],
-  },
-  {
-    key: "pluginmanifests",
-    route: "/plugins/manifests",
-    title: "Manifests",
-    ownerKey: "plugin-runtime",
-    icon: ScrollText,
-    capability: "view",
-    aliases: ["plugin manifests", "manifests", "manifest"],
-  },
-  {
-    key: "tradelab",
+    key: "tradelab.strategies",
     route: "/plugins/tradelab",
     title: "Strategy Lab",
     ownerKey: "tradelab",
@@ -157,7 +101,7 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["trade lab", "tradelab", "strategy lab", "chiến lược", "chien luoc"],
   },
   {
-    key: "tradelabdatasets",
+    key: "tradelab.datasets",
     route: "/plugins/tradelab/datasets",
     title: "Datasets",
     ownerKey: "tradelab",
@@ -166,7 +110,7 @@ const routeCatalog: RouteCatalogEntry[] = [
     aliases: ["datasets", "dataset catalog", "dữ liệu", "du lieu"],
   },
   {
-    key: "aivideoproduction",
+    key: "ai-video.projects",
     route: "/plugins/ai-video",
     title: "AI Video Production",
     ownerKey: "ai-video-production",
@@ -203,8 +147,13 @@ export function getRouteCatalogEntries() {
   return routeCatalog
 }
 
-export function getRouteCatalogEntryForMenu(controller: string, name: string) {
+export function getRouteCatalogEntryForMenu(
+  permissionKey: string | null | undefined,
+  controller: string,
+  name: string,
+) {
   return (
+    getRouteCatalogEntry(permissionKey ?? "") ??
     getRouteCatalogEntry(controller) ??
     getRouteCatalogEntry(name) ??
     null

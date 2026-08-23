@@ -9,6 +9,10 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Role.Requests
         public Guid Id { get; set; }
 
         public string Name { get; set; } = null!;
+
+        public string Key { get; set; } = null!;
+
+        public bool IsRegistrationEligible { get; set; }
     }
 
     public class RoleRequestValidator : AbstractValidator<RoleRequest>
@@ -17,6 +21,8 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Role.Requests
         {
             RuleFor(x => x.Name)
                 .NotEmpty().WithMessage("Tên gọi không được để trống");
+            RuleFor(x => x.Key)
+                .NotEmpty().WithMessage("Mã vai trò không được để trống");
         }
     }
 }

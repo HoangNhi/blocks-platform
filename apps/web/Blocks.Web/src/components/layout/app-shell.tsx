@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from "react-router";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileSidebarSheet } from "@/components/layout/mobile-sidebar-sheet";
 import { WorkspaceTopChrome } from "@/components/layout/workspace-top-chrome";
-import { AccessDeniedPage } from "@/features/auth/access-denied-page";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type {
   AuthUser,
   ChangePasswordRequest,
@@ -43,11 +43,6 @@ import {
 import { AssistantDrawer } from "@/features/assistant/assistant-drawer";
 
 const OPEN_STATE_KEY = "blocks.sidebar.openSubgroups";
-const alwaysAllowedRoutes = new Set([
-  "/",
-  "/overview/service-health",
-  "/overview/recent-activity",
-]);
 
 type AppShellProps = {
   navigation: NavNode[];
@@ -229,9 +224,7 @@ export function AppShell({
     }
   }
 
-  const hasRouteAccess =
-    alwaysAllowedRoutes.has(activeRoute) ||
-    canAccessRoute(navigation, activeRoute);
+  const hasRouteAccess = canAccessRoute(navigation, activeRoute);
 
   return (
     <div className="flex h-svh overflow-hidden bg-platform-bg text-platform-ink">
@@ -284,7 +277,12 @@ export function AppShell({
           onOpenAssistant={() => setAssistantOpen(true)}
         />
         <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4 xl:p-5">
-          {hasRouteAccess ? <Outlet /> : <AccessDeniedPage />}
+          {hasRouteAccess ? <Outlet /> : (
+            <Alert role="alert" variant="destructive">
+              <AlertTitle>Truy cập bị từ chối</AlertTitle>
+              <AlertDescription>Bạn không có quyền truy cập nội dung này.</AlertDescription>
+            </Alert>
+          )}
         </div>
       </main>
       <AssistantDrawer

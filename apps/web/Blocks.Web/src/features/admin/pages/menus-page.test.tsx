@@ -56,7 +56,9 @@ describe("MenusPage", () => {
             id: "menu-1",
             controller: "User",
             name: "Users",
+            permissionKey: "admin.users",
             systemGroupId: "group-1",
+
             systemGroup: "Identity",
             sort: 10,
             canView: true,
@@ -76,7 +78,9 @@ describe("MenusPage", () => {
             id: "menu-1",
             controller: "User",
             name: "Users",
+            permissionKey: "admin.users",
             systemGroupId: "group-1",
+
             systemGroup: "Identity",
             sort: 10,
             canView: true,
@@ -131,6 +135,7 @@ describe("MenusPage", () => {
     await user.click(screen.getByRole("button", { name: /^Thêm$/i }))
     await user.type(screen.getByRole("textbox", { name: /tên menu/i }), "Roles")
     await user.type(screen.getByRole("textbox", { name: /controller/i }), "Role")
+    await user.type(screen.getByRole("textbox", { name: /mã quyền ổn định/i }), "admin.roles")
 
     const systemGroupTrigger = screen.getByRole("combobox", { name: /nhóm hệ thống/i })
     systemGroupTrigger.focus()
@@ -172,7 +177,9 @@ describe("MenusPage", () => {
             id: "menu-1",
             controller: "User",
             name: "Users",
+            permissionKey: "admin.users",
             systemGroupId: "group-1",
+
             systemGroup: "Identity",
             sort: 10,
             canView: true,
@@ -207,12 +214,13 @@ describe("MenusPage", () => {
         totalRow: 1,
       })
 
-    mockAdminApi.getMenuById.mockResolvedValue({
-      id: "menu-1",
-      controller: "User",
-      name: "Users",
-      systemGroupId: "group-1",
-      sort: 10,
+     mockAdminApi.getMenuById.mockResolvedValue({
+       id: "menu-1",
+       controller: "User",
+       name: "Users",
+       permissionKey: "admin.users",
+       systemGroupId: "group-1",
+       sort: 10,
       canView: true,
       canAdd: false,
       canUpdate: false,
@@ -224,12 +232,13 @@ describe("MenusPage", () => {
       isActived: true,
     })
 
-    mockAdminApi.updateMenu.mockResolvedValue({
-      id: "menu-1",
-      controller: "User",
-      name: "Users updated",
-      systemGroupId: "group-1",
-      sort: 10,
+     mockAdminApi.updateMenu.mockResolvedValue({
+       id: "menu-1",
+       controller: "User",
+       name: "Users updated",
+       permissionKey: "admin.users",
+       systemGroupId: "group-1",
+       sort: 10,
       canView: true,
       canAdd: false,
       canUpdate: false,

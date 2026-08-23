@@ -48,9 +48,11 @@ const adminApi = createSystemAdminApi(
 function createEmptyMenuForm(): MenuFormValues {
   return {
     id: crypto.randomUUID(),
-    controller: "",
-    name: "",
-    systemGroupId: "",
+     controller: "",
+     name: "",
+     permissionKey: "",
+     systemGroupId: "",
+
     sort: 0,
     canView: true,
     canAdd: false,
@@ -68,9 +70,11 @@ function createEmptyMenuForm(): MenuFormValues {
 function createMenuFormFromDetail(detail: MenuDetailModel): MenuFormValues {
   return {
     id: detail.id,
-    controller: detail.controller,
-    name: detail.name,
-    systemGroupId: detail.systemGroupId,
+     controller: detail.controller,
+     name: detail.name,
+     permissionKey: detail.permissionKey ?? "",
+     systemGroupId: detail.systemGroupId,
+
     sort: detail.sort ?? 0,
     canView: detail.canView,
     canAdd: detail.canAdd,
@@ -92,11 +96,16 @@ function validateMenuForm(form: MenuFormValues): MenuFormErrors {
     errors.name = "Tên menu không được để trống."
   }
 
-  if (!form.controller.trim()) {
-    errors.controller = "Controller không được để trống."
-  }
+   if (!form.controller.trim()) {
+     errors.controller = "Controller không được để trống."
+   }
 
-  if (!form.systemGroupId.trim()) {
+   if (!form.permissionKey.trim()) {
+     errors.permissionKey = "Mã quyền không được để trống."
+   }
+
+   if (!form.systemGroupId.trim()) {
+
     errors.systemGroupId = "Nhóm hệ thống không được để trống."
   }
 
@@ -285,9 +294,11 @@ export function MenusPage() {
     try {
       const requestBody = {
         id: menuForm.id,
-        controller: menuForm.controller.trim(),
-        name: menuForm.name.trim(),
-        systemGroupId: menuForm.systemGroupId,
+         controller: menuForm.controller.trim(),
+         name: menuForm.name.trim(),
+         permissionKey: menuForm.permissionKey.trim(),
+         systemGroupId: menuForm.systemGroupId,
+
         sort: menuForm.sort,
         canView: menuForm.canView,
         canAdd: menuForm.canAdd,

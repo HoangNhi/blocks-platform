@@ -28,7 +28,7 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Permission.Requests
         public PermissionRequestValidator()
         {
             RuleFor(r => r.RoleId).NotEmpty().WithMessage("Vai trò không được để trống");
-            RuleFor(r => r.RoleId).NotEmpty().WithMessage("Menu không được để trống");
+            RuleFor(r => r.MenuId).NotEmpty().WithMessage("Menu không được để trống");
         }
     }
 }

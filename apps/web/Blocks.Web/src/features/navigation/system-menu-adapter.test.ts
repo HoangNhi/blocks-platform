@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { adaptSystemNavigation } from "./system-menu-adapter"
+import {
+  adaptSystemNavigation,
+  collectUnknownSystemMenus,
+} from "./system-menu-adapter"
+import { getRouteCatalogEntry } from "./route-catalog"
 import type { SystemGroupRecord, SystemMenuRecord } from "./system-menu-types"
 
 const identityGroups: SystemGroupRecord[] = [
@@ -82,6 +86,25 @@ function createMenu(overrides: Partial<SystemMenuRecord>): SystemMenuRecord {
 }
 
 describe("system menu adapter", () => {
+  it("maps every canonical permission key to an implemented route", () => {
+    const expectedRoutes = {
+      "admin.registration": "/system/overview",
+      "workspace.home": "/system/hermes/overview",
+      "admin.audit": "/system/audit-log",
+      "admin.users": "/system/identity/users",
+      "admin.roles": "/system/identity/roles",
+      "admin.plugins": "/system/identity/menus",
+      "admin.permissions": "/system/identity/system-groups",
+      "tradelab.strategies": "/plugins/tradelab",
+      "tradelab.datasets": "/plugins/tradelab/datasets",
+      "ai-video.projects": "/plugins/ai-video",
+    } as const
+
+    for (const [permissionKey, route] of Object.entries(expectedRoutes)) {
+      expect(getRouteCatalogEntry(permissionKey)?.route).toBe(route)
+    }
+  })
+
   it("builds a three-level navigation tree from system groups and menus", () => {
     const navigation = adaptSystemNavigation({
       groups: identityGroups,
@@ -160,7 +183,7 @@ describe("system menu adapter", () => {
     expect(usersRoute?.isVisible).toBe(true)
   })
 
-  it("copies route catalog access routes for the Roles menu", () => {
+  it("keeps Roles & Permissions inside the Roles surface", () => {
     const navigation = adaptSystemNavigation({
       groups: identityGroups,
       menus: identityMenus,
@@ -170,7 +193,7 @@ describe("system menu adapter", () => {
       (item) => item.id === "roles",
     ) as { accessRoutes?: string[] } | undefined
 
-    expect(rolesRoute?.accessRoutes).toContain("/system/identity/permissions")
+    expect(rolesRoute?.accessRoutes).toBeUndefined()
   })
 
   it("maps SystemGroup menus to the system groups route catalog entry", () => {
@@ -185,6 +208,45 @@ describe("system menu adapter", () => {
 
     expect(systemGroupsRoute?.route).toBe("/system/identity/system-groups")
     expect(systemGroupsRoute?.title).toBe("System Groups")
+  })
+
+  it("resolves permission keys before controller and name aliases", () => {
+    const navigation = adaptSystemNavigation({
+      groups: [{ id: "system", name: "System", sort: 1, parentId: null }],
+      menus: [
+        createMenu({
+          id: "canonical-users",
+          permissionKey: "admin.users",
+          controller: "Role",
+          name: "Roles",
+        } as Partial<SystemMenuRecord>),
+      ],
+    })
+
+    expect(navigation[0]?.children?.[0]?.children?.[0]).toMatchObject({
+      id: "canonical-users",
+      route: "/system/identity/users",
+    })
+  })
+
+  it("reports unknown menus without making them routable", () => {
+    const menus = [createMenu({ id: "unknown", controller: "Unknown", name: "Unknown" })]
+    const navigation = adaptSystemNavigation({
+      groups: [{ id: "system", name: "System", sort: 1, parentId: null }],
+      menus,
+    })
+
+    expect(navigation[0]?.children).toEqual([])
+    expect(collectUnknownSystemMenus(menus)).toEqual(menus)
+  })
+
+  it("omits menus with no effective actions", () => {
+    const navigation = adaptSystemNavigation({
+      groups: [{ id: "system", name: "System", sort: 1, parentId: null }],
+      menus: [createMenu({ canView: false, isShowMenu: true })],
+    })
+
+    expect(navigation[0]?.children).toEqual([])
   })
 
   it("maps route-like controller values", () => {

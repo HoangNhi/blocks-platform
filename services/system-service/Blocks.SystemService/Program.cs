@@ -61,6 +61,7 @@ if (app.Environment.IsDevelopment() && !disableHttpsRedirection)
 }
 
 app.UseCors();
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

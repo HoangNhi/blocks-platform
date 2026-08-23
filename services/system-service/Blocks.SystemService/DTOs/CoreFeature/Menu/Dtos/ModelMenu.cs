@@ -10,6 +10,8 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Menu.Dtos
 
         public string Name { get; set; } = null!;
 
+        public string PermissionKey { get; set; } = null!;
+
         public Guid SystemGroupId { get; set; }
 
         public new int Sort { get; set; }

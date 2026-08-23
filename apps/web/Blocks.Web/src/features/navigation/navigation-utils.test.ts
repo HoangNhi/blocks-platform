@@ -9,6 +9,7 @@ import {
   getVisibleNavigation,
   getParentSubgroupIdsForRoute,
 } from "./navigation-utils"
+import { getRouteCatalogEntry } from "./route-catalog"
 import type { NavNode } from "./types"
 
 describe("navigation utilities", () => {
@@ -16,7 +17,7 @@ describe("navigation utilities", () => {
     const flattened = flattenNavigation(navigationFixture)
 
     expect(flattened[0]?.id).toBe("overview")
-    expect(flattened.map((node) => node.id)).toContain("permission-matrix")
+    expect(flattened.map((node) => node.id)).not.toContain("permission-matrix")
     expect(flattened.every((node) => node.isVisible)).toBe(true)
   })
 
@@ -84,12 +85,16 @@ describe("navigation utilities", () => {
     expect(canAccessRoute(navigationFixture, "/missing")).toBe(false)
   })
 
-  it("allows readiness routes but keeps TradeLab behind contract-backed access", () => {
-    expect(canAccessRoute([], "/plugins/installed")).toBe(true)
-    expect(canAccessRoute([], "/plugins/activity")).toBe(true)
-    expect(canAccessRoute([], "/plugins/manifests")).toBe(true)
-    expect(canAccessRoute([], "/services/files/library")).toBe(true)
-    expect(canAccessRoute([], "/services/files/storage-providers")).toBe(true)
+  it("binds the platform overview to workspace.home", () => {
+    expect(getRouteCatalogEntry("workspace.home")?.accessRoutes).toContain("/")
+  })
+
+  it("denies readiness routes without an authorized menu", () => {
+    expect(canAccessRoute([], "/plugins/installed")).toBe(false)
+    expect(canAccessRoute([], "/plugins/activity")).toBe(false)
+    expect(canAccessRoute([], "/plugins/manifests")).toBe(false)
+    expect(canAccessRoute([], "/services/files/library")).toBe(false)
+    expect(canAccessRoute([], "/services/files/storage-providers")).toBe(false)
     expect(canAccessRoute([], "/plugins/tradelab")).toBe(false)
   })
 
@@ -126,22 +131,4 @@ describe("navigation utilities", () => {
     expect(canAccessRoute(navigation, "/system/identity/users")).toBe(true)
   })
 
-  it("accepts a route listed in accessRoutes", () => {
-    const navigation = [
-      {
-        id: "roles",
-        title: "Roles",
-        kind: "menu",
-        route: "/system/identity/roles",
-        accessRoutes: ["/system/identity/permissions"],
-        owner: "system",
-        ownerKey: "system-service",
-        sort: 1,
-        isVisible: true,
-        status: "active",
-      } as NavNode & { accessRoutes?: string[] },
-    ]
-
-    expect(canAccessRoute(navigation, "/system/identity/permissions")).toBe(true)
-  })
 })

@@ -108,9 +108,10 @@ export function UserFormDialog({
                     onChange={(event) =>
                       onChange(setField(value, "username", event.target.value))
                     }
-                    aria-invalid={Boolean(errors.username)}
-                  />
-                  {errors.username ? <FormMessage>{errors.username}</FormMessage> : null}
+                     aria-invalid={Boolean(errors.username)}
+                     aria-describedby={errors.username ? "user-username-error" : undefined}
+                   />
+                   {errors.username ? <FormMessage id="user-username-error">{errors.username}</FormMessage> : null}
                 </FormItem>
                 <FormItem>
                   <FormLabel htmlFor="user-fullname">Họ và tên</FormLabel>
@@ -120,9 +121,10 @@ export function UserFormDialog({
                     onChange={(event) =>
                       onChange(setField(value, "fullname", event.target.value))
                     }
-                    aria-invalid={Boolean(errors.fullname)}
-                  />
-                  {errors.fullname ? <FormMessage>{errors.fullname}</FormMessage> : null}
+                     aria-invalid={Boolean(errors.fullname)}
+                     aria-describedby={errors.fullname ? "user-fullname-error" : undefined}
+                   />
+                   {errors.fullname ? <FormMessage id="user-fullname-error">{errors.fullname}</FormMessage> : null}
                 </FormItem>
               </div>
 
@@ -136,9 +138,10 @@ export function UserFormDialog({
                     onChange={(event) =>
                       onChange(setField(value, "email", event.target.value))
                     }
-                    aria-invalid={Boolean(errors.email)}
-                  />
-                  {errors.email ? <FormMessage>{errors.email}</FormMessage> : null}
+                     aria-invalid={Boolean(errors.email)}
+                     aria-describedby={errors.email ? "user-email-error" : undefined}
+                   />
+                   {errors.email ? <FormMessage id="user-email-error">{errors.email}</FormMessage> : null}
                 </FormItem>
                 <FormItem>
                   <FormLabel htmlFor="user-role">Vai trò</FormLabel>
@@ -149,8 +152,9 @@ export function UserFormDialog({
                     <SelectTrigger
                       id="user-role"
                       aria-label="Vai trò"
-                      aria-invalid={Boolean(errors.roleId)}
-                    >
+                       aria-invalid={Boolean(errors.roleId)}
+                       aria-describedby={errors.roleId ? "user-role-error" : undefined}
+                     >
                       <SelectValue placeholder="Chọn vai trò" />
                     </SelectTrigger>
                     <SelectContent>
@@ -161,7 +165,7 @@ export function UserFormDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.roleId ? <FormMessage>{errors.roleId}</FormMessage> : null}
+                   {errors.roleId ? <FormMessage id="user-role-error">{errors.roleId}</FormMessage> : null}
                 </FormItem>
               </div>
 
@@ -174,14 +178,15 @@ export function UserFormDialog({
                   onChange={(event) =>
                     onChange(setField(value, "password", event.target.value))
                   }
-                  aria-invalid={Boolean(errors.password)}
-                />
+                   aria-invalid={Boolean(errors.password)}
+                   aria-describedby={errors.password ? "user-password-error" : undefined}
+                 />
                 {isEditMode ? (
                   <p className="text-xs text-muted-foreground">
                     Để trống nếu muốn giữ nguyên mật khẩu hiện tại.
                   </p>
                 ) : null}
-                {errors.password ? <FormMessage>{errors.password}</FormMessage> : null}
+                 {errors.password ? <FormMessage id="user-password-error">{errors.password}</FormMessage> : null}
               </FormItem>
             </div>
           </ScrollArea>

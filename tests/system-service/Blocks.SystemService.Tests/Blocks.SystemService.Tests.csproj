@@ -21,4 +21,8 @@
     <ProjectReference Include="..\..\..\services\system-service\Blocks.SystemService\Blocks.SystemService.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Data\*.sql" LogicalName="Blocks.SystemService.Infrastructure.Data.Migrations.%(Filename).sql" />
+  </ItemGroup>
+
 </Project>

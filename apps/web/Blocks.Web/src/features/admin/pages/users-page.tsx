@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { InvitationsPanel } from "../components/invitations-panel"
 import { ConfirmAction } from "@/features/admin/components/confirm-action"
 import { UserFormDialog, type UserFormErrors, type UserFormValues } from "@/features/admin/components/user-form-dialog"
 import {
@@ -335,6 +337,12 @@ export function UsersPage() {
   }
 
   return (
+    <Tabs defaultValue="users" className="h-full min-h-0">
+      <TabsList>
+        <TabsTrigger value="users">Tài khoản</TabsTrigger>
+        <TabsTrigger value="invitations">Lời mời</TabsTrigger>
+      </TabsList>
+      <TabsContent value="users" className="min-h-0 flex-1">
     <SystemListPageScaffold
       onResetFilters={() => {
         setError(null)
@@ -437,5 +445,10 @@ export function UsersPage() {
         onSaveAndAddMore={() => void submitUserForm("saveAndAddMore")}
       />
     </SystemListPageScaffold>
+      </TabsContent>
+      <TabsContent value="invitations" className="min-h-0 flex-1 overflow-auto">
+        <InvitationsPanel adminApi={adminApi} />
+      </TabsContent>
+    </Tabs>
   )
 }

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Blocks.Shared.Authorization;
 using Blocks.AiVideoService.Read;
 using Blocks.AiVideoService.Artifacts;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -17,7 +18,30 @@ public static class AiVideoReadEndpoints
     public static IEndpointRouteBuilder MapAiVideoReadEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/ai-video")
-            .RequireAuthorization(AiVideoAccessPolicies.View);
+            .RequireAuthorization(AiVideoAccessPolicies.View)
+            .AddEndpointFilter(async (context, next) =>
+            {
+                var authorization = context.HttpContext.RequestServices.GetRequiredService<SystemFunctionalAuthorizationClient>();
+                var result = await authorization.CheckAsync(
+                    "ai-video.projects",
+                    FunctionalPermissionAction.VIEW,
+                    context.HttpContext.RequestAborted);
+                if (!result.AuthorityAvailable)
+                {
+                    return Results.Json(
+                        AiVideoResponses.Fail<object>("Authorization authority unavailable.", "AUTHORITY_UNAVAILABLE"),
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+
+                if (!result.Allowed)
+                {
+                    return Results.Json(
+                        AiVideoResponses.Fail<object>("AI Video Production view permission is required.", "FORBIDDEN"),
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                return await next(context);
+            });
 
         group.MapGet("/status", async (
             AiVideoReadService readService,

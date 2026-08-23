@@ -1,6 +1,8 @@
+using Blocks.Shared.Authorization;
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
 using Blocks.SystemService.DTOs.CoreFeature.User.Dtos;
+using Blocks.SystemService.Services.CoreFeature.Authorization;
 using Blocks.SystemService.DTOs.CoreFeature.User.Requests;
 using Blocks.SystemService.Helpers;
 using Blocks.SystemService.Infrastructure.Data;
@@ -22,19 +24,22 @@ namespace Blocks.SystemService.Services.CoreFeature.User
         private readonly IHttpContextAccessor _contextAccessor;
         private readonly IUploadFileService _uploadFileService;
         private readonly ISystemReferenceGuard _referenceGuard;
+        private readonly IFunctionalAuthorizationService _functionalAuthorizationService;
 
         public UserService(
             SystemContext context,
             IMapper mapper,
             IHttpContextAccessor contextAccessor,
             IUploadFileService uploadFileService,
-            ISystemReferenceGuard referenceGuard)
+            ISystemReferenceGuard referenceGuard,
+            IFunctionalAuthorizationService functionalAuthorizationService)
         {
             _context = context;
             _mapper = mapper;
             _contextAccessor = contextAccessor;
             _uploadFileService = uploadFileService;
             _referenceGuard = referenceGuard;
+            _functionalAuthorizationService = functionalAuthorizationService;
         }
 
         public async Task<ModelUser> GetById(GetByIdRequest request)
@@ -231,15 +236,16 @@ namespace Blocks.SystemService.Services.CoreFeature.User
 
         public async Task<CheckPermissionResponse> CheckPermission(CheckPermissionRequest request)
         {
-            var parameters = new[]
-            {
-                new NpgsqlParameter("i_user_id", request.UserId),
-                new NpgsqlParameter("i_controller", request.Controller),
-                new NpgsqlParameter("i_action", request.Action)
-            };
+            var action = Enum.IsDefined(typeof(FunctionalPermissionAction), request.Action)
+                ? (FunctionalPermissionAction)request.Action
+                : FunctionalPermissionAction.NONE;
+            var hasPermission = await _functionalAuthorizationService.CheckAsync(
+                request.UserId,
+                null,
+                action,
+                request.Controller);
 
-            var result = await _context.ExecuteFunction<CheckPermissionResponse>("fn_user_checkpermission", parameters);
-            return result;
+            return new CheckPermissionResponse { HasPermission = hasPermission };
         }
 
         public async Task<List<ModelCombobox>> GetAllForCombobox()

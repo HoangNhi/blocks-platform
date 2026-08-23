@@ -30,6 +30,7 @@ public sealed class AuditInterceptorTests
             {
                 Id = roleId,
                 Name = "Administrator",
+                Key = "administrator",
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "seed",
                 IsActived = true,
@@ -113,6 +114,7 @@ public sealed class AuditInterceptorTests
             {
                 Id = roleId,
                 Name = "Administrator",
+                Key = "administrator",
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "seed",
                 IsActived = true,

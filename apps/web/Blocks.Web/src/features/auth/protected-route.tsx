@@ -23,9 +23,5 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 
-  if (status === "forbidden") {
-    return <Navigate to="/403" replace />
-  }
-
   return <Outlet />
 }

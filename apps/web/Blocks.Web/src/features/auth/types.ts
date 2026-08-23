@@ -3,6 +3,26 @@ export type LoginRequest = {
   password: string
 }
 
+export type RegistrationAvailability = {
+  isAvailable: boolean
+}
+
+export type RegistrationRequest = {
+  username: string
+  email: string
+  fullname: string
+  password: string
+  invitationToken?: string | null
+}
+
+export type RegistrationResponse = {
+  id: string
+  username: string
+  email: string
+  fullname: string
+  workspaceId: string
+}
+
 export type AuthUser = {
   id: string
   username: string

@@ -184,12 +184,16 @@ describe("system admin api", () => {
     await api.createRole({
       id: "role-1",
       name: "Administrator",
+      key: "administrator",
+      isRegistrationEligible: false,
       folderUpload: "folder-role-1",
       isActived: true,
     })
     await api.updateRole({
       id: "role-1",
       name: "Administrator",
+      key: "administrator",
+      isRegistrationEligible: false,
       folderUpload: "folder-role-1",
       isActived: false,
     })
@@ -215,9 +219,11 @@ describe("system admin api", () => {
         Data: [
           {
             Id: "menu-1",
-            Controller: "User",
-            Name: "Users",
-            SystemGroupId: "identity",
+             Controller: "User",
+             Name: "Users",
+             PermissionKey: "admin.users",
+             SystemGroupId: "identity",
+
             SystemGroup: "Identity",
             Sort: 10,
             CanView: true,
@@ -239,6 +245,7 @@ describe("system admin api", () => {
       id: "menu-1",
       controller: "User",
       name: "Users",
+      permissionKey: "admin.users",
       systemGroupId: "identity",
       systemGroup: "Identity",
       sort: 10,
@@ -257,9 +264,11 @@ describe("system admin api", () => {
     const api = createSystemAdminApi(
       createApiClient({
         Id: "menu-1",
-        Controller: "User",
-        Name: "Users",
-        SystemGroupId: "identity",
+         Controller: "User",
+         Name: "Users",
+         PermissionKey: "admin.users",
+         SystemGroupId: "identity",
+
         Sort: 10,
         CanView: true,
         CanAdd: false,
@@ -287,6 +296,7 @@ describe("system admin api", () => {
       id: "menu-1",
       controller: "User",
       name: "Users",
+      permissionKey: "admin.users",
       systemGroupId: "identity",
       sort: 10,
       canView: true,
@@ -302,6 +312,7 @@ describe("system admin api", () => {
       id: "menu-1",
       controller: "User",
       name: "Users",
+      permissionKey: "admin.users",
       systemGroupId: "identity",
       sort: 10,
       canView: true,
@@ -455,6 +466,34 @@ describe("system admin api", () => {
       entityName: "Role",
       isSuccess: true,
       createdAt: "2026-05-10T00:00:00Z",
+    })
+  })
+
+  it("reads admin settings separately from public availability and creates invitations", async () => {
+    const client = createApiClient({
+      RegistrationMode: "open",
+      DefaultRegistrationRoleId: "role-1",
+      Id: "invite-1",
+      Token: "invite-token",
+      ExpiresAt: "2026-09-01T00:00:00Z",
+    })
+    const api = createSystemAdminApi(client)
+
+    await expect(api.getRegistrationSettings()).resolves.toEqual({
+      registrationMode: "open",
+      defaultRegistrationRoleId: "role-1",
+    })
+    await api.updateRegistrationSettings({ registrationMode: "open", defaultRegistrationRoleId: "role-1" })
+    await api.createInvitation({ expiresAt: "2026-09-01T00:00:00Z" })
+
+    expect(vi.mocked(client.request)).toHaveBeenNthCalledWith(1, "/api/system/RegistrationAdmin/settings")
+    expect(vi.mocked(client.request)).toHaveBeenNthCalledWith(2, "/api/system/RegistrationAdmin/settings", {
+      method: "PUT",
+      body: { registrationMode: "open", defaultRegistrationRoleId: "role-1" },
+    })
+    expect(vi.mocked(client.request)).toHaveBeenNthCalledWith(3, "/api/system/RegistrationAdmin/invitations", {
+      method: "POST",
+      body: { expiresAt: "2026-09-01T00:00:00Z" },
     })
   })
 

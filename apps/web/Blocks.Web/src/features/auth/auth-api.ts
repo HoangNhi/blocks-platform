@@ -9,6 +9,9 @@ import type {
   LoginRequest,
   LoginResponse,
   RefreshTokenRequest,
+  RegistrationAvailability,
+  RegistrationRequest,
+  RegistrationResponse,
   TokenPair,
 } from "./types"
 
@@ -103,6 +106,38 @@ function isTransportFailure(error: unknown) {
 
 export function createAuthApi(client: AuthApiOptions) {
   return {
+    getRegistrationAvailability: async () => {
+      const response = await client.request<RegistrationAvailability>(
+        "/api/system/Auth/registration-availability",
+      )
+      const record = response as unknown as AuthApiRecord
+      return {
+        isAvailable: Boolean(pickApiValue<boolean>(record, "isAvailable", "IsAvailable")),
+      }
+    },
+    register: async (body: RegistrationRequest) => {
+      const response = await client.request<RegistrationResponse>(
+        "/api/system/Auth/register",
+        {
+          method: "POST",
+          body: {
+            username: body.username,
+            email: body.email,
+            fullname: body.fullname,
+            password: body.password,
+            invitationToken: body.invitationToken ?? null,
+          },
+        },
+      )
+      const record = response as unknown as AuthApiRecord
+      return {
+        id: String(pickApiValue<string>(record, "id", "Id")),
+        username: pickApiValue<string>(record, "username", "Username"),
+        email: pickApiValue<string>(record, "email", "Email"),
+        fullname: pickAuthFullname(record),
+        workspaceId: String(pickApiValue<string>(record, "workspaceId", "WorkspaceId")),
+      }
+    },
     login: async (body: LoginRequest) => {
       try {
         const response = await client.request<LoginResponse>(

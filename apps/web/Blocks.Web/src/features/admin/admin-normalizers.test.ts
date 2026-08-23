@@ -107,9 +107,11 @@ describe("admin normalizers", () => {
     expect(
       normalizeMenuDetail({
         ID: "menu-1",
-        Controller: "User",
-        Name: "Users",
-        SystemGroupId: "group-1",
+         Controller: "User",
+         Name: "Users",
+         PermissionKey: "admin.users",
+         SystemGroupId: "group-1",
+
         Sort: 10,
         CanView: true,
         CanAdd: false,

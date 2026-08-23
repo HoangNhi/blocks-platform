@@ -21,7 +21,7 @@ import { CrudDialogFooter } from "./crud-dialog-footer"
 
 export type MenuFormValues = MenuUpsertRequest
 
-export type MenuFormErrors = Partial<Record<"name" | "controller" | "systemGroupId", string>>
+export type MenuFormErrors = Partial<Record<"name" | "controller" | "permissionKey" | "systemGroupId", string>>
 
 type MenuFormDialogProps = {
   open: boolean
@@ -118,8 +118,9 @@ export function MenuFormDialog({
                       onChange(updateMenuValue(value, "name", event.target.value))
                     }
                     aria-invalid={Boolean(errors.name)}
+                    aria-describedby={errors.name ? "menu-name-error" : undefined}
                   />
-                  {errors.name ? <FormMessage>{errors.name}</FormMessage> : null}
+                  {errors.name ? <FormMessage id="menu-name-error">{errors.name}</FormMessage> : null}
                 </FormItem>
                 <FormItem>
                   <FormLabel htmlFor="menu-controller">Controller</FormLabel>
@@ -130,9 +131,28 @@ export function MenuFormDialog({
                       onChange(updateMenuValue(value, "controller", event.target.value))
                     }
                     aria-invalid={Boolean(errors.controller)}
+                    aria-describedby={errors.controller ? "menu-controller-error" : undefined}
                   />
                   {errors.controller ? (
-                    <FormMessage>{errors.controller}</FormMessage>
+                    <FormMessage id="menu-controller-error">{errors.controller}</FormMessage>
+                  ) : null}
+                </FormItem>
+                <FormItem>
+                  <FormLabel htmlFor="menu-permission-key">Mã quyền ổn định</FormLabel>
+                  <Input
+                    id="menu-permission-key"
+                    value={value.permissionKey}
+                    onChange={(event) =>
+                      onChange(updateMenuValue(value, "permissionKey", event.target.value))
+                    }
+                    aria-invalid={Boolean(errors.permissionKey)}
+                    aria-describedby={errors.permissionKey ? "menu-permission-key-error" : "menu-permission-key-help"}
+                  />
+                  <p id="menu-permission-key-help" className="text-xs text-muted-foreground">
+                    Mã dùng để liên kết quyền giữa menu và dịch vụ.
+                  </p>
+                  {errors.permissionKey ? (
+                    <FormMessage id="menu-permission-key-error">{errors.permissionKey}</FormMessage>
                   ) : null}
                 </FormItem>
               </div>
@@ -160,7 +180,8 @@ export function MenuFormDialog({
                     <SelectTrigger
                       id="menu-system-group"
                       aria-label="Nhóm hệ thống"
-                      aria-invalid={Boolean(errors.systemGroupId)}
+                       aria-invalid={Boolean(errors.systemGroupId)}
+                       aria-describedby={errors.systemGroupId ? "menu-system-group-error" : undefined}
                     >
                       <SelectValue placeholder="Chọn nhóm hệ thống" />
                     </SelectTrigger>
@@ -172,9 +193,9 @@ export function MenuFormDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.systemGroupId ? (
-                    <FormMessage>{errors.systemGroupId}</FormMessage>
-                  ) : null}
+                   {errors.systemGroupId ? (
+                     <FormMessage id="menu-system-group-error">{errors.systemGroupId}</FormMessage>
+                   ) : null}
                 </FormItem>
               </div>
 

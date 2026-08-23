@@ -30,6 +30,11 @@ namespace Blocks.SystemService.Configs
                 : authHeader.Trim();
         }
 
+        private static bool IsFunctionalAuthorizationCheck(HttpContext httpContext)
+        {
+            return httpContext.Request.Path.Equals("/api/Authorization/check", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static void ExecuteConfigAuthentication(this WebApplicationBuilder builder)
         {
             var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -70,14 +75,21 @@ namespace Blocks.SystemService.Configs
                             return Task.CompletedTask;
                         },
 
-                        OnChallenge = async context =>
-                        {
-                            if (IsGrpcRequest(context.HttpContext))
-                            {
-                                return;
-                            }
+                         OnChallenge = async context =>
+                         {
+                             if (IsGrpcRequest(context.HttpContext))
+                             {
+                                 return;
+                             }
 
-                            context.HandleResponse();
+                             if (IsFunctionalAuthorizationCheck(context.HttpContext))
+                             {
+                                 context.HandleResponse();
+                                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                 return;
+                             }
+
+                             context.HandleResponse();
 
                             context.Response.StatusCode = StatusCodes.Status200OK;
                             context.Response.ContentType = "application/json";

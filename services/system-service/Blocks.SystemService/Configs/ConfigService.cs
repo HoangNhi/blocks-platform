@@ -11,6 +11,8 @@ using AutoMapper;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 namespace Blocks.SystemService.Configs
 {
@@ -26,6 +28,29 @@ namespace Blocks.SystemService.Configs
                 });
             });
             builder.Services.AddSingleton(builder.Configuration);
+            builder.Services.AddOptions<RegistrationOptions>()
+                .Bind(builder.Configuration.GetSection(RegistrationOptions.SectionName));
+            var registrationOptions = builder.Configuration.GetSection(RegistrationOptions.SectionName).Get<RegistrationOptions>() ?? new RegistrationOptions();
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy(RegistrationOptions.RegistrationPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = registrationOptions.RegistrationPermitLimit,
+                        Window = TimeSpan.FromMinutes(registrationOptions.RegistrationWindowMinutes),
+                        QueueLimit = 0
+                    }));
+                options.AddPolicy(RegistrationOptions.BootstrapPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = registrationOptions.BootstrapPermitLimit,
+                        Window = TimeSpan.FromMinutes(registrationOptions.BootstrapWindowMinutes),
+                        QueueLimit = 0
+                    }));
+            });
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddOptions<JwtOptions>()
                 .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
@@ -49,6 +74,7 @@ namespace Blocks.SystemService.Configs
             builder.Services.AddDbContextFactory<SystemContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("System")),
                 ServiceLifetime.Scoped);
+            builder.Services.AddHostedService<SystemMigrationHostedService>();
 
             builder.Services.AddAutoMapper(mc =>
             {

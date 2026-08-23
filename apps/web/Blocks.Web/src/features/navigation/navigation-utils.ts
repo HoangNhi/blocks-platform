@@ -4,14 +4,6 @@ function sortNodes(nodes: NavNode[]) {
   return [...nodes].sort((a, b) => a.sort - b.sort)
 }
 
-const alwaysAllowedReadinessRoutes = new Set([
-  "/plugins/installed",
-  "/plugins/activity",
-  "/plugins/manifests",
-  "/services/files/library",
-  "/services/files/storage-providers",
-])
-
 function matchesRoutePattern(pattern: string, route: string) {
   const patternParts = pattern.split("/")
   const routeParts = route.split("/")
@@ -84,10 +76,6 @@ export function findFirstMenuRoute(nodes: NavNode[]): string {
 }
 
 export function canAccessRoute(nodes: NavNode[], route: string) {
-  if (alwaysAllowedReadinessRoutes.has(route)) {
-    return true
-  }
-
   for (const node of sortNodes(nodes)) {
     if (
       node.route === route

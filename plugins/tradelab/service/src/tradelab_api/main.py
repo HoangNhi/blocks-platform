@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from tradelab_api.api.responses import install_exception_handlers
 from tradelab_api.api.router import router as api_router
+from tradelab_api.core.authorization import SystemFunctionalAuthorizationClient, authorize_request
 from tradelab_api.core.config import get_settings
 from tradelab_api.db.session import (
     SessionLocal,
@@ -64,6 +65,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 install_exception_handlers(app)
+
+
+@app.middleware("http")
+async def functional_authorization_middleware(request, call_next):
+    client = getattr(request.app.state, "system_authorization_client", None)
+    if client is None:
+        client = SystemFunctionalAuthorizationClient(get_settings().system_service_base_url)
+    denial = await authorize_request(request, client)
+    if denial is not None:
+        return denial
+    return await call_next(request)
+
+
 app.include_router(api_router, prefix="/api/tradelab")
 
 
