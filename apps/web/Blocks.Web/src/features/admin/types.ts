@@ -29,6 +29,11 @@ export type UserModel = BaseModel & {
   avatar?: string | null
 }
 
+export type UserPagingRequest = PagingRequest & {
+  roleId?: string
+  isActived?: boolean
+}
+
 export type UserDetailModel = UserModel & {
   password: string
   folderUpload: string

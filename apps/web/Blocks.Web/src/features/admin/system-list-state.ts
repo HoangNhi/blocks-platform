@@ -1,5 +1,7 @@
 import type { PagingRequest } from "@/lib/api/types"
 
+import type { UserPagingRequest } from "./types"
+
 export function createDefaultPagingRequest(pageSize = 20): PagingRequest {
   return {
     pageIndex: 1,
@@ -10,16 +12,45 @@ export function createDefaultPagingRequest(pageSize = 20): PagingRequest {
   }
 }
 
-export function applyTextSearch(
-  request: PagingRequest,
+export function createDefaultUserPagingRequest(pageSize = 20): UserPagingRequest {
+  return {
+    ...createDefaultPagingRequest(pageSize),
+    roleId: undefined,
+    isActived: undefined,
+  }
+}
+
+export function applyTextSearch<TRequest extends PagingRequest>(
+  request: TRequest,
   searchTerm: string,
-): PagingRequest {
+): TRequest {
   const nextSearch = searchTerm.trim()
 
   return {
     ...request,
     pageIndex: 1,
     textSearch: nextSearch ? nextSearch : undefined,
+  } as TRequest
+}
+
+export function applyUserFilters(
+  request: UserPagingRequest,
+  filters: Pick<UserPagingRequest, "roleId" | "isActived">,
+): UserPagingRequest {
+  return {
+    ...request,
+    pageIndex: 1,
+    roleId: filters.roleId || undefined,
+    isActived: filters.isActived,
+  }
+}
+
+export function resetUserFilters(request: UserPagingRequest): UserPagingRequest {
+  return {
+    ...request,
+    pageIndex: 1,
+    roleId: undefined,
+    isActived: undefined,
   }
 }
 

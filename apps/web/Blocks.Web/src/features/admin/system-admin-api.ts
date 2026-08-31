@@ -10,6 +10,7 @@ import type {
   RoleUpsertRequest,
   SystemGroupUpsertRequest,
   UserUpsertRequest,
+  UserPagingRequest,
 } from "./types"
 import {
   normalizeAuditLog,
@@ -62,7 +63,7 @@ export function createSystemAdminApi(client: SystemAdminApiOptions) {
         token: String(record.token ?? record.Token ?? ""),
       }
     },
-    getUsers: async (body: PagingRequest) =>
+    getUsers: async (body: UserPagingRequest) =>
       normalizePagingResponse(
         await client.request<unknown>("/api/system/User/get-list", {
           method: "POST",

@@ -61,6 +61,33 @@ describe("system admin api", () => {
     expect(result.data[0]).not.toHaveProperty("password")
   })
 
+  it("sends optional user role and status filters to existing list endpoint", async () => {
+    const client = createApiClient({ PageIndex: 1, PageSize: 20, TotalRow: 0, Data: [] })
+    const api = createSystemAdminApi(client)
+
+    await api.getUsers({
+      pageIndex: 1,
+      pageSize: 20,
+      textSearch: "admin",
+      roleId: "role-1",
+      isActived: false,
+    })
+
+    expect(vi.mocked(client.request)).toHaveBeenCalledWith(
+      "/api/system/User/get-list",
+      expect.objectContaining({
+        method: "POST",
+        body: {
+          pageIndex: 1,
+          pageSize: 20,
+          textSearch: "admin",
+          roleId: "role-1",
+          isActived: false,
+        },
+      }),
+    )
+  })
+
   it("fetches and normalizes user detail responses", async () => {
     const api = createSystemAdminApi(
       createApiClient({

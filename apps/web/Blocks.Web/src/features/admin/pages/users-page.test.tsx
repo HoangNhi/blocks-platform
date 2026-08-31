@@ -129,7 +129,7 @@ describe("UsersPage", () => {
 
     await screen.findByText("admin")
 
-    await user.click(screen.getByRole("button", { name: /^Thêm$/i }))
+    await user.click(screen.getByRole("button", { name: /thêm tài khoản/i }))
 
     const usernameInput = screen.getByRole("textbox", { name: /tên đăng nhập/i })
     const fullnameInput = screen.getByRole("textbox", { name: /họ và tên/i })
@@ -303,6 +303,56 @@ describe("UsersPage", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 
+  it("does not send an avatar upload folder when editing without a new avatar", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({
+      data: [{ id: "role-1", name: "Administrator" }],
+      totalRow: 1,
+    })
+    mockAdminApi.getUsers.mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          username: "admin",
+          fullname: "Admin",
+          roleId: "role-1",
+          roleName: "Administrator",
+          email: "admin@example.com",
+          avatar: "/avatars/admin.png",
+          isActived: true,
+        },
+      ],
+      totalRow: 1,
+    })
+    mockAdminApi.getUserById.mockResolvedValue({
+      id: "user-1",
+      username: "admin",
+      fullname: "Admin",
+      password: "placeholder-token",
+      roleId: "role-1",
+      roleName: "Administrator",
+      email: "admin@example.com",
+      avatar: "/avatars/admin.png",
+      folderUpload: "folder-user-1",
+      isActived: true,
+    })
+    mockAdminApi.updateUser.mockResolvedValue(undefined)
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    await screen.findByText("admin")
+    await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
+    await user.click(await screen.findByRole("menuitem", { name: /sửa/i }))
+    await user.click(screen.getByRole("button", { name: /^Lưu$/i }))
+
+    await waitFor(() => {
+      expect(mockAdminApi.updateUser).toHaveBeenCalledWith(
+        expect.objectContaining({ folderUpload: "" }),
+      )
+    })
+    expect(mockFilesApi.uploadTemporary).not.toHaveBeenCalled()
+  })
+
   it("restores the table after confirming a bulk delete", async () => {
     mockAdminApi.getRoles.mockResolvedValue({
       data: [{ id: "role-1", name: "Administrator" }],
@@ -351,5 +401,59 @@ describe("UsersPage", () => {
       (screen.getByRole("button", { name: /xóa/i }) as HTMLButtonElement).disabled,
     ).toBe(true)
     expect(screen.queryByRole("button", { name: /xác nhận xóa/i })).toBeNull()
+  })
+
+  it("reloads users with selected role and status filters", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({
+      data: [{ id: "role-1", name: "Administrator" }],
+      totalRow: 1,
+    })
+    mockAdminApi.getUsers.mockResolvedValue({ data: [], totalRow: 0 })
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    const roleFilter = screen.getByRole("combobox", { name: /vai trò/i })
+    roleFilter.focus()
+    fireEvent.keyDown(roleFilter, { key: "ArrowDown" })
+    await user.click(await screen.findByRole("option", { name: "Administrator" }))
+    const statusFilter = screen.getByRole("combobox", { name: /trạng thái/i })
+    statusFilter.focus()
+    fireEvent.keyDown(statusFilter, { key: "ArrowDown" })
+    await user.click(await screen.findByRole("option", { name: /không hoạt động/i }))
+
+    await waitFor(() => {
+      expect(mockAdminApi.getUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          pageIndex: 1,
+          roleId: "role-1",
+          isActived: false,
+        }),
+      )
+    })
+  })
+
+  it("renders grid toolbar hierarchy with filters open by default", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({ data: [], totalRow: 0 })
+    mockAdminApi.getUsers.mockResolvedValue({ data: [], totalRow: 0 })
+
+    render(<UsersPage />)
+
+    await screen.findByText(/không có tài khoản/i)
+
+    const heading = screen.getByRole("heading", { name: "Người dùng", level: 1 })
+    const filterButton = screen.getByRole("button", { name: /^bộ lọc$/i })
+    const search = screen.getByRole("searchbox", { name: /tìm tên/i })
+    const refresh = screen.getByRole("button", { name: /làm mới danh sách/i })
+    const deleteButton = screen.getByRole("button", { name: /xóa danh sách/i })
+    const addButton = screen.getByRole("button", { name: /thêm tài khoản/i })
+
+    expect(heading.closest('[data-slot="card"]')).toBeNull()
+    expect(filterButton.getAttribute("aria-expanded")).toBe("true")
+    expect(screen.getByRole("combobox", { name: "Vai trò" })).toBeTruthy()
+    expect(search.compareDocumentPosition(filterButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(filterButton.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(refresh.compareDocumentPosition(deleteButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(deleteButton.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

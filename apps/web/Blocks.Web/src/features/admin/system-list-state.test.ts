@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  applyUserFilters,
   applyTextSearch,
   areAllVisibleSelected,
   changePage,
   changePageSize,
+  createDefaultUserPagingRequest,
   createDefaultPagingRequest,
+  resetUserFilters,
   resetPagingRequest,
   toggleAllSelectedIds,
   toggleSelectedId,
@@ -32,6 +35,57 @@ describe("system list state helpers", () => {
       pageIndex: 1,
       pageSize: 20,
       textSearch: "admin",
+    })
+  })
+
+  it("applies user filters and resets the page index", () => {
+    expect(
+      applyUserFilters(
+        {
+          pageIndex: 4,
+          pageSize: 20,
+          textSearch: "admin",
+          roleId: "role-old",
+          isActived: true,
+        },
+        { roleId: "role-1", isActived: false },
+      ),
+    ).toEqual({
+      pageIndex: 1,
+      pageSize: 20,
+      textSearch: "admin",
+      roleId: "role-1",
+      isActived: false,
+    })
+  })
+
+  it("clears only user filters while preserving search and page size", () => {
+    expect(
+      resetUserFilters({
+        pageIndex: 4,
+        pageSize: 50,
+        textSearch: "admin",
+        roleId: "role-1",
+        isActived: false,
+      }),
+    ).toEqual({
+      pageIndex: 1,
+      pageSize: 50,
+      textSearch: "admin",
+      roleId: undefined,
+      isActived: undefined,
+    })
+  })
+
+  it("creates a default user paging request", () => {
+    expect(createDefaultUserPagingRequest()).toEqual({
+      pageIndex: 1,
+      pageSize: 20,
+      textSearch: undefined,
+      fromDate: undefined,
+      toDate: undefined,
+      roleId: undefined,
+      isActived: undefined,
     })
   })
 

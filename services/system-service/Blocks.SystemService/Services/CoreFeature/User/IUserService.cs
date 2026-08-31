@@ -17,7 +17,7 @@ namespace Blocks.SystemService.Services.CoreFeature.User
         Task<ModelUser> Insert(UserRequest request);
         Task<ModelUser> Update(UserRequest request);
         Task<string> DeleteList(DeleteListRequest request);
-        Task<GetListPagingResponse<ModelUserGetListPaging>> GetList(GetListPagingRequest request);
+        Task<GetListPagingResponse<ModelUserGetListPaging>> GetList(UserGetListPagingRequest request);
         Task<CheckPermissionResponse> CheckPermission(CheckPermissionRequest request);
         Task<ModelUser> GetCurrentUser();
         Task<List<ModelCombobox>> GetAllForCombobox();

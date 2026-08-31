@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react"
+import type { ComponentProps } from "react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -8,6 +9,8 @@ type ConfirmActionProps = {
   confirmLabel: string
   disabled?: boolean
   onConfirm: () => Promise<void> | void
+  variant?: ComponentProps<typeof Button>["variant"]
+  className?: string
 }
 
 export function ConfirmAction({
@@ -15,6 +18,8 @@ export function ConfirmAction({
   confirmLabel,
   disabled,
   onConfirm,
+  variant = "destructive",
+  className,
 }: ConfirmActionProps) {
   const [isConfirming, setIsConfirming] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -58,7 +63,8 @@ export function ConfirmAction({
   return (
     <Button
       type="button"
-      variant="destructive"
+      variant={variant}
+      className={className}
       disabled={disabled}
       onClick={() => setIsConfirming(true)}
     >

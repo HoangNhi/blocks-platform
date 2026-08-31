@@ -23,7 +23,7 @@ namespace Blocks.SystemService.Controllers
 
         [HttpPost, Route("get-list")]
         [AttributePermission(PermissionKey = "admin.users", Action = ActionType.VIEW)]
-        public async Task<IActionResult> GetList(GetListPagingRequest request)
+        public async Task<IActionResult> GetList(UserGetListPagingRequest request)
         {
             var result = await _service.GetList(request);
             return Ok(new BaseResponse<GetListPagingResponse<ModelUserGetListPaging>> { Data = result, Success = true });

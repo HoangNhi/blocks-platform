@@ -11,7 +11,6 @@ using Blocks.SystemService.Services.Commons.UploadFile;
 using AutoDependencyRegistration.Attributes;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace Blocks.SystemService.Services.CoreFeature.User
 {
@@ -152,7 +151,7 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             add.Password = Encrypt_DecryptHelper.EncodePassword(request.Password, add.PasswordSalt);
             add.CreatedBy = _contextAccessor.HttpContext?.User?.Identity?.Name ?? "System";
             add.CreatedAt = DateTime.UtcNow;
-            add.Avatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, "");
+            add.Avatar = await ResolveAvatarAsync(request.FolderUpload, null);
 
             await _context.Users.AddAsync(add);
             await _context.SaveChangesAsync();
@@ -178,6 +177,7 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             }
 
             var oldPassword = update.Password;
+            var oldAvatar = update.Avatar;
             await _referenceGuard.EnsureRoleExistsAsync(request.RoleId);
             _mapper.Map(request, update);
 
@@ -190,7 +190,7 @@ namespace Blocks.SystemService.Services.CoreFeature.User
                 update.Password = oldPassword;
             }
 
-            update.Avatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, update.Avatar);
+            update.Avatar = await ResolveAvatarAsync(request.FolderUpload, oldAvatar);
             update.UpdatedBy = _contextAccessor.HttpContext?.User?.Identity?.Name ?? "System";
             update.UpdatedAt = DateTime.UtcNow;
 
@@ -198,6 +198,16 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             await _context.SaveChangesAsync();
 
             return _mapper.Map<ModelUser>(update);
+        }
+
+        private async Task<string?> ResolveAvatarAsync(string folderUpload, string? currentAvatar)
+        {
+            if (string.IsNullOrWhiteSpace(folderUpload))
+            {
+                return currentAvatar;
+            }
+
+            return await _uploadFileService.UploadAvatarAsync(folderUpload, currentAvatar ?? string.Empty);
         }
 
         public async Task<string> DeleteList(DeleteListRequest request)
@@ -221,17 +231,66 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             return string.Join(',', request.Ids);
         }
 
-        public async Task<GetListPagingResponse<ModelUserGetListPaging>> GetList(GetListPagingRequest request)
+        public async Task<GetListPagingResponse<ModelUserGetListPaging>> GetList(UserGetListPagingRequest request)
         {
-            var parameters = new[]
-            {
-                new NpgsqlParameter("i_textsearch", request.TextSearch),
-                new NpgsqlParameter("i_pageindex", request.PageIndex - 1),
-                new NpgsqlParameter("i_pagesize", request.PageSize),
-            };
+            var safePageIndex = request.PageIndex <= 0 ? 1 : request.PageIndex;
+            var safePageSize = request.PageSize <= 0 ? 10 : request.PageSize;
+            var query = from user in _context.Users.AsNoTracking()
+                        join role in _context.Roles.Where(role => !role.IsDeleted && role.IsActived)
+                            on user.RoleId equals role.Id into roles
+                        from role in roles.DefaultIfEmpty()
+                        where !user.IsDeleted
+                        select new { User = user, Role = role };
 
-            var result = await _context.ExecuteFunction<GetListPagingResponse<ModelUserGetListPaging>>("fn_user_getlistpaging", parameters);
-            return result;
+            if (!string.IsNullOrWhiteSpace(request.TextSearch))
+            {
+                var text = request.TextSearch.Trim().ToLower();
+                query = query.Where(item =>
+                    item.User.Fullname.ToLower().Contains(text)
+                    || item.User.Username.ToLower().Contains(text)
+                    || item.User.Email.ToLower().Contains(text));
+            }
+
+            if (request.RoleId.HasValue)
+            {
+                query = query.Where(item => item.User.RoleId == request.RoleId.Value);
+            }
+
+            if (request.IsActived.HasValue)
+            {
+                query = query.Where(item => item.User.IsActived == request.IsActived.Value);
+            }
+
+            var totalRow = await query.CountAsync();
+            var users = await query
+                .OrderByDescending(item => item.User.UpdatedAt ?? item.User.CreatedAt)
+                .Skip((safePageIndex - 1) * safePageSize)
+                .Take(safePageSize)
+                .Select(item => new ModelUserGetListPaging
+                {
+                    Id = item.User.Id,
+                    Username = item.User.Username,
+                    Fullname = item.User.Fullname,
+                    RoleId = item.User.RoleId,
+                    RoleName = item.Role == null ? null : item.Role.Name,
+                    Role = item.Role == null ? null : item.Role.Name,
+                    Email = item.User.Email,
+                    Avatar = item.User.Avatar,
+                    CreatedAt = item.User.CreatedAt,
+                    CreatedBy = item.User.CreatedBy,
+                    UpdatedAt = item.User.UpdatedAt,
+                    UpdatedBy = item.User.UpdatedBy,
+                    IsActived = item.User.IsActived,
+                })
+                .ToListAsync();
+
+            return new GetListPagingResponse<ModelUserGetListPaging>
+            {
+                PageIndex = safePageIndex,
+                PageSize = safePageSize,
+                TotalRow = totalRow,
+                Data = users,
+            };
         }
 
         public async Task<CheckPermissionResponse> CheckPermission(CheckPermissionRequest request)
