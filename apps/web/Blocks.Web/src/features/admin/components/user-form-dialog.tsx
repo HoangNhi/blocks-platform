@@ -122,7 +122,7 @@ export function UserFormDialog({
                   />
                   {errors.email ? <FormMessage id="user-email-error">{errors.email}</FormMessage> : null}
                 </FormItem>
-                <FormItem className="md:w-[280px] md:max-w-full">
+                <FormItem className="w-full">
                   <FormLabel htmlFor="user-role">Vai trò</FormLabel>
                   <Select value={value.roleId} onValueChange={(roleId) => onChange(setField(value, "roleId", roleId))}>
                     <SelectTrigger id="user-role" className="w-full" aria-label="Vai trò" aria-invalid={Boolean(errors.roleId)} aria-describedby={errors.roleId ? "user-role-error" : undefined}>
@@ -135,7 +135,7 @@ export function UserFormDialog({
                   {errors.roleId ? <FormMessage id="user-role-error">{errors.roleId}</FormMessage> : null}
                 </FormItem>
 
-                <FormItem className="md:w-[280px] md:max-w-full">
+                <FormItem className="w-full">
                   <FormLabel htmlFor="user-password">Mật khẩu</FormLabel>
                   <Input
                     id="user-password"
@@ -148,7 +148,7 @@ export function UserFormDialog({
                   {isEditMode ? <p id="user-password-help" className="text-xs text-muted-foreground">Để trống nếu muốn giữ nguyên mật khẩu hiện tại.</p> : null}
                   {errors.password ? <FormMessage id="user-password-error">{errors.password}</FormMessage> : null}
                 </FormItem>
-                <FormItem className="md:w-[280px] md:max-w-full">
+                <FormItem className="w-full">
                   <FormLabel htmlFor="user-status">Trạng thái</FormLabel>
                   <Select value={value.isActived ? "active" : "inactive"} onValueChange={(status) => onChange(setField(value, "isActived", status === "active"))}>
                     <SelectTrigger id="user-status" className="w-full" aria-label="Trạng thái">

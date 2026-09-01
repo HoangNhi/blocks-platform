@@ -37,7 +37,7 @@ export function UserAvatarUploadField({
 
   return (
     <div className="flex items-center gap-4 rounded-xl border bg-muted/20 p-4">
-      <Avatar size="lg" className="border border-border bg-background">
+      <Avatar className="size-20 border border-border bg-background">
         <AvatarImage src={displaySource ?? undefined} alt="Ảnh đại diện" />
         <AvatarFallback>AV</AvatarFallback>
       </Avatar>

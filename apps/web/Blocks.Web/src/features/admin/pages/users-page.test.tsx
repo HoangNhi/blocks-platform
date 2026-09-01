@@ -138,6 +138,13 @@ describe("UsersPage", () => {
     const roleTrigger = screen.getByRole("combobox", { name: /vai trò/i })
 
     fireEvent.change(usernameInput, { target: { value: "newuser" } })
+
+    const dialog = screen.getByRole("dialog")
+    expect(dialog.querySelector('[data-slot="avatar"]')?.getAttribute("data-size")).toBe("default")
+    expect(dialog.querySelector('[data-slot="avatar"]')?.classList.contains("size-20")).toBe(true)
+    expect(dialog.querySelector("#user-password")?.closest('[data-slot="form-item"]')?.classList.contains("w-full")).toBe(true)
+    expect(dialog.querySelector("#user-role")?.closest('[data-slot="form-item"]')?.classList.contains("w-full")).toBe(true)
+    expect(dialog.querySelector("#user-status")?.closest('[data-slot="form-item"]')?.classList.contains("w-full")).toBe(true)
     fireEvent.change(fullnameInput, { target: { value: "New User" } })
     fireEvent.change(emailInput, { target: { value: "new@example.com" } })
     fireEvent.change(passwordInput, { target: { value: "secret-123" } })
