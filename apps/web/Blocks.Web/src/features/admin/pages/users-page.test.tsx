@@ -451,16 +451,58 @@ describe("UsersPage", () => {
     const heading = screen.getByRole("heading", { name: "Người dùng", level: 1 })
     const filterButton = screen.getByRole("button", { name: /^bộ lọc$/i })
     const search = screen.getByRole("searchbox", { name: /tìm tên/i })
-    const refresh = screen.getByRole("button", { name: /làm mới danh sách/i })
+    const refresh = screen.getByRole("button", { name: /^làm mới$/i })
     const deleteButton = screen.getByRole("button", { name: /xóa danh sách/i })
     const addButton = screen.getByRole("button", { name: /thêm tài khoản/i })
 
     expect(heading.closest('[data-slot="card"]')).toBeNull()
     expect(filterButton.getAttribute("aria-expanded")).toBe("true")
     expect(screen.getByRole("combobox", { name: "Vai trò" })).toBeTruthy()
+    expect(screen.queryByText(/^0 tài khoản/i)).toBeNull()
+    expect(refresh.closest('[data-slot="card-footer"]')).toBeTruthy()
     expect(search.compareDocumentPosition(filterButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(filterButton.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(refresh.compareDocumentPosition(deleteButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(filterButton.compareDocumentPosition(deleteButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(heading.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(deleteButton.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("shows row delete confirmation and refreshes users after confirmation", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({ data: [], totalRow: 0 })
+    mockAdminApi.getUsers
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "user-1",
+            username: "admin",
+            fullname: "Admin",
+            roleId: "role-1",
+            roleName: "Administrator",
+            email: "admin@example.com",
+            avatar: null,
+            isActived: true,
+          },
+        ],
+        totalRow: 1,
+      })
+      .mockResolvedValueOnce({ data: [], totalRow: 0 })
+    mockAdminApi.deleteUsers.mockResolvedValue(undefined)
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    await screen.findByText("admin")
+    await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
+
+    expect(screen.getByRole("menuitem", { name: /xóa tài khoản/i })).toBeTruthy()
+    await user.click(screen.getByRole("menuitem", { name: /xóa tài khoản/i }))
+
+    const deleteDialog = screen.getByRole("dialog", { name: /xóa tài khoản/i })
+    expect(within(deleteDialog).getByText(/admin/i)).toBeTruthy()
+    await user.click(within(deleteDialog).getByRole("button", { name: /xóa tài khoản/i }))
+
+    await waitFor(() => {
+      expect(mockAdminApi.deleteUsers).toHaveBeenCalledWith(["user-1"])
+    })
+    await screen.findByText(/không có tài khoản/i)
   })
 })

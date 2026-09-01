@@ -166,7 +166,7 @@ export function SystemDataTable<TItem>({
   )
 
   const footer = (
-    <CardFooter className="shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+    <CardFooter className="shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-card px-4 py-3">
       <div className="text-sm text-platform-muted">
         {totalRow > 0 ? `Hiển thị ${startRow} - ${endRow} trong ${totalRow} mục` : "Không có dữ liệu"}
       </div>

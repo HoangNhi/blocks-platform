@@ -17,10 +17,14 @@ const columns: SystemColumn<Row>[] = [
   },
 ]
 
-function renderTable(items: Row[] = [{ id: "1", name: "First row" }]) {
+function renderTable(
+  items: Row[] = [{ id: "1", name: "First row" }],
+  variant: "card" | "embedded" = "card",
+) {
   return render(
     <div className="h-[600px]">
       <SystemDataTable
+        variant={variant}
         columns={columns}
         items={items}
         getRowKey={(item) => item.id}
@@ -58,5 +62,12 @@ describe("SystemDataTable", () => {
     expect(header?.className).toContain("sticky")
     expect(footer?.className).toContain("shrink-0")
     expect(scrollArea?.contains(footer)).toBe(false)
+  })
+
+  it("keeps footer background in embedded tables", () => {
+    const { container } = renderTable([{ id: "1", name: "First row" }], "embedded")
+    const footer = container.querySelector('[data-slot="card-footer"]')
+
+    expect(footer?.className).toContain("bg-card")
   })
 })

@@ -1,4 +1,4 @@
-import { Filter, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react"
+import { Filter, MoreHorizontal, Plus, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -6,7 +6,22 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -106,6 +121,9 @@ export function UsersPage() {
   const [userForm, setUserForm] = useState<UserFormValues>(createEmptyUserForm())
   const [formErrors, setFormErrors] = useState<UserFormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<UserModel | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isDeletingUser, setIsDeletingUser] = useState(false)
 
   const columns = useMemo<SystemColumn<UserModel>[]>(
     () => [
@@ -235,6 +253,31 @@ export function UsersPage() {
     }
   }
 
+  function openDeleteUserDialog(item: UserModel) {
+    setDeleteError(null)
+    setDeleteTarget(item)
+  }
+
+  async function confirmDeleteUser() {
+    if (!deleteTarget || isDeletingUser) return
+
+    setDeleteError(null)
+    setIsDeletingUser(true)
+    setIsLoading(true)
+
+    try {
+      await adminApi.deleteUsers([deleteTarget.id])
+      setSelectedIds((current) => current.filter((id) => id !== deleteTarget.id))
+      setDeleteTarget(null)
+      await refreshUsers()
+    } catch (deleteLoadError: unknown) {
+      setDeleteError(deleteLoadError instanceof Error ? deleteLoadError.message : "Không thể xóa tài khoản.")
+    } finally {
+      setIsDeletingUser(false)
+      setIsLoading(false)
+    }
+  }
+
   async function submitUserForm(intent: EntityDialogSubmitIntent) {
     if (isSubmitting) return
 
@@ -353,9 +396,6 @@ export function UsersPage() {
                       {activeFilterCount > 0 ? <Badge variant="secondary" className="h-5 min-w-5 px-1.5">{activeFilterCount}</Badge> : null}
                     </Button>
                   </CollapsibleTrigger>
-                  <Button type="button" variant="outline" size="icon" aria-label="Làm mới danh sách" onClick={() => { setError(null); setIsLoading(true); setRequest((current) => ({ ...current })) }}>
-                    <RefreshCw className="size-4" aria-hidden="true" />
-                  </Button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -425,13 +465,9 @@ export function UsersPage() {
             </Collapsible>
           </div>
 
-          <div className="border-b px-4 py-3 text-sm text-muted-foreground">
-            {totalRow} tài khoản{activeFilterCount > 0 ? ` · ${activeFilterCount} bộ lọc đang áp dụng` : ""}
-          </div>
-
           <SystemDataTable
             variant="embedded"
-            showRefresh={false}
+            showRefresh
             className="min-w-0"
             columns={columns}
             items={items}
@@ -455,7 +491,13 @@ export function UsersPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-32">
+                  <DropdownMenuLabel>Thao tác</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => void openEditUserDialog(item.id)}>Sửa</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => openDeleteUserDialog(item)}>
+                    Xóa tài khoản
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -480,6 +522,41 @@ export function UsersPage() {
         onSave={() => void submitUserForm("save")}
         onSaveAndAddMore={() => void submitUserForm("saveAndAddMore")}
       />
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingUser) {
+            setDeleteError(null)
+            setDeleteTarget(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Xóa tài khoản</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc muốn xóa tài khoản <strong>{deleteTarget?.username}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? <p role="alert" className="px-6 pt-4 text-sm text-destructive">{deleteError}</p> : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeletingUser}
+              onClick={() => {
+                setDeleteError(null)
+                setDeleteTarget(null)
+              }}
+            >
+              Hủy
+            </Button>
+            <Button type="button" variant="destructive" disabled={isDeletingUser} onClick={() => void confirmDeleteUser()}>
+              {isDeletingUser ? "Đang xóa..." : "Xóa tài khoản"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </Tabs>
     </div>
   )
