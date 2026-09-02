@@ -43,14 +43,14 @@ const promptShortcuts = [
 
 function useIsMobileDrawer() {
   const [isMobile, setIsMobile] = useState(() =>
-    typeof window === "undefined"
-      ? false
-      : window.matchMedia("(max-width: 767px)").matches,
+      typeof window === "undefined"
+        ? false
+        : window.matchMedia("(max-width: 819px)").matches,
   );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 767px)");
+    const media = window.matchMedia("(max-width: 819px)");
     const update = () => setIsMobile(media.matches);
 
     update();
@@ -105,7 +105,7 @@ export function AssistantDrawer({
   return (
     <aside
       aria-label="AI assistant"
-      className="hidden h-svh w-[420px] shrink-0 border-l bg-background text-foreground shadow-sm md:flex"
+      className="hidden h-svh w-[336px] shrink-0 border-l bg-background text-foreground shadow-sm md:flex"
       role="complementary"
     >
       {content}

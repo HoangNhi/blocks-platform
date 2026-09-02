@@ -74,7 +74,7 @@ describe("AppShell workspace tabs", () => {
 
     renderShell("/system/identity/users");
 
-    expect(screen.getByRole("tab", { name: "Platform Overview" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Platform Overview" })).toBeNull();
     expect(screen.getByRole("tab", { name: "Users" }).getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -84,7 +84,7 @@ describe("AppShell workspace tabs", () => {
   it("opens a deep-linked accessible route as a tab", () => {
     renderShell("/plugins/tradelab");
 
-    expect(screen.getByRole("tab", { name: "Platform Overview" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Platform Overview" })).toBeNull();
     expect(
       screen.getByRole("tab", { name: "Strategy Lab" }).getAttribute("aria-selected"),
     ).toBe("true");
@@ -102,6 +102,18 @@ describe("AppShell workspace tabs", () => {
 
     expect(screen.getAllByRole("tab", { name: "Users" })).toHaveLength(1);
     expect(screen.getByText("Users content")).toBeTruthy();
+  });
+
+  it("returns Home without creating an Overview tab", async () => {
+    const actor = userEvent.setup();
+
+    renderShell("/system/identity/users");
+
+    await actor.click(screen.getByRole("link", { name: "Blocks home" }));
+
+    expect(screen.getByText("Overview content")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Platform Overview" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Users" })).toBeTruthy();
   });
 
   it("closes the active tab and navigates to the nearest left tab", async () => {
@@ -123,6 +135,25 @@ describe("AppShell workspace tabs", () => {
       "true",
     );
     expect(screen.getByText("Users content")).toBeTruthy();
+  });
+
+  it("returns Home after closing the final working tab", async () => {
+    const actor = userEvent.setup();
+    window.localStorage.setItem(
+      "blocks.workspace.tabs.admin",
+      JSON.stringify({
+        version: 1,
+        activeRoute: "/system/identity/users",
+        routes: ["/system/identity/users"],
+      }),
+    );
+
+    renderShell("/system/identity/users");
+
+    await actor.click(screen.getByRole("button", { name: "Close Users tab" }));
+
+    expect(screen.getByText("Overview content")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Users" })).toBeNull();
   });
 
   it("opens assistant drawer and sends current page context to the stream client", async () => {
@@ -181,5 +212,24 @@ describe("AppShell workspace tabs", () => {
     expect(window.localStorage.getItem("blocks.sidebar.layoutMode.admin")).toBe(
       JSON.stringify("expanded"),
     );
+  });
+
+  it("auto-collapses the desktop sidebar in tablet viewport", () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(min-width: 768px) and (max-width: 1179px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    renderShell("/");
+
+    expect(screen.getByRole("complementary").className).toContain("w-16");
+    expect(screen.getByRole("button", { name: "Expand navigation" })).toBeTruthy();
+
+    window.matchMedia = originalMatchMedia;
   });
 });

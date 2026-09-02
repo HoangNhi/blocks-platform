@@ -68,6 +68,47 @@ describe("AssistantDrawer", () => {
     expect(screen.getByText(/TradeLab is the first supported assistant scope/)).toBeTruthy();
   });
 
+  it("uses a compact desktop panel", () => {
+    render(
+      <AssistantDrawer
+        open
+        onOpenChange={vi.fn()}
+        pageContext={tradelabContext}
+        streamMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("complementary", { name: "AI assistant" }).className).toContain(
+      "w-[336px]",
+    );
+  });
+
+  it("uses an overlay sheet at tablet and mobile widths", () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 819px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(
+      <AssistantDrawer
+        open
+        onOpenChange={vi.fn()}
+        pageContext={tradelabContext}
+        streamMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close AI assistant" })).toBeTruthy();
+
+    window.matchMedia = originalMatchMedia;
+  });
+
   it("shows a safe stream error with retry", async () => {
     const actor = userEvent.setup();
     const streamMessage: AssistantApi["streamChat"] = vi.fn(async (_request, handlers) => {

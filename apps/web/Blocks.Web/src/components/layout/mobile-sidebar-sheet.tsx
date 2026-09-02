@@ -1,4 +1,5 @@
 import { AppSidebarNav } from "@/components/layout/app-sidebar-nav"
+import { Link } from "react-router"
 import {
   Sheet,
   SheetContent,
@@ -44,7 +45,22 @@ export function MobileSidebarSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="flex h-svh w-[86vw] max-w-[20rem] flex-col p-0">
         <SheetHeader className="shrink-0 border-b border-platform-border px-4 py-4">
-          <SheetTitle>Blocks</SheetTitle>
+          <SheetTitle>
+            <Link
+              to="/"
+              aria-label="Blocks home"
+              className="outline-none focus-visible:ring-2 focus-visible:ring-platform-primary/50"
+              onClick={(event) => {
+                if (onNavigate) {
+                  event.preventDefault()
+                  onNavigate("/")
+                }
+                onOpenChange(false)
+              }}
+            >
+              Blocks
+            </Link>
+          </SheetTitle>
           <SheetDescription>
             Bảng điều hướng hệ thống dành cho thiết bị di động.
           </SheetDescription>

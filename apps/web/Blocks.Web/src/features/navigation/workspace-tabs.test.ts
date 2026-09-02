@@ -16,14 +16,10 @@ describe("workspace route tabs", () => {
   it("creates route-tab candidates from visible menu routes", () => {
     const candidates = getWorkspaceTabCandidates(navigationFixture)
 
-    expect(candidates.map((tab) => tab.route)).toContain("/")
+    expect(candidates.map((tab) => tab.route)).not.toContain("/")
+    expect(candidates.map((tab) => tab.title)).not.toContain("Platform Overview")
     expect(candidates.map((tab) => tab.route)).toContain("/system/identity/users")
     expect(candidates.map((tab) => tab.route)).toContain("/plugins/tradelab")
-    expect(candidates[0]).toMatchObject({
-      route: DEFAULT_WORKSPACE_ROUTE,
-      title: "Platform Overview",
-      pinned: true,
-    })
   })
 
   it("restores valid persisted routes, dedupes them, and drops inaccessible routes", () => {
@@ -39,7 +35,6 @@ describe("workspace route tabs", () => {
     })
 
     expect(state.tabs.map((tab) => tab.route)).toEqual([
-      "/",
       "/system/identity/users",
       "/plugins/tradelab",
     ])
@@ -54,7 +49,6 @@ describe("workspace route tabs", () => {
     })
 
     expect(state.tabs.map((tab) => tab.route)).toEqual([
-      "/",
       "/system/identity/roles",
     ])
     expect(state.activeRoute).toBe("/system/identity/roles")
@@ -70,10 +64,15 @@ describe("workspace route tabs", () => {
     const openedState = openWorkspaceTab(initialState, "/system/identity/users")
 
     expect(openedState.tabs.map((tab) => tab.route)).toEqual([
-      "/",
       "/system/identity/users",
     ])
     expect(openedState.activeRoute).toBe("/system/identity/users")
+
+    const duplicateState = openWorkspaceTab(openedState, "/system/identity/users")
+
+    expect(duplicateState.tabs.map((tab) => tab.route)).toEqual([
+      "/system/identity/users",
+    ])
   })
 
   it("closes the active tab and focuses the nearest tab on the left", () => {
@@ -85,33 +84,41 @@ describe("workspace route tabs", () => {
 
     const closedState = closeWorkspaceTab(initialState, "/plugins/tradelab")
 
-    expect(closedState.tabs.map((tab) => tab.route)).toEqual([
-      "/",
-      "/system/identity/users",
-    ])
+    expect(closedState.tabs.map((tab) => tab.route)).toEqual(["/system/identity/users"])
     expect(closedState.activeRoute).toBe("/system/identity/users")
   })
 
-  it("keeps the pinned overview tab when asked to close it", () => {
+  it("closes an inactive tab without changing the active route", () => {
     const initialState = resolveWorkspaceTabsState({
       navigation: navigationFixture,
-      routes: ["/", "/system/identity/users"],
-      activeRoute: "/",
+      routes: ["/system/identity/users", "/plugins/tradelab"],
+      activeRoute: "/system/identity/users",
     })
 
-    const closedState = closeWorkspaceTab(initialState, "/")
+    const closedState = closeWorkspaceTab(initialState, "/plugins/tradelab")
 
-    expect(closedState.tabs.map((tab) => tab.route)).toEqual([
-      "/",
-      "/system/identity/users",
-    ])
-    expect(closedState.activeRoute).toBe("/")
+    expect(closedState.tabs.map((tab) => tab.route)).toEqual(["/system/identity/users"])
+    expect(closedState.activeRoute).toBe("/system/identity/users")
+  })
+
+  it("returns Home after closing the final working tab and ignores Home close", () => {
+    const initialState = resolveWorkspaceTabsState({
+      navigation: navigationFixture,
+      routes: ["/system/identity/users"],
+      activeRoute: "/system/identity/users",
+    })
+
+    const closedState = closeWorkspaceTab(initialState, "/system/identity/users")
+
+    expect(closedState.tabs).toEqual([])
+    expect(closedState.activeRoute).toBe(DEFAULT_WORKSPACE_ROUTE)
+    expect(closeWorkspaceTab(closedState, DEFAULT_WORKSPACE_ROUTE)).toEqual(closedState)
   })
 
   it("serializes and parses persisted route tabs with a version", () => {
     const state = resolveWorkspaceTabsState({
       navigation: navigationFixture,
-      routes: ["/", "/system/identity/users"],
+      routes: ["/", "/system/identity/users", "/system/identity/users"],
       activeRoute: "/system/identity/users",
     })
 
@@ -121,7 +128,7 @@ describe("workspace route tabs", () => {
     expect(serialized).toEqual({
       version: 1,
       activeRoute: "/system/identity/users",
-      routes: ["/", "/system/identity/users"],
+      routes: ["/system/identity/users"],
     })
     expect(parsed).toEqual(serialized)
     expect(parseSerializedWorkspaceTabs("{bad json")).toBeNull()

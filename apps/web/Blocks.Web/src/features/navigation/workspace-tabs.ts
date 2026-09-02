@@ -1,9 +1,5 @@
-import {
-  buildBreadcrumb,
-  canAccessRoute,
-  flattenNavigation,
-} from "./navigation-utils"
-import type { BreadcrumbItem, NavNode } from "./types"
+import { canAccessRoute, flattenNavigation } from "./navigation-utils"
+import type { NavNode } from "./types"
 
 export const WORKSPACE_TABS_STORAGE_VERSION = 1
 export const DEFAULT_WORKSPACE_ROUTE = "/"
@@ -14,8 +10,7 @@ export type WorkspaceTab = {
   title: string
   owner: NavNode["owner"]
   ownerKey: string
-  pinned: boolean
-  breadcrumb: BreadcrumbItem[]
+  isDirty?: boolean
   icon?: NavNode["icon"]
 }
 
@@ -45,6 +40,7 @@ export function getWorkspaceTabCandidates(navigation: NavNode[]): WorkspaceTab[]
   const seenRoutes = new Set<string>()
   const candidates = flattenNavigation(navigation)
     .filter((node) => node.kind === "menu" && node.route)
+    .filter((node) => node.route !== DEFAULT_WORKSPACE_ROUTE)
     .filter((node) => canAccessRoute(navigation, node.route ?? ""))
     .filter((node) => {
       if (!node.route || seenRoutes.has(node.route)) {
@@ -60,34 +56,10 @@ export function getWorkspaceTabCandidates(navigation: NavNode[]): WorkspaceTab[]
       title: node.title,
       owner: node.owner,
       ownerKey: node.ownerKey,
-      pinned: node.route === DEFAULT_WORKSPACE_ROUTE,
-      breadcrumb: buildBreadcrumb(navigation, node.route ?? DEFAULT_WORKSPACE_ROUTE),
       icon: node.icon,
     }))
 
-  if (seenRoutes.has(DEFAULT_WORKSPACE_ROUTE)) {
-    return candidates
-  }
-
-  return [getDefaultWorkspaceTab(), ...candidates]
-}
-
-function getDefaultWorkspaceTab(): WorkspaceTab {
-  return {
-    id: "platform-overview",
-    route: DEFAULT_WORKSPACE_ROUTE,
-    title: "Platform Overview",
-    owner: "system",
-    ownerKey: "blocks-web",
-    pinned: true,
-    breadcrumb: [
-      {
-        id: "platform-overview",
-        title: "Platform Overview",
-        route: DEFAULT_WORKSPACE_ROUTE,
-      },
-    ],
-  }
+  return candidates
 }
 
 export function resolveWorkspaceTabsState({
@@ -97,12 +69,7 @@ export function resolveWorkspaceTabsState({
 }: ResolveWorkspaceTabsOptions): WorkspaceTabsState {
   const candidates = getWorkspaceTabCandidates(navigation)
   const candidateByRoute = new Map(candidates.map((tab) => [tab.route, tab]))
-  const defaultCandidate = candidateByRoute.get(DEFAULT_WORKSPACE_ROUTE)
   const resolvedRoutes = new Set<string>()
-
-  if (defaultCandidate) {
-    resolvedRoutes.add(DEFAULT_WORKSPACE_ROUTE)
-  }
 
   for (const route of routes) {
     if (candidateByRoute.has(route)) {
@@ -118,9 +85,12 @@ export function resolveWorkspaceTabsState({
     .map((route) => candidateByRoute.get(route))
     .filter((tab): tab is WorkspaceTab => Boolean(tab))
 
-  const nextActiveRoute = candidateByRoute.has(activeRoute)
-    ? activeRoute
-    : defaultCandidate?.route ?? tabs[0]?.route ?? activeRoute
+  const nextActiveRoute =
+    activeRoute === DEFAULT_WORKSPACE_ROUTE
+      ? DEFAULT_WORKSPACE_ROUTE
+      : candidateByRoute.has(activeRoute)
+        ? activeRoute
+        : tabs[0]?.route ?? DEFAULT_WORKSPACE_ROUTE
 
   return {
     tabs,
@@ -133,6 +103,13 @@ export function openWorkspaceTab(
   state: WorkspaceTabsState,
   route: string,
 ): WorkspaceTabsState {
+  if (route === DEFAULT_WORKSPACE_ROUTE) {
+    return {
+      ...state,
+      activeRoute: DEFAULT_WORKSPACE_ROUTE,
+    }
+  }
+
   const candidate = state.candidates.find((tab) => tab.route === route)
 
   if (!candidate) {
@@ -156,7 +133,7 @@ export function closeWorkspaceTab(
   const closingIndex = state.tabs.findIndex((tab) => tab.route === route)
   const closingTab = state.tabs[closingIndex]
 
-  if (!closingTab || closingTab.pinned) {
+  if (!closingTab) {
     return state
   }
 

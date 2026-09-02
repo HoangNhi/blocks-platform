@@ -11,7 +11,6 @@ import type {
   EditProfileRequest,
 } from "@/features/auth/types";
 import {
-  buildBreadcrumb,
   canAccessRoute,
   getParentSubgroupIdsForRoute,
   getVisibleNavigation,
@@ -87,6 +86,23 @@ function getInitialWorkspaceRoutes(userId: string) {
   }
 }
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(query).matches,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [query]);
+
+  return matches;
+}
+
 export function AppShell({
   navigation,
   currentUser,
@@ -122,6 +138,12 @@ export function AppShell({
   const [desktopSidebarMode, setDesktopSidebarMode] = useState(() =>
     getInitialSidebarLayoutMode(currentUser.id),
   );
+  const isCompactDesktopViewport = useMediaQuery(
+    "(min-width: 768px) and (max-width: 1179px)",
+  );
+  const effectiveDesktopSidebarMode: SidebarLayoutMode = isCompactDesktopViewport
+    ? "collapsed"
+    : desktopSidebarMode;
 
   const [assistantOpen, setAssistantOpen] = useState(false);
   const defaultAssistantApi = useMemo(() => {
@@ -144,18 +166,6 @@ export function AppShell({
       }),
     [activeRoute, visibleNavigation, workspaceRoutes],
   );
-  const activeBreadcrumb = useMemo(
-    () =>
-      workspaceTabsState.tabs.find(
-        (tab) => tab.route === workspaceTabsState.activeRoute,
-      )?.breadcrumb ?? buildBreadcrumb(visibleNavigation, activeRoute),
-    [
-      activeRoute,
-      visibleNavigation,
-      workspaceTabsState.activeRoute,
-      workspaceTabsState.tabs,
-    ],
-  );
 
   const activeWorkspaceTab = workspaceTabsState.tabs.find(
     (tab) => tab.route === workspaceTabsState.activeRoute,
@@ -164,14 +174,10 @@ export function AppShell({
   const assistantPageContext = useMemo(
     () => ({
       route: activeRoute,
-      title:
-        activeWorkspaceTab?.title ??
-        activeBreadcrumb.at(-1)?.title ??
-        "Current page",
+      title: activeWorkspaceTab?.title ?? "Current page",
       ownerKey: activeWorkspaceTab?.ownerKey ?? "workspace",
     }),
     [
-      activeBreadcrumb,
       activeRoute,
       activeWorkspaceTab?.ownerKey,
       activeWorkspaceTab?.title,
@@ -230,7 +236,7 @@ export function AppShell({
     <div className="flex h-svh overflow-hidden bg-platform-bg text-platform-ink">
       <div className="hidden h-full min-h-0 md:flex">
         <AppSidebar
-          layoutMode={desktopSidebarMode}
+          layoutMode={effectiveDesktopSidebarMode}
           navigation={visibleNavigation}
           currentUser={currentUser}
           openSubgroupIds={effectiveOpenSubgroupIds}
@@ -266,8 +272,8 @@ export function AppShell({
           tabs={workspaceTabsState.tabs}
           candidates={workspaceTabsState.candidates}
           activeRoute={workspaceTabsState.activeRoute}
-          breadcrumb={activeBreadcrumb}
-          desktopSidebarMode={desktopSidebarMode}
+          desktopSidebarMode={effectiveDesktopSidebarMode}
+          assistantOpen={assistantOpen}
           onSelectRoute={selectWorkspaceRoute}
           onCloseRoute={closeWorkspaceRoute}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
