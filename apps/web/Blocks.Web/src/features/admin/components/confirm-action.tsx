@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react"
-import type { ComponentProps } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ type ConfirmActionProps = {
   onConfirm: () => Promise<void> | void
   variant?: ComponentProps<typeof Button>["variant"]
   className?: string
+  icon?: ReactNode
 }
 
 export function ConfirmAction({
@@ -20,6 +21,7 @@ export function ConfirmAction({
   onConfirm,
   variant = "destructive",
   className,
+  icon,
 }: ConfirmActionProps) {
   const [isConfirming, setIsConfirming] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -68,7 +70,7 @@ export function ConfirmAction({
       disabled={disabled}
       onClick={() => setIsConfirming(true)}
     >
-      <Trash2 className="size-4" aria-hidden="true" />
+      {icon ?? <Trash2 className="size-4" aria-hidden="true" />}
       {label}
     </Button>
   )
