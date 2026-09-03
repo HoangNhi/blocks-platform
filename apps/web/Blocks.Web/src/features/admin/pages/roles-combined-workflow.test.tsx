@@ -7,9 +7,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { mockAdminApi } = vi.hoisted(() => ({
   mockAdminApi: {
     getRoles: vi.fn(),
+    getRoleById: vi.fn(),
     getPermissionsByRole: vi.fn(),
     updatePermissions: vi.fn(),
+    updateRole: vi.fn(),
     createRole: vi.fn(),
+    deleteRoles: vi.fn(),
   },
 }))
 
@@ -37,31 +40,55 @@ function permissionRows() {
   }]
 }
 
-describe("RolesPage combined workflow", () => {
+describe("RolesPage permission dialog workflow", () => {
   beforeEach(() => {
     mockAdminApi.getRoles.mockReset()
+    mockAdminApi.getRoleById.mockReset()
     mockAdminApi.getPermissionsByRole.mockReset()
     mockAdminApi.updatePermissions.mockReset()
+    mockAdminApi.updateRole.mockReset()
     mockAdminApi.createRole.mockReset()
+    mockAdminApi.deleteRoles.mockReset()
   })
 
-  it("shows role safety fields and saves permission changes from same surface", async () => {
+  it("edits role information and permissions from the same popup", async () => {
     mockAdminApi.getRoles.mockResolvedValue({
-      data: [{ id: "role-1", name: "Thành viên", key: "member", isSystem: true, isRegistrationEligible: true, isDefaultRegistrationRole: true }],
+      data: [{ id: "role-1", name: "Thành viên", key: "member", isSystem: true, isRegistrationEligible: true, isDefaultRegistrationRole: true, isActived: true }],
       totalRow: 1,
+    })
+    mockAdminApi.getRoleById.mockResolvedValue({
+      id: "role-1",
+      name: "Thành viên",
+      key: "member",
+      isSystem: true,
+      isRegistrationEligible: true,
+      isDefaultRegistrationRole: true,
+      folderUpload: "folder-role-1",
+      isActived: true,
     })
     mockAdminApi.getPermissionsByRole.mockResolvedValue(permissionRows())
     mockAdminApi.updatePermissions.mockResolvedValue(true)
+    mockAdminApi.updateRole.mockResolvedValue(true)
 
     const user = userEvent.setup()
     render(<RolesPage />)
 
     expect(await screen.findByText("member")).toBeTruthy()
-    expect(screen.getAllByText(/vai trò hệ thống/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/vai trò đăng ký mặc định/i).length).toBeGreaterThan(0)
-    await user.click(screen.getByRole("checkbox", { name: /xem.*không gian cá nhân/i }))
-    await user.click(screen.getByRole("button", { name: /lưu phân quyền/i }))
+    expect(screen.getAllByText(/hệ thống/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/mặc định đăng ký/i).length).toBeGreaterThan(0)
 
-    await waitFor(() => expect(mockAdminApi.updatePermissions).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
+    await user.click(await screen.findByRole("menuitem", { name: /phân quyền/i }))
+
+    const permissionCheckbox = await screen.findByRole("checkbox", { name: /xem.*không gian cá nhân/i })
+    await user.click(permissionCheckbox)
+    expect(screen.getByText(/có thay đổi chưa lưu/i)).toBeTruthy()
+
+    await user.click(screen.getByRole("button", { name: /^lưu$/i }))
+
+    await waitFor(() => {
+      expect(mockAdminApi.updateRole).toHaveBeenCalledTimes(1)
+      expect(mockAdminApi.updatePermissions).toHaveBeenCalledTimes(1)
+    })
   })
 })
