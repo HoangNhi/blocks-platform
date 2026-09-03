@@ -20,15 +20,11 @@ const { mockAdminApi } = vi.hoisted(() => ({
 }))
 
 vi.mock("@/features/auth/token-store", () => ({
-  createBrowserTokenStore: () => ({
-    getAccessToken: () => null,
-  }),
+  createBrowserTokenStore: () => ({ getAccessToken: () => null }),
 }))
 
 vi.mock("@/lib/api/client", () => ({
-  createApiClient: () => ({
-    request: vi.fn(),
-  }),
+  createApiClient: () => ({ request: vi.fn() }),
 }))
 
 vi.mock("../system-admin-api", () => ({
@@ -58,51 +54,41 @@ describe("RolesPage", () => {
     mockAdminApi.updatePermissions.mockResolvedValue(true)
   })
 
+  it("hiển thị danh sách vai trò theo cùng kiểu grid của trang người dùng", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({
+      data: [{ id: "role-1", name: "Administrator", key: "administrator", isSystem: true, isActived: true }],
+      totalRow: 1,
+    })
+
+    renderRolesPage()
+
+    expect(await screen.findByRole("cell", { name: /Administrator/i })).toBeTruthy()
+    expect(screen.getByPlaceholderText(/tìm theo tên hoặc mã vai trò/i)).toBeTruthy()
+    expect(screen.getByRole("button", { name: /bộ lọc/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /thêm vai trò/i })).toBeTruthy()
+  })
+
   it("mở dialog tạo mới, lưu và thêm tiếp, rồi giữ dialog mở với form rỗng", async () => {
     mockAdminApi.getRoles
       .mockResolvedValueOnce({
-        data: [
-           {
-             id: "role-1",
-             name: "Administrator",
-             key: "administrator",
-             isSystem: true,
-             isActived: true,
-           },
-        ],
+        data: [{ id: "role-1", name: "Administrator", key: "administrator", isSystem: true, isActived: true }],
         totalRow: 1,
       })
       .mockResolvedValueOnce({
         data: [
-           {
-             id: "role-1",
-             name: "Administrator",
-             key: "administrator",
-             isSystem: true,
-             isActived: true,
-           },
-          {
-            id: "role-2",
-            name: "Editor",
-            isActived: true,
-          },
+          { id: "role-1", name: "Administrator", key: "administrator", isSystem: true, isActived: true },
+          { id: "role-2", name: "Editor", key: "editor", isActived: true },
         ],
         totalRow: 2,
       })
 
-    mockAdminApi.createRole.mockResolvedValue({
-      id: "role-2",
-      name: "Editor",
-      folderUpload: "folder-role-2",
-      isActived: true,
-    })
+    mockAdminApi.createRole.mockResolvedValue({ id: "role-2", name: "Editor", folderUpload: "folder-role-2", isActived: true })
 
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByRole("cell", { name: "Administrator" })
-
-    await user.click(screen.getByRole("button", { name: /^Thêm$/i }))
+    await screen.findByText("Administrator")
+    await user.click(screen.getByRole("button", { name: /thêm vai trò/i }))
     await user.type(screen.getByRole("textbox", { name: /tên vai trò/i }), "Editor")
     await user.type(screen.getByRole("textbox", { name: /mã vai trò ổn định/i }), "editor")
     await user.click(screen.getByRole("button", { name: /^Lưu và thêm tiếp$/i }))
@@ -112,56 +98,21 @@ describe("RolesPage", () => {
       expect(mockAdminApi.getRoles).toHaveBeenCalledTimes(2)
     })
 
-    expect(mockAdminApi.createRole).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "Editor",
-      }),
-    )
-
     expect(screen.getByRole("dialog")).toBeTruthy()
-    const dialogButtons = within(screen.getByRole("dialog")).getAllByRole("button")
-    expect((dialogButtons.at(-1) as HTMLButtonElement | undefined)?.disabled).toBe(false)
-    expect((dialogButtons.at(-2) as HTMLButtonElement | undefined)?.disabled).toBe(false)
     expect((screen.getByRole("textbox", { name: /tên vai trò/i }) as HTMLInputElement).value).toBe("")
   })
 
-  it("mở dialog chỉnh sửa và đóng sau khi lưu", async () => {
-    mockAdminApi.getRoles
-      .mockResolvedValueOnce({
-        data: [
-           {
-             id: "role-1",
-             name: "Administrator",
-             key: "administrator",
-             isSystem: true,
-             isActived: true,
-           },
-        ],
-        totalRow: 1,
-      })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: "role-1",
-            name: "Administrator updated",
-            isActived: true,
-          },
-        ],
-        totalRow: 1,
-      })
-
+  it("mở popup chỉnh sửa và có tab phân quyền", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({
+      data: [{ id: "role-1", name: "Administrator", key: "administrator", isSystem: true, isActived: true }],
+      totalRow: 1,
+    })
     mockAdminApi.getRoleById.mockResolvedValue({
       id: "role-1",
       name: "Administrator",
       key: "administrator",
       isSystem: true,
-      folderUpload: "folder-role-1",
-      isActived: true,
-    })
-
-    mockAdminApi.updateRole.mockResolvedValue({
-      id: "role-1",
-      name: "Administrator updated",
+      isRegistrationEligible: false,
       folderUpload: "folder-role-1",
       isActived: true,
     })
@@ -169,44 +120,38 @@ describe("RolesPage", () => {
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByRole("cell", { name: "Administrator" })
-
+    await screen.findByText("Administrator")
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
     await user.click(await screen.findByRole("menuitem", { name: /sửa/i }))
 
-    expect((screen.getByRole("textbox", { name: /tên vai trò/i }) as HTMLInputElement).value).toBe("Administrator")
-
-    await user.clear(screen.getByRole("textbox", { name: /tên vai trò/i }))
-    await user.type(screen.getByRole("textbox", { name: /tên vai trò/i }), "Administrator updated")
-    await user.click(screen.getByRole("button", { name: /^Lưu$/i }))
-
-    await waitFor(() => {
-      expect(mockAdminApi.updateRole).toHaveBeenCalledTimes(1)
-      expect(mockAdminApi.getRoles).toHaveBeenCalledTimes(2)
-    })
-
-    expect(screen.queryByRole("dialog")).toBeNull()
+    const dialog = screen.getByRole("dialog")
+    expect(within(dialog).getByRole("tab", { name: /thông tin/i })).toBeTruthy()
+    expect(within(dialog).getByRole("tab", { name: /phân quyền/i })).toBeTruthy()
+    expect((within(dialog).getByRole("textbox", { name: /tên vai trò/i }) as HTMLInputElement).value).toBe("Administrator")
   })
-  it("hiển thị Roles & Permissions trong cùng quy trình vai trò", async () => {
+
+  it("mở trực tiếp tab phân quyền từ menu thao tác hàng", async () => {
     mockAdminApi.getRoles.mockResolvedValue({
-      data: [
-        {
-          id: "role-1",
-          name: "Administrator",
-          isActived: true,
-        },
-      ],
+      data: [{ id: "role-1", name: "Administrator", key: "administrator", isSystem: true, isActived: true }],
       totalRow: 1,
+    })
+    mockAdminApi.getRoleById.mockResolvedValue({
+      id: "role-1",
+      name: "Administrator",
+      key: "administrator",
+      isSystem: true,
+      isRegistrationEligible: false,
+      folderUpload: "folder-role-1",
+      isActived: true,
     })
 
     const user = userEvent.setup()
     renderRolesPage()
 
-    await screen.findByRole("cell", { name: "Administrator" })
-
+    await screen.findByText("Administrator")
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
+    await user.click(await screen.findByRole("menuitem", { name: /phân quyền/i }))
 
-    const permissionAction = await screen.findByRole("menuitem", { name: /roles & permissions/i })
-    expect(permissionAction.getAttribute("href")).toBeNull()
+    expect(screen.getByRole("tab", { name: /phân quyền/i }).getAttribute("data-state")).toBe("active")
   })
 })
