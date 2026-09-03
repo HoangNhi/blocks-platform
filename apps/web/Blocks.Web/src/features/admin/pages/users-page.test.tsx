@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render as testingLibraryRender, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.setConfig({ testTimeout: 10000 })
@@ -40,7 +41,17 @@ vi.mock("../system-admin-api", () => ({
   createSystemAdminApi: () => mockAdminApi,
 }))
 
+import { Toaster } from "@/components/ui/sonner"
 import { UsersPage } from "./users-page"
+
+function render(ui: ReactNode) {
+  return testingLibraryRender(
+    <>
+      {ui}
+      <Toaster closeButton />
+    </>,
+  )
+}
 
 function getFileInput() {
   const fileInput = document.body.querySelector<HTMLInputElement>('input[type="file"]')
@@ -61,6 +72,25 @@ describe("UsersPage", () => {
     mockAdminApi.updateUser.mockReset()
     mockAdminApi.deleteUsers.mockReset()
     mockFilesApi.uploadTemporary.mockReset()
+  })
+
+  it("keeps the user form dialog open when clicking outside", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({ data: [], totalRow: 0 })
+    mockAdminApi.getUsers.mockResolvedValue({ data: [], totalRow: 0 })
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    await screen.findByText(/kh\u00f4ng c\u00f3 t\u00e0i kho\u1ea3n/i)
+    await user.click(screen.getByRole("button", { name: /th\u00eam t\u00e0i kho\u1ea3n/i }))
+
+    const dialog = screen.getByRole("dialog", { name: /th\u00eam t\u00e0i kho\u1ea3n/i })
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')
+
+    expect(overlay).toBeTruthy()
+    await user.click(overlay as HTMLElement)
+
+    expect(screen.getByRole("dialog", { name: /th\u00eam t\u00e0i kho\u1ea3n/i })).toBe(dialog)
   })
 
   it("mở dialog tạo mới, tải avatar tạm, lưu và thêm tiếp, rồi giữ dialog mở với form rỗng", async () => {
@@ -188,6 +218,7 @@ describe("UsersPage", () => {
       expect(mockAdminApi.getUsers).toHaveBeenCalledTimes(2)
     })
 
+    expect(await screen.findByText('Thêm tài khoản thành công')).toBeTruthy()
     expect(screen.getByRole("dialog")).toBeTruthy()
     const dialogButtons = within(screen.getByRole("dialog")).getAllByRole("button")
     expect((dialogButtons.at(-1) as HTMLButtonElement | undefined)?.disabled).toBe(false)
@@ -197,6 +228,57 @@ describe("UsersPage", () => {
     expect((screen.getByRole("textbox", { name: /email/i }) as HTMLInputElement).value).toBe("")
     expect((screen.getByLabelText(/mật khẩu/i) as HTMLInputElement).value).toBe("")
     expect((screen.getByRole("combobox", { name: /vai trò/i }) as HTMLElement).textContent).toContain("Chọn vai trò")
+  })
+
+  it("shows save failure toast when creating a user fails", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({
+      data: [{ id: "role-1", name: "Administrator" }],
+      totalRow: 1,
+    })
+    mockAdminApi.getUsers.mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          username: "admin",
+          fullname: "Admin",
+          roleId: "role-1",
+          roleName: "Administrator",
+          email: "admin@example.com",
+          avatar: null,
+          isActived: true,
+        },
+      ],
+      totalRow: 1,
+    })
+    mockAdminApi.createUser.mockRejectedValue(new Error("Create user failed"))
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    await screen.findByText("admin")
+    await user.click(screen.getByRole("button", { name: /thêm tài khoản/i }))
+    fireEvent.change(screen.getByRole("textbox", { name: /tên đăng nhập/i }), { target: { value: "newuser" } })
+    fireEvent.change(screen.getByRole("textbox", { name: /họ và tên/i }), { target: { value: "New User" } })
+    fireEvent.change(screen.getByRole("textbox", { name: /email/i }), { target: { value: "new@example.com" } })
+    fireEvent.change(screen.getByLabelText(/mật khẩu/i), { target: { value: "secret-123" } })
+
+    const roleTrigger = screen.getByRole("combobox", { name: /vai trò/i })
+    roleTrigger.focus()
+    fireEvent.keyDown(roleTrigger, { key: "ArrowDown" })
+    await user.click(await screen.findByRole("option", { name: "Administrator" }))
+    await user.click(screen.getByRole("button", { name: /^Lưu$/i }))
+
+    const toastTitle = await screen.findByText("Không thể lưu tài khoản")
+    const errorToast = toastTitle.closest<HTMLElement>('[data-sonner-toast]')
+
+    expect(errorToast).toBeTruthy()
+    expect(errorToast?.textContent).toContain("Create user failed")
+    expect(errorToast?.style.pointerEvents).toBe("auto")
+    fireEvent.click(within(errorToast as HTMLElement).getByRole("button", { name: /close toast/i }))
+
+    await waitFor(() => expect(errorToast?.isConnected).toBe(false))
+    expect(screen.getByRole("dialog", { name: /thêm tài khoản/i })).toBeTruthy()
+    expect(screen.queryByText("Không thể tải dữ liệu")).toBeNull()
   })
 
   it("mở dialog chỉnh sửa, giữ nguyên mật khẩu placeholder khi để trống và tải avatar tạm trước khi cập nhật", async () => {
@@ -288,6 +370,7 @@ describe("UsersPage", () => {
       expect(mockAdminApi.updateUser).toHaveBeenCalledTimes(1)
     })
 
+    expect(await screen.findByText('Cập nhật tài khoản thành công')).toBeTruthy()
     expect(mockFilesApi.uploadTemporary.mock.invocationCallOrder[0]).toBeLessThan(
       mockAdminApi.updateUser.mock.invocationCallOrder[0],
     )
@@ -360,7 +443,7 @@ describe("UsersPage", () => {
     expect(mockFilesApi.uploadTemporary).not.toHaveBeenCalled()
   })
 
-  it("restores the table after confirming a bulk delete", async () => {
+  it("confirms bulk delete in a dialog and restores the table", async () => {
     mockAdminApi.getRoles.mockResolvedValue({
       data: [{ id: "role-1", name: "Administrator" }],
       totalRow: 1,
@@ -395,19 +478,63 @@ describe("UsersPage", () => {
     fireEvent.click(checkboxes[1])
 
     const user = userEvent.setup()
-    await user.click(screen.getByRole("button", { name: /xóa/i }))
-    await user.click(screen.getByRole("button", { name: /xác nhận xóa/i }))
+    const bulkDeleteButton = screen.getByRole("button", { name: /xóa danh sách/i })
+    await user.click(bulkDeleteButton)
+
+    const bulkDeleteDialog = screen.getByRole("alertdialog", { name: /xóa danh sách tài khoản/i })
+    expect(within(bulkDeleteDialog).getByText(/1 tài khoản/i)).toBeTruthy()
+    await user.click(within(bulkDeleteDialog).getByRole("button", { name: /hủy/i }))
+    expect(screen.queryByRole("alertdialog", { name: /xóa danh sách tài khoản/i })).toBeNull()
+    expect(mockAdminApi.deleteUsers).not.toHaveBeenCalled()
+
+    await user.click(bulkDeleteButton)
+    const reopenedBulkDeleteDialog = screen.getByRole("alertdialog", { name: /xóa danh sách tài khoản/i })
+    await user.click(within(reopenedBulkDeleteDialog).getByRole("button", { name: /xác nhận xóa/i }))
 
     await waitFor(() => {
       expect(mockAdminApi.deleteUsers).toHaveBeenCalledWith(["user-1"])
     })
 
     await screen.findByText(/không có tài khoản/i)
+    expect(await screen.findByText('Đã xóa 1 tài khoản')).toBeTruthy()
 
     expect(
       (screen.getByRole("button", { name: /xóa/i }) as HTMLButtonElement).disabled,
     ).toBe(true)
     expect(screen.queryByRole("button", { name: /xác nhận xóa/i })).toBeNull()
+  })
+
+  it("keeps the bulk delete dialog open when deletion fails", async () => {
+    mockAdminApi.getRoles.mockResolvedValue({ data: [], totalRow: 0 })
+    mockAdminApi.getUsers.mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          username: "admin",
+          fullname: "Admin",
+          roleId: "role-1",
+          roleName: "Administrator",
+          email: "admin@example.com",
+          isActived: true,
+        },
+      ],
+      totalRow: 1,
+    })
+    mockAdminApi.deleteUsers.mockRejectedValue(new Error("Bulk delete failed"))
+
+    const user = userEvent.setup()
+    render(<UsersPage />)
+
+    await screen.findByText("admin")
+    fireEvent.click(screen.getAllByRole("checkbox")[1])
+    await user.click(screen.getByRole("button", { name: /xóa danh sách/i }))
+
+    const bulkDeleteDialog = screen.getByRole("alertdialog", { name: /xóa danh sách tài khoản/i })
+    await user.click(within(bulkDeleteDialog).getByRole("button", { name: /xác nhận xóa/i }))
+
+    expect((await within(bulkDeleteDialog).findByRole("alert")).textContent).toContain("Bulk delete failed")
+    expect(await screen.findByText("Không thể xóa tài khoản")).toBeTruthy()
+    expect(screen.getByRole("alertdialog", { name: /xóa danh sách tài khoản/i })).toBeTruthy()
   })
 
   it("reloads users with selected role and status filters", async () => {
@@ -444,7 +571,7 @@ describe("UsersPage", () => {
     mockAdminApi.getRoles.mockResolvedValue({ data: [], totalRow: 0 })
     mockAdminApi.getUsers.mockResolvedValue({ data: [], totalRow: 0 })
 
-    render(<UsersPage />)
+    const { container } = render(<UsersPage />)
 
     await screen.findByText(/không có tài khoản/i)
 
@@ -454,8 +581,20 @@ describe("UsersPage", () => {
     const refresh = screen.getByRole("button", { name: /^làm mới$/i })
     const deleteButton = screen.getByRole("button", { name: /xóa danh sách/i })
     const addButton = screen.getByRole("button", { name: /thêm tài khoản/i })
+    const page = heading.parentElement?.parentElement
+    const tabs = screen.getByRole("tablist").parentElement
+    const activeTabContent = container.querySelector('[data-slot="tabs-content"][data-state="active"]')
+    const tableCard = activeTabContent?.querySelector('[data-slot="card"]')
 
     expect(heading.closest('[data-slot="card"]')).toBeNull()
+    expect(page?.className).toContain("h-full")
+    expect(page?.className).toContain("overflow-hidden")
+    expect(tabs?.className).toContain("flex-1")
+    expect(tabs?.className).toContain("overflow-hidden")
+    expect(activeTabContent?.className).toContain("flex-1")
+    expect(activeTabContent?.className).toContain("overflow-hidden")
+    expect(tableCard?.className).toContain("h-full")
+    expect(tableCard?.className).toContain("min-h-0")
     expect(filterButton.getAttribute("aria-expanded")).toBe("true")
     expect(screen.getByRole("combobox", { name: "Vai trò" })).toBeTruthy()
     expect(screen.queryByText(/^0 tài khoản/i)).toBeNull()
@@ -496,7 +635,7 @@ describe("UsersPage", () => {
     expect(screen.getByRole("menuitem", { name: /xóa tài khoản/i })).toBeTruthy()
     await user.click(screen.getByRole("menuitem", { name: /xóa tài khoản/i }))
 
-    const deleteDialog = screen.getByRole("dialog", { name: /xóa tài khoản/i })
+    const deleteDialog = screen.getByRole("alertdialog", { name: /xóa tài khoản/i })
     expect(within(deleteDialog).getByText(/admin/i)).toBeTruthy()
     await user.click(within(deleteDialog).getByRole("button", { name: /xóa tài khoản/i }))
 
@@ -504,5 +643,6 @@ describe("UsersPage", () => {
       expect(mockAdminApi.deleteUsers).toHaveBeenCalledWith(["user-1"])
     })
     await screen.findByText(/không có tài khoản/i)
+    expect(await screen.findByText('Xóa tài khoản thành công')).toBeTruthy()
   })
 })

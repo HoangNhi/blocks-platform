@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils"
 
 import { areAllVisibleSelected, toggleAllSelectedIds, toggleSelectedId } from "../system-list-state"
 
+const stickyHeaderCellClassName =
+  "sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_rgba(15,23,42,0.08)]"
+
 export type SystemColumn<TItem> = {
   key: string
   header: ReactNode
@@ -86,14 +89,14 @@ export function SystemDataTable<TItem>({
     <div
       data-slot="system-data-table-scroll-area"
       className={cn(
-        variant === "embedded" ? "max-h-[min(60vh,36rem)] overflow-auto" : "h-full overflow-auto",
+        variant === "embedded" ? "min-h-0 flex-1 overflow-auto" : "h-full overflow-auto",
       )}
     >
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_rgba(15,23,42,0.08)]">
+      <Table containerClassName="overflow-visible">
+        <TableHeader>
           <TableRow>
             {hasSelection ? (
-              <TableHead className="w-12">
+              <TableHead className={cn(stickyHeaderCellClassName, "w-12")}>
                 <Checkbox
                   checked={allVisibleSelected ? true : partiallySelected ? "indeterminate" : false}
                   onCheckedChange={() => selection?.onSelectedIdsChange(toggleAllSelectedIds(selectedIds, visibleIds))}
@@ -102,12 +105,15 @@ export function SystemDataTable<TItem>({
               </TableHead>
             ) : null}
             {columns.map((column) => (
-              <TableHead key={column.key} className={column.headerClassName}>
+              <TableHead
+                key={column.key}
+                className={cn(stickyHeaderCellClassName, column.headerClassName)}
+              >
                 {column.header}
               </TableHead>
             ))}
             {rowActions ? (
-              <TableHead className="w-14 text-right">
+              <TableHead className={cn(stickyHeaderCellClassName, "w-14 text-right")}>
                 <span className="sr-only">Thao tác</span>
               </TableHead>
             ) : null}
@@ -207,7 +213,7 @@ export function SystemDataTable<TItem>({
   )
 
   if (variant === "embedded") {
-    return <div className={cn("min-w-0 overflow-hidden", className)}>{tableContent}{footer}</div>
+    return <div className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden", className)}>{tableContent}{footer}</div>
   }
 
   return (

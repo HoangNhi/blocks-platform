@@ -18,6 +18,27 @@ describe("API error helpers", () => {
     expect(getEnvelopeMessage({ Message: "Access denied" })).toBe("Access denied")
   })
 
+  it("reads ASP.NET ProblemDetails validation errors", () => {
+    expect(
+      getEnvelopeMessage({
+        title: "One or more validation errors occurred.",
+        errors: {
+          Username: ["Username is already taken."],
+          Email: ["Email is invalid."],
+        },
+      }),
+    ).toBe("Username: Username is already taken.; Email: Email is invalid.")
+  })
+
+  it("reads detail and nested string data when no message exists", () => {
+    expect(getEnvelopeMessage({ detail: "User could not be saved." })).toBe(
+      "User could not be saved.",
+    )
+    expect(getEnvelopeMessage({ data: "The username already exists." })).toBe(
+      "The username already exists.",
+    )
+  })
+
   it("normalizes API errors", () => {
     const error = new ApiError("Access denied", 403)
 
@@ -51,5 +72,15 @@ describe("API error helpers", () => {
       allowedModes: ["backtest"],
       blockedModes: ["paper", "live"],
     })
+  })
+
+  it("uses the HTTP status when the error body has no status code", () => {
+    const error = toApiError(
+      { detail: "User could not be saved." },
+      "Request failed",
+      422,
+    )
+
+    expect(error.statusCode).toBe(422)
   })
 })

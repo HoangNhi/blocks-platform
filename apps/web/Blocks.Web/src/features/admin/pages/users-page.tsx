@@ -1,19 +1,22 @@
-import { Filter, MoreHorizontal, Plus, Search } from "lucide-react"
+import { Filter, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +28,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ConfirmAction } from "@/features/admin/components/confirm-action"
 import { InvitationsPanel } from "@/features/admin/components/invitations-panel"
 import { SystemDataTable, type SystemColumn } from "@/features/admin/components/system-data-table"
 import { UserFormDialog, type UserFormErrors, type UserFormValues } from "@/features/admin/components/user-form-dialog"
@@ -124,6 +126,9 @@ export function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<UserModel | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeletingUser, setIsDeletingUser] = useState(false)
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null)
+  const [isDeletingUsers, setIsDeletingUsers] = useState(false)
 
   const columns = useMemo<SystemColumn<UserModel>[]>(
     () => [
@@ -258,9 +263,24 @@ export function UsersPage() {
     setDeleteTarget(item)
   }
 
+  function openBulkDeleteDialog() {
+    if (selectedIds.length === 0 || isDeletingUsers) return
+
+    setBulkDeleteError(null)
+    setIsBulkDeleteDialogOpen(true)
+  }
+
+  function closeBulkDeleteDialog() {
+    if (isDeletingUsers) return
+
+    setBulkDeleteError(null)
+    setIsBulkDeleteDialogOpen(false)
+  }
+
   async function confirmDeleteUser() {
     if (!deleteTarget || isDeletingUser) return
 
+    const username = deleteTarget.username
     setDeleteError(null)
     setIsDeletingUser(true)
     setIsLoading(true)
@@ -270,8 +290,13 @@ export function UsersPage() {
       setSelectedIds((current) => current.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(null)
       await refreshUsers()
+      toast.success("Xóa tài khoản thành công", {
+        description: `Tài khoản ${username} đã được xóa.`,
+      })
     } catch (deleteLoadError: unknown) {
-      setDeleteError(deleteLoadError instanceof Error ? deleteLoadError.message : "Không thể xóa tài khoản.")
+      const message = deleteLoadError instanceof Error ? deleteLoadError.message : "Không thể xóa tài khoản."
+      setDeleteError(message)
+      toast.error("Không thể xóa tài khoản", { description: message })
     } finally {
       setIsDeletingUser(false)
       setIsLoading(false)
@@ -321,6 +346,11 @@ export function UsersPage() {
       else await adminApi.createUser(requestBody)
 
       await refreshUsers()
+      toast.success(isEditMode ? "Cập nhật tài khoản thành công" : "Thêm tài khoản thành công", {
+        description: isEditMode
+          ? `Tài khoản ${requestBody.username} đã được cập nhật.`
+          : `Tài khoản ${requestBody.username} đã được thêm.`,
+      })
 
       if (intent === "saveAndAddMore" && !isEditMode && canUseSaveAndAddMore("create")) {
         setDialogState(openCreateDialog())
@@ -331,26 +361,34 @@ export function UsersPage() {
         closeUserDialog()
       }
     } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : "Không thể lưu tài khoản.")
+      const message = saveError instanceof Error ? saveError.message : "Không thể lưu tài khoản."
+      toast.error("Không thể lưu tài khoản", { description: message })
       setIsSubmitting(false)
     }
   }
 
   async function deleteSelectedUsers() {
-    if (selectedIds.length === 0) return
+    if (selectedIds.length === 0 || isDeletingUsers) return
 
-    setError(null)
+    const deletedCount = selectedIds.length
+    setBulkDeleteError(null)
+    setIsDeletingUsers(true)
     setIsLoading(true)
 
     try {
       await adminApi.deleteUsers(selectedIds)
       setSelectedIds([])
-      const refreshed = await loadUsers(request)
-      setItems(refreshed.data)
-      setTotalRow(refreshed.totalRow)
+      setIsBulkDeleteDialogOpen(false)
+      await refreshUsers()
+      toast.success(`Đã xóa ${deletedCount} tài khoản`, {
+        description: "Danh sách tài khoản đã được cập nhật.",
+      })
     } catch (deleteError: unknown) {
-      setError(deleteError instanceof Error ? deleteError.message : "Không thể xóa tài khoản.")
+      const message = deleteError instanceof Error ? deleteError.message : "Không thể xóa tài khoản."
+      setBulkDeleteError(message)
+      toast.error("Không thể xóa tài khoản", { description: message })
     } finally {
+      setIsDeletingUsers(false)
       setIsLoading(false)
     }
   }
@@ -360,21 +398,21 @@ export function UsersPage() {
   const currentStatusFilter = request.isActived === undefined ? "all" : request.isActived ? "active" : "inactive"
 
   return (
-    <div className="mx-auto flex w-full max-w-[1500px] min-h-0 flex-col gap-5 px-4 py-5 md:px-6">
-      <div className="space-y-1 border-b pb-5">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col gap-5 overflow-hidden px-4 py-5 md:px-6">
+      <div className="shrink-0 space-y-1 border-b pb-5">
         <h1 className="text-2xl font-semibold tracking-tight">Người dùng</h1>
         <p className="text-sm text-muted-foreground">Quản lý tài khoản, vai trò và quyền truy cập hệ thống.</p>
       </div>
 
-      <Tabs defaultValue="users" className="min-h-0 gap-3">
-        <TabsList variant="line" className="w-full justify-start gap-4 rounded-none border-b p-0">
+      <Tabs defaultValue="users" className="min-h-0 flex-1 gap-3 overflow-hidden">
+        <TabsList variant="line" className="shrink-0 w-full justify-start gap-4 rounded-none border-b p-0">
           <TabsTrigger value="users" className="flex-none rounded-none px-1.5 py-3">Tài khoản</TabsTrigger>
           <TabsTrigger value="invitations" className="flex-none rounded-none px-1.5 py-3">Lời mời</TabsTrigger>
         </TabsList>
 
-      <TabsContent value="users" className="min-h-0">
-        <Card className="gap-0 overflow-hidden rounded-xl border-platform-border bg-background py-0 shadow-none ring-0">
-          <div className="border-b p-4">
+      <TabsContent value="users" className="min-h-0 flex-1 overflow-hidden">
+        <Card className="h-full min-h-0 gap-0 overflow-hidden rounded-xl border-platform-border bg-background py-0 shadow-none ring-0">
+          <div className="shrink-0 border-b p-4">
             <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
               <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex min-w-0 flex-1 gap-2">
@@ -399,14 +437,16 @@ export function UsersPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <ConfirmAction
-                    label={selectedIds.length > 0 ? `Xóa danh sách (${selectedIds.length})` : "Xóa danh sách"}
-                    confirmLabel="Xác nhận xóa"
-                    disabled={selectedIds.length === 0}
+                  <Button
+                    type="button"
                     variant="outline"
                     className="text-destructive hover:text-destructive"
-                    onConfirm={deleteSelectedUsers}
-                  />
+                    disabled={selectedIds.length === 0}
+                    onClick={openBulkDeleteDialog}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    {selectedIds.length > 0 ? `Xóa danh sách (${selectedIds.length})` : "Xóa danh sách"}
+                  </Button>
                   <Button type="button" onClick={openCreateUserDialog}>
                     <Plus className="size-4" aria-hidden="true" />
                     Thêm tài khoản
@@ -468,7 +508,7 @@ export function UsersPage() {
           <SystemDataTable
             variant="embedded"
             showRefresh
-            className="min-w-0"
+            className="min-h-0 flex-1"
             columns={columns}
             items={items}
             getRowKey={(item) => item.id}
@@ -505,7 +545,7 @@ export function UsersPage() {
         </Card>
       </TabsContent>
 
-      <TabsContent value="invitations" className="min-h-0 overflow-auto">
+      <TabsContent value="invitations" className="min-h-0 flex-1 overflow-auto">
         <InvitationsPanel adminApi={adminApi} />
       </TabsContent>
 
@@ -522,7 +562,42 @@ export function UsersPage() {
         onSave={() => void submitUserForm("save")}
         onSaveAndAddMore={() => void submitUserForm("saveAndAddMore")}
       />
-      <Dialog
+      <AlertDialog
+        open={isBulkDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setIsBulkDeleteDialogOpen(true)
+          } else {
+            closeBulkDeleteDialog()
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa danh sách tài khoản</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa <strong>{selectedIds.length} tài khoản</strong> đã chọn? Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {bulkDeleteError ? <p role="alert" className="text-sm text-destructive">{bulkDeleteError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingUsers} onClick={closeBulkDeleteDialog}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeletingUsers || selectedIds.length === 0}
+              onClick={(event) => {
+                event.preventDefault()
+                void deleteSelectedUsers()
+              }}
+            >
+              {isDeletingUsers ? "Đang xóa..." : "Xác nhận xóa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => {
           if (!open && !isDeletingUser) {
@@ -531,18 +606,16 @@ export function UsersPage() {
           }
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Xóa tài khoản</DialogTitle>
-            <DialogDescription>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa tài khoản</AlertDialogTitle>
+            <AlertDialogDescription>
               Bạn có chắc muốn xóa tài khoản <strong>{deleteTarget?.username}</strong>?
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError ? <p role="alert" className="px-6 pt-4 text-sm text-destructive">{deleteError}</p> : null}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? <p role="alert" className="text-sm text-destructive">{deleteError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel
               disabled={isDeletingUser}
               onClick={() => {
                 setDeleteError(null)
@@ -550,13 +623,20 @@ export function UsersPage() {
               }}
             >
               Hủy
-            </Button>
-            <Button type="button" variant="destructive" disabled={isDeletingUser} onClick={() => void confirmDeleteUser()}>
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeletingUser}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmDeleteUser()
+              }}
+            >
               {isDeletingUser ? "Đang xóa..." : "Xóa tài khoản"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </Tabs>
     </div>
   )

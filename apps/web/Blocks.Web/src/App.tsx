@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { LoaderCircle, ShieldCheck } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageState } from "@/components/platform/page-state";
 import { LoginPage } from "@/features/auth/login-page";
@@ -234,6 +235,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        <Toaster position="bottom-right" closeButton duration={5000} />
       </AuthProvider>
     </BrowserRouter>
   );

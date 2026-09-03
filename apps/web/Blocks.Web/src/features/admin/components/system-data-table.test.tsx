@@ -53,13 +53,18 @@ describe("SystemDataTable", () => {
     )
     const footer = container.querySelector('[data-slot="card-footer"]')
     const header = container.querySelector('[data-slot="table-header"]')
+    const headerCells = container.querySelectorAll('[data-slot="table-head"]')
+    const tableContainer = container.querySelector('[data-slot="table-container"]')
 
     expect(card?.className).toContain("h-full")
     expect(card?.className).toContain("min-h-0")
     expect(card?.className).not.toContain("min-h-[26rem]")
     expect(content?.className).toContain("min-h-0")
     expect(scrollArea?.className).toContain("overflow-auto")
-    expect(header?.className).toContain("sticky")
+    expect(header?.className).not.toContain("sticky")
+    expect(headerCells.length).toBe(1)
+    expect(headerCells[0]?.className).toContain("sticky")
+    expect(tableContainer?.className).toContain("overflow-visible")
     expect(footer?.className).toContain("shrink-0")
     expect(scrollArea?.contains(footer)).toBe(false)
   })
@@ -67,7 +72,13 @@ describe("SystemDataTable", () => {
   it("keeps footer background in embedded tables", () => {
     const { container } = renderTable([{ id: "1", name: "First row" }], "embedded")
     const footer = container.querySelector('[data-slot="card-footer"]')
+    const scrollArea = container.querySelector(
+      '[data-slot="system-data-table-scroll-area"]',
+    )
 
     expect(footer?.className).toContain("bg-card")
+    expect(scrollArea?.className).toContain("min-h-0")
+    expect(scrollArea?.className).toContain("flex-1")
+    expect(scrollArea?.className).not.toContain("max-h-")
   })
 })

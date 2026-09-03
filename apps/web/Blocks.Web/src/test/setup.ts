@@ -30,7 +30,7 @@ if (typeof window !== "undefined" && !("PointerEvent" in globalThis)) {
   })
 }
 
-if (typeof window !== "undefined" && !("matchMedia" in window)) {
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({

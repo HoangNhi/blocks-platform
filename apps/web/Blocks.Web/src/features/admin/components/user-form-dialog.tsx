@@ -65,7 +65,10 @@ export function UserFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-1.5rem)] p-0 sm:max-w-[60rem]">
+      <DialogContent
+        className="max-h-[calc(100vh-1.5rem)] p-0 sm:max-w-[60rem]"
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader className="px-8 py-6">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

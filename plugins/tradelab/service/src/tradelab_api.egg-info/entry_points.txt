@@ -1,0 +1,3 @@
+[console_scripts]
+tradelab-clean-test-data = tradelab_api.tools.cleanup_test_data:main
+tradelab-seed-baseline = tradelab_api.tools.seed_baseline:main

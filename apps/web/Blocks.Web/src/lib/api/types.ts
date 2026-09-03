@@ -9,6 +9,18 @@ export type ApiEnvelope<T> = {
   Data?: T
   message?: string | null
   Message?: string | null
+  detail?: string | null
+  Detail?: string | null
+  title?: string | null
+  Title?: string | null
+  error?: string | null
+  Error?: string | null
+  errorDescription?: string | null
+  error_description?: string | null
+  errors?: unknown
+  Errors?: unknown
+  status?: number
+  Status?: number
 }
 
 export type PagingRequest = {

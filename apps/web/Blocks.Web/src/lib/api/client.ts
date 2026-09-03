@@ -76,7 +76,7 @@ export function createApiClient({
     }
 
     if (!response.ok || !getEnvelopeSuccess(payload)) {
-      throw toApiError(payload, "The request failed.")
+      throw toApiError(payload, "The request failed.", response.status)
     }
 
     return getEnvelopeData(payload) as T

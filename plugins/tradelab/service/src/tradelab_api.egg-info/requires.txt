@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy
+psycopg[binary]
+httpx
+pandas
+numpy
+python-dateutil
+pytest
+pytest-asyncio
+ruff
+cryptography>=48.0.0

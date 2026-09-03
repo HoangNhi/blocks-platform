@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: tradelab-api
+Version: 0.1.0
+Summary: TradeLab FastAPI service
+Requires-Python: >=3.12
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: pydantic
+Requires-Dist: pydantic-settings
+Requires-Dist: sqlalchemy
+Requires-Dist: psycopg[binary]
+Requires-Dist: httpx
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: python-dateutil
+Requires-Dist: pytest
+Requires-Dist: pytest-asyncio
+Requires-Dist: ruff
+Requires-Dist: cryptography>=48.0.0

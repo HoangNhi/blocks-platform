@@ -72,6 +72,28 @@ describe("API client", () => {
     })
   })
 
+  it("surfaces ProblemDetails validation errors and HTTP status", async () => {
+    const fetcher = vi.fn(async () =>
+      jsonResponse(
+        {
+          title: "One or more validation errors occurred.",
+          errors: { Username: ["Username is already taken."] },
+        },
+        400,
+      ),
+    )
+    const client = createApiClient({
+      baseUrl: "http://localhost:5000",
+      getAccessToken: () => null,
+      fetcher,
+    })
+
+    await expect(client.request("/api/system/User/insert")).rejects.toMatchObject({
+      message: "Username: Username is already taken.",
+      statusCode: 400,
+    })
+  })
+
   it("sends JSON request bodies", async () => {
     const fetcher = vi.fn(async () =>
       jsonResponse({ success: true, data: { id: "1" } }),
