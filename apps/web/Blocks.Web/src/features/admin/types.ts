@@ -79,6 +79,19 @@ export type RoleModel = BaseModel & {
   isSystem?: boolean
   isRegistrationEligible?: boolean
   isDefaultRegistrationRole?: boolean
+  isProtected?: boolean
+  canDeactivate?: boolean
+  deactivationBlockedReason?: string | null
+  canChangeRegistrationEligibility?: boolean
+  registrationEligibilityBlockedReason?: string | null
+  canDelete?: boolean
+  deleteBlockedReason?: string | null
+}
+
+export type RolePagingRequest = PagingRequest & {
+  isActived?: boolean
+  isSystem?: boolean
+  isRegistrationEligible?: boolean
 }
 
 export type RoleDetailModel = RoleModel & {
@@ -94,6 +107,29 @@ export type RoleUpsertRequest = {
   isActived?: boolean
   isEdit?: boolean
   sort?: number | null
+}
+
+export type RoleSaveDetails = {
+  name: string
+  key: string
+  isRegistrationEligible: boolean
+  isActived: boolean
+}
+
+export type RolePermissionSaveRequest = Pick<PermissionMenuModel, "id" | "roleId" | "menuId" | "isViewed" | "isAdded" | "isUpdated" | "isDeleted" | "isApproved" | "isAnalyzed">
+
+export type RoleSaveRequest = {
+  id: string
+  details?: RoleSaveDetails
+  permissions?: RolePermissionSaveRequest[]
+}
+
+export type RoleSaveResult = {
+  role: RoleDetailModel
+  savedScopes: {
+    details: boolean
+    permissions: boolean
+  }
 }
 
 export type MenuModel = BaseModel & {

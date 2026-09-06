@@ -18,4 +18,6 @@ export type UploadEmbeddedRequest = UploadRequest
 
 export type UploadTemporaryRequest = UploadRequest
 
+export type UploadAvatarTemporaryRequest = UploadRequest
+
 export type UploadEmbeddedResult = FileAttachment[]

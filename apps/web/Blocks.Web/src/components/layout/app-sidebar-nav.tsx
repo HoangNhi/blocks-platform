@@ -136,7 +136,12 @@ function NavTreeNode({
                   <NavLink
                     to={child.route!}
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                    onClick={() => onNavigate?.(child.route!)}
+                    onClick={(event) => {
+                      if (onNavigate) {
+                        event.preventDefault()
+                        onNavigate(child.route!)
+                      }
+                    }}
                   >
                     {child.title}
                   </NavLink>
@@ -165,7 +170,12 @@ function NavTreeNode({
                 compact ? "justify-center px-0 pr-0" : getIndentClass(depth),
                 active && "bg-blue-50 font-semibold text-blue-700",
               )}
-              onClick={() => onNavigate?.(route)}
+              onClick={(event) => {
+                if (onNavigate) {
+                  event.preventDefault()
+                  onNavigate(route)
+                }
+              }}
             >
               {compact ? (
                 <span
@@ -211,7 +221,12 @@ function NavTreeNode({
                 compact ? "justify-center px-0 pr-0" : getIndentClass(depth),
                 active && "bg-blue-50 text-blue-700",
               )}
-              onClick={() => onNavigate?.(route)}
+              onClick={(event) => {
+                if (onNavigate) {
+                  event.preventDefault()
+                  onNavigate(route)
+                }
+              }}
             >
               <span
                 aria-hidden="true"

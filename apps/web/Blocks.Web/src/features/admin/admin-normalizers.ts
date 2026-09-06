@@ -10,6 +10,7 @@ import type {
   PermissionMenuModel,
   RoleDetailModel,
   RoleModel,
+  RoleSaveResult,
   SystemGroupDetailModel,
   SystemGroupModel,
   UserDetailModel,
@@ -121,6 +122,13 @@ export function normalizeRole(row: unknown): RoleModel {
     isSystem: boolValue(pick(record, "isSystem", "IsSystem")),
     isRegistrationEligible: boolValue(pick(record, "isRegistrationEligible", "IsRegistrationEligible")),
     isDefaultRegistrationRole: boolValue(pick(record, "isDefaultRegistrationRole", "IsDefaultRegistrationRole")),
+    isProtected: boolValue(pick(record, "isProtected", "IsProtected")),
+    canDeactivate: boolValue(pick(record, "canDeactivate", "CanDeactivate"), true),
+    deactivationBlockedReason: nullableText(pick(record, "deactivationBlockedReason", "DeactivationBlockedReason")),
+    canChangeRegistrationEligibility: boolValue(pick(record, "canChangeRegistrationEligibility", "CanChangeRegistrationEligibility"), true),
+    registrationEligibilityBlockedReason: nullableText(pick(record, "registrationEligibilityBlockedReason", "RegistrationEligibilityBlockedReason")),
+    canDelete: boolValue(pick(record, "canDelete", "CanDelete"), true),
+    deleteBlockedReason: nullableText(pick(record, "deleteBlockedReason", "DeleteBlockedReason")),
   }
 }
 
@@ -130,6 +138,20 @@ export function normalizeRoleDetail(row: unknown): RoleDetailModel {
   return {
     ...normalizeRole(record),
     folderUpload: normalizeFolderUpload(record),
+  }
+}
+
+export function normalizeRoleSaveResult(row: unknown): RoleSaveResult {
+  const record = asRecord(row)
+  const rawRole = pick(record, "role", "Role") ?? record
+  const scopes = asRecord(pick(record, "savedScopes", "SavedScopes"))
+
+  return {
+    role: normalizeRoleDetail(rawRole),
+    savedScopes: {
+      details: boolValue(pick(scopes, "details", "Details")),
+      permissions: boolValue(pick(scopes, "permissions", "Permissions")),
+    },
   }
 }
 

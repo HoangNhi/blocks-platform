@@ -194,7 +194,7 @@ public sealed class AuthorizationAdministrationTests
     }
 
     [Fact]
-    public async Task Default_registration_role_cannot_become_ineligible()
+    public async Task Default_registration_role_can_become_ineligible_and_clears_default()
     {
         var role = NewRole("Creator", "creator", isRegistrationEligible: true);
         await using var context = CreateContext(role);
@@ -211,13 +211,16 @@ public sealed class AuthorizationAdministrationTests
         await context.SaveChangesAsync();
         var service = CreateRoleService(context);
 
-        await Assert.ThrowsAsync<BusinessException>(() => service.Update(new RoleRequest
+        await service.Update(new RoleRequest
         {
             Id = role.Id,
             Name = role.Name,
             Key = role.Key,
             IsRegistrationEligible = false
-        }));
+        });
+
+        Assert.False((await context.Roles.SingleAsync()).IsRegistrationEligible);
+        Assert.Null(await context.InstanceSettings.Select(setting => setting.DefaultRegistrationRoleId).SingleAsync());
     }
 
     [Fact]

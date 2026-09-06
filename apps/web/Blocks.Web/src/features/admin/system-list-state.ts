@@ -1,6 +1,6 @@
 import type { PagingRequest } from "@/lib/api/types"
 
-import type { UserPagingRequest } from "./types"
+import type { RolePagingRequest, UserPagingRequest } from "./types"
 
 export function createDefaultPagingRequest(pageSize = 20): PagingRequest {
   return {
@@ -17,6 +17,15 @@ export function createDefaultUserPagingRequest(pageSize = 20): UserPagingRequest
     ...createDefaultPagingRequest(pageSize),
     roleId: undefined,
     isActived: undefined,
+  }
+}
+
+export function createDefaultRolePagingRequest(pageSize = 20): RolePagingRequest {
+  return {
+    ...createDefaultPagingRequest(pageSize),
+    isActived: undefined,
+    isSystem: undefined,
+    isRegistrationEligible: undefined,
   }
 }
 
@@ -51,6 +60,29 @@ export function resetUserFilters(request: UserPagingRequest): UserPagingRequest 
     pageIndex: 1,
     roleId: undefined,
     isActived: undefined,
+  }
+}
+
+export function applyRoleFilters(
+  request: RolePagingRequest,
+  filters: Pick<RolePagingRequest, "isActived" | "isSystem" | "isRegistrationEligible">,
+): RolePagingRequest {
+  return {
+    ...request,
+    pageIndex: 1,
+    isActived: filters.isActived,
+    isSystem: filters.isSystem,
+    isRegistrationEligible: filters.isRegistrationEligible,
+  }
+}
+
+export function resetRoleFilters(request: RolePagingRequest): RolePagingRequest {
+  return {
+    ...request,
+    pageIndex: 1,
+    isActived: undefined,
+    isSystem: undefined,
+    isRegistrationEligible: undefined,
   }
 }
 

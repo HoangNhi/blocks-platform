@@ -11,6 +11,7 @@ namespace Blocks.SystemService.Services.CoreFeature.Role
         Task<ModelRole> GetById(GetByIdRequest request);
         Task<ModelRole> Insert(RoleRequest request);
         Task<ModelRole> Update(RoleRequest request);
+        Task<ModelRoleSave> Save(RoleSaveRequest request);
         Task<string> DeleteList(DeleteListRequest request);
         Task<GetListPagingResponse<ModelRoleGetListPaging>> GetList(GetListPagingRequest request);
         Task<List<ModelPermission>> GetPermissionsByRole(GetByIdRequest request);

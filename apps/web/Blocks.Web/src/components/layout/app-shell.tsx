@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Outlet, useBeforeUnload, useLocation, useNavigate } from "react-router";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileSidebarSheet } from "@/components/layout/mobile-sidebar-sheet";
 import { WorkspaceTopChrome } from "@/components/layout/workspace-top-chrome";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type {
   AuthUser,
   ChangePasswordRequest,
@@ -34,6 +44,8 @@ import {
   parseSerializedWorkspaceTabs,
   resolveWorkspaceTabsState,
   serializeWorkspaceTabs,
+  WORKSPACE_DIRTY_EVENT,
+  type WorkspaceDirtyEventDetail,
 } from "@/features/navigation/workspace-tabs";
 import {
   createAssistantApi,
@@ -42,6 +54,11 @@ import {
 import { AssistantDrawer } from "@/features/assistant/assistant-drawer";
 
 const OPEN_STATE_KEY = "blocks.sidebar.openSubgroups";
+
+type PendingWorkspaceExit =
+  | { kind: "route"; route: string }
+  | { kind: "close"; route: string }
+  | { kind: "pop"; delta: number };
 
 type AppShellProps = {
   navigation: NavNode[];
@@ -138,6 +155,10 @@ export function AppShell({
   const [desktopSidebarMode, setDesktopSidebarMode] = useState(() =>
     getInitialSidebarLayoutMode(currentUser.id),
   );
+  const [dirtyRoutes, setDirtyRoutes] = useState<Record<string, boolean>>({});
+  const [pendingWorkspaceExit, setPendingWorkspaceExit] = useState<PendingWorkspaceExit | null>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const suppressPopRef = useRef(false);
   const isCompactDesktopViewport = useMediaQuery(
     "(min-width: 768px) and (max-width: 1179px)",
   );
@@ -157,7 +178,7 @@ export function AppShell({
     () => ensureOpenSubgroups(openSubgroupIds, requiredOpenIds),
     [openSubgroupIds, requiredOpenIds],
   );
-  const workspaceTabsState = useMemo(
+  const resolvedWorkspaceTabsState = useMemo(
     () =>
       resolveWorkspaceTabsState({
         navigation: visibleNavigation,
@@ -165,6 +186,16 @@ export function AppShell({
         activeRoute,
       }),
     [activeRoute, visibleNavigation, workspaceRoutes],
+  );
+  const workspaceTabsState = useMemo(
+    () => ({
+      ...resolvedWorkspaceTabsState,
+      tabs: resolvedWorkspaceTabsState.tabs.map((tab) => ({
+        ...tab,
+        isDirty: dirtyRoutes[tab.route] ?? tab.isDirty,
+      })),
+    }),
+    [dirtyRoutes, resolvedWorkspaceTabsState],
   );
 
   const activeWorkspaceTab = workspaceTabsState.tabs.find(
@@ -185,6 +216,81 @@ export function AppShell({
   );
 
   const effectiveAssistantApi = assistantApi ?? defaultAssistantApi;
+
+  useBeforeUnload((event) => {
+    if (dirtyRoutes[activeRoute]) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
+  useEffect(() => {
+    const historyIndex = window.history.state?.idx;
+    if (typeof historyIndex === "number") {
+      historyIndexRef.current = historyIndex;
+    }
+  }, [activeRoute]);
+
+  useEffect(() => {
+    const handleDirtyChange = (event: Event) => {
+      const detail = (event as CustomEvent<WorkspaceDirtyEventDetail>).detail;
+      if (!detail || typeof detail.route !== "string" || typeof detail.isDirty !== "boolean") {
+        return;
+      }
+
+      setDirtyRoutes((current) => {
+        if (detail.isDirty) {
+          if (current[detail.route]) return current;
+          return { ...current, [detail.route]: true };
+        }
+
+        if (!current[detail.route]) return current;
+        const next = { ...current };
+        delete next[detail.route];
+        return next;
+      });
+    };
+
+    window.addEventListener(WORKSPACE_DIRTY_EVENT, handleDirtyChange);
+    return () => window.removeEventListener(WORKSPACE_DIRTY_EVENT, handleDirtyChange);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const nextHistoryIndex = event.state?.idx;
+      if (suppressPopRef.current) {
+        suppressPopRef.current = false;
+        if (typeof nextHistoryIndex === "number") {
+          historyIndexRef.current = nextHistoryIndex;
+        }
+        return;
+      }
+
+      const previousHistoryIndex = historyIndexRef.current;
+      if (
+        typeof nextHistoryIndex !== "number"
+        || previousHistoryIndex === null
+        || !dirtyRoutes[activeRoute]
+      ) {
+        if (typeof nextHistoryIndex === "number") {
+          historyIndexRef.current = nextHistoryIndex;
+        }
+        return;
+      }
+
+      const delta = nextHistoryIndex - previousHistoryIndex;
+      if (delta === 0) return;
+
+      event.stopImmediatePropagation();
+      historyIndexRef.current = previousHistoryIndex;
+      suppressPopRef.current = true;
+      window.history.go(-delta);
+      setPendingWorkspaceExit({ kind: "pop", delta });
+    };
+
+    window.addEventListener("popstate", handlePopState, true);
+    return () => window.removeEventListener("popstate", handlePopState, true);
+  }, [activeRoute, dirtyRoutes]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -209,16 +315,25 @@ export function AppShell({
     );
   }, [currentUser.id, workspaceTabsState]);
 
-  function selectWorkspaceRoute(route: string) {
+  function navigateWorkspaceRoute(route: string) {
     const nextState = openWorkspaceTab(workspaceTabsState, route);
     setWorkspaceRouteState({
       userId: currentUser.id,
       routes: nextState.tabs.map((tab) => tab.route),
     });
-    navigate(route);
+    navigate(nextState.activeRoute);
   }
 
-  function closeWorkspaceRoute(route: string) {
+  function selectWorkspaceRoute(route: string) {
+    if (route !== activeRoute && dirtyRoutes[activeRoute]) {
+      setPendingWorkspaceExit({ kind: "route", route });
+      return;
+    }
+
+    navigateWorkspaceRoute(route);
+  }
+
+  function applyCloseWorkspaceRoute(route: string) {
     const nextState = closeWorkspaceTab(workspaceTabsState, route);
     setWorkspaceRouteState({
       userId: currentUser.id,
@@ -228,6 +343,50 @@ export function AppShell({
     if (nextState.activeRoute !== activeRoute) {
       navigate(nextState.activeRoute);
     }
+  }
+
+  function closeWorkspaceRoute(route: string) {
+    if (dirtyRoutes[route]) {
+      setPendingWorkspaceExit({ kind: "close", route });
+      return;
+    }
+
+    applyCloseWorkspaceRoute(route);
+  }
+
+  function clearDirtyRoute(route: string) {
+    setDirtyRoutes((current) => {
+      if (!current[route]) return current;
+      const next = { ...current };
+      delete next[route];
+      return next;
+    });
+  }
+
+  function cancelWorkspaceExit() {
+    setPendingWorkspaceExit(null);
+  }
+
+  function discardWorkspaceExit() {
+    const pending = pendingWorkspaceExit;
+    if (!pending) return;
+
+    setPendingWorkspaceExit(null);
+
+    if (pending.kind === "pop") {
+      clearDirtyRoute(activeRoute);
+      suppressPopRef.current = true;
+      window.history.go(pending.delta);
+      return;
+    }
+
+    clearDirtyRoute(pending.route === activeRoute ? activeRoute : pending.route);
+    if (pending.kind === "route") {
+      navigateWorkspaceRoute(pending.route);
+      return;
+    }
+
+    applyCloseWorkspaceRoute(pending.route);
   }
 
   const hasRouteAccess = canAccessRoute(navigation, activeRoute);
@@ -291,6 +450,33 @@ export function AppShell({
           )}
         </div>
       </main>
+      <AlertDialog
+        open={pendingWorkspaceExit !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelWorkspaceExit();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Thay đổi chưa lưu</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có thay đổi chưa lưu. Rời khỏi trang sẽ loại bỏ các thay đổi này.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelWorkspaceExit}>Ở lại</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={(event) => {
+                event.preventDefault();
+                discardWorkspaceExit();
+              }}
+            >
+              Rời đi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AssistantDrawer
         open={assistantOpen}
         onOpenChange={setAssistantOpen}

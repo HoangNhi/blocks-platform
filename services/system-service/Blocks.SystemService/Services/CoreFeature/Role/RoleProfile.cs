@@ -11,6 +11,7 @@ namespace Blocks.SystemService.Services.CoreFeature.Role
         {
             CreateMap<Entities.Role, ModelRole>().ReverseMap();
             CreateMap<Entities.Role, ModelRoleGetListPaging>().ReverseMap();
+            CreateMap<Entities.Role, ModelRoleSave>().ReverseMap();
             CreateMap<Entities.Role, RoleRequest>().ReverseMap();
 
             CreateMap<Entities.Permission, PermissionRequest>().ReverseMap();

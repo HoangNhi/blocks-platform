@@ -3,6 +3,12 @@ import type { NavNode } from "./types"
 
 export const WORKSPACE_TABS_STORAGE_VERSION = 1
 export const DEFAULT_WORKSPACE_ROUTE = "/"
+export const WORKSPACE_DIRTY_EVENT = "blocks:workspace-dirty"
+
+export type WorkspaceDirtyEventDetail = {
+  route: string
+  isDirty: boolean
+}
 
 export type WorkspaceTab = {
   id: string

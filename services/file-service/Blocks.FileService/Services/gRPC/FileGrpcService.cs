@@ -57,7 +57,6 @@ public class FileGrpcService : FileProto.FileProtoBase
 
     public override async Task<UploadAvatarResponse> UploadAvatar(UploadAvatarRequest request, ServerCallContext context)
     {
-        await EnsureAllowedAsync(Blocks.Shared.Authorization.FunctionalPermissionAction.UPDATE, context);
         var newImage = _uploadFileService.UploadAvatar(request.FolderUploadId, request.OldImage);
         return new UploadAvatarResponse { NewImage = newImage };
     }

@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react"
+﻿import { MoreHorizontal } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -14,9 +14,9 @@ import { Input } from "@/components/ui/input"
 import { ConfirmAction } from "@/features/admin/components/confirm-action"
 import { MenuFormDialog, type MenuFormErrors, type MenuFormValues } from "@/features/admin/components/menu-form-dialog"
 import {
-  SystemDataTable,
-  type SystemColumn,
-} from "@/features/admin/components/system-data-table"
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table/data-table"
 import { SystemListPageScaffold } from "@/features/admin/components/system-list-page-scaffold"
 import {
   applyTextSearch,
@@ -126,7 +126,7 @@ export function MenusPage() {
   const [formErrors, setFormErrors] = useState<MenuFormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const columns = useMemo<SystemColumn<MenuModel>[]>(
+  const columns = useMemo<DataTableColumn<MenuModel>[]>(
     () => [
       { key: "name", header: "Tên menu", cell: (item) => item.name },
       {
@@ -391,7 +391,7 @@ export function MenusPage() {
         </>
       }
       tableContent={
-        <SystemDataTable
+        <DataTable
           columns={columns}
           items={items}
           getRowKey={(item) => item.id}
@@ -459,3 +459,4 @@ export function MenusPage() {
     </SystemListPageScaffold>
   )
 }
+

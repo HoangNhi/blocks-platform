@@ -15,5 +15,19 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Role.Dtos
         public bool IsRegistrationEligible { get; set; }
 
         public bool IsDefaultRegistrationRole { get; set; }
+
+        public bool IsProtected { get; set; }
+
+        public bool CanDeactivate { get; set; }
+
+        public string? DeactivationBlockedReason { get; set; }
+
+        public bool CanChangeRegistrationEligibility { get; set; }
+
+        public string? RegistrationEligibilityBlockedReason { get; set; }
+
+        public bool CanDelete { get; set; }
+
+        public string? DeleteBlockedReason { get; set; }
     }
 }

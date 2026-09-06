@@ -4,6 +4,7 @@ import { ChevronDown, KeyRound, LoaderCircle, LogOut, UserPen } from "lucide-rea
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { resolveAvatarUrl } from "@/features/files/avatar-url"
 import {
   Dialog,
   DialogContent,
@@ -129,6 +130,7 @@ export function SidebarAccountMenu({
   className,
 }: SidebarAccountMenuProps) {
   const avatarFallback = getAvatarFallback(currentUser)
+  const avatarSource = resolveAvatarUrl(currentUser.avatar)
   const secondaryLabel = currentUser.roleName ?? currentUser.username
   const profileFullNameId = useId()
   const profileEmailId = useId()
@@ -249,8 +251,8 @@ export function SidebarAccountMenu({
               )}
             >
               <Avatar size="lg" className="rounded-lg">
-                {currentUser.avatar ? (
-                  <AvatarImage alt={currentUser.fullname} src={currentUser.avatar} />
+                {avatarSource ? (
+                  <AvatarImage alt={currentUser.fullname} src={avatarSource} />
                 ) : null}
                 <AvatarFallback className="rounded-lg bg-blue-100 text-xs font-semibold text-blue-700">
                   {avatarFallback}
@@ -267,8 +269,8 @@ export function SidebarAccountMenu({
               )}
             >
               <Avatar size="lg" className="rounded-lg">
-                {currentUser.avatar ? (
-                  <AvatarImage alt={currentUser.fullname} src={currentUser.avatar} />
+                {avatarSource ? (
+                  <AvatarImage alt={currentUser.fullname} src={avatarSource} />
                 ) : null}
                 <AvatarFallback className="rounded-lg bg-blue-100 text-xs font-semibold text-blue-700">
                   {avatarFallback}

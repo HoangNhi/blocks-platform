@@ -1,5 +1,5 @@
-import type { ReactNode } from "react"
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from "lucide-react"
+﻿import type { ReactNode } from "react"
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LockKeyhole, RefreshCw } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -10,12 +10,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
-import { areAllVisibleSelected, toggleAllSelectedIds, toggleSelectedId } from "../system-list-state"
+import { areAllVisibleSelected, toggleAllSelectedIds, toggleSelectedId } from "./selection-state"
 
 const stickyHeaderCellClassName =
   "sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_rgba(15,23,42,0.08)]"
 
-export type SystemColumn<TItem> = {
+export type DataTableColumn<TItem> = {
   key: string
   header: ReactNode
   cell: (item: TItem) => ReactNode
@@ -23,16 +23,19 @@ export type SystemColumn<TItem> = {
   cellClassName?: string
 }
 
-type SystemSelectionState = {
+export type SelectionState = {
   selectedIds: string[]
   onSelectedIdsChange: (nextIds: string[]) => void
 }
 
-type SystemDataTableProps<TItem> = {
-  columns: SystemColumn<TItem>[]
+export type DataTableProps<TItem> = {
+  columns: DataTableColumn<TItem>[]
   items: TItem[]
   getRowKey: (item: TItem) => string
-  selection?: SystemSelectionState
+  getRowLabel?: (item: TItem) => string
+  isRowSelectable?: (item: TItem) => boolean
+  getRowSelectionDisabledReason?: (item: TItem) => string | undefined
+  selection?: SelectionState
   pageIndex: number
   pageSize: number
   totalRow: number
@@ -49,10 +52,13 @@ type SystemDataTableProps<TItem> = {
   className?: string
 }
 
-export function SystemDataTable<TItem>({
+export function DataTable<TItem>({
   columns,
   items,
   getRowKey,
+  getRowLabel = getRowKey,
+  isRowSelectable = () => true,
+  getRowSelectionDisabledReason,
   selection,
   pageIndex,
   pageSize,
@@ -68,10 +74,11 @@ export function SystemDataTable<TItem>({
   variant = "card",
   showRefresh = true,
   className,
-}: SystemDataTableProps<TItem>) {
+}: DataTableProps<TItem>) {
   const hasSelection = Boolean(selection)
   const selectedIds = selection?.selectedIds ?? []
-  const visibleIds = items.map(getRowKey)
+  const selectableItems = items.filter(isRowSelectable)
+  const visibleIds = selectableItems.map(getRowKey)
   const allVisibleSelected = hasSelection && areAllVisibleSelected(selectedIds, visibleIds)
   const partiallySelected = hasSelection && !allVisibleSelected && visibleIds.some((visibleId) => selectedIds.includes(visibleId))
   const pageCount = Math.max(1, Math.ceil(totalRow / pageSize))
@@ -87,7 +94,7 @@ export function SystemDataTable<TItem>({
     </div>
   ) : (
     <div
-      data-slot="system-data-table-scroll-area"
+      data-slot="data-table-scroll-area"
       className={cn(
         variant === "embedded" ? "min-h-0 flex-1 overflow-auto" : "h-full overflow-auto",
       )}
@@ -100,6 +107,7 @@ export function SystemDataTable<TItem>({
                 <Checkbox
                   checked={allVisibleSelected ? true : partiallySelected ? "indeterminate" : false}
                   onCheckedChange={() => selection?.onSelectedIdsChange(toggleAllSelectedIds(selectedIds, visibleIds))}
+                  disabled={visibleIds.length === 0}
                   aria-label="Chọn các hàng đang hiển thị"
                 />
               </TableHead>
@@ -144,16 +152,34 @@ export function SystemDataTable<TItem>({
           ) : (
             items.map((item) => {
               const rowId = getRowKey(item)
+              const rowLabel = getRowLabel(item)
+              const rowSelectable = isRowSelectable(item)
+              const selectionDisabledReason = rowSelectable
+                ? undefined
+                : getRowSelectionDisabledReason?.(item) ?? "Không thể chọn hàng này."
 
               return (
                 <TableRow key={rowId} data-state={selectedIds.includes(rowId) ? "selected" : undefined}>
                   {hasSelection ? (
                     <TableCell>
-                      <Checkbox
-                        checked={selectedIds.includes(rowId)}
-                        onCheckedChange={() => selection?.onSelectedIdsChange(toggleSelectedId(selectedIds, rowId))}
-                        aria-label={`Chọn hàng ${rowId}`}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <Checkbox
+                          checked={selectedIds.includes(rowId)}
+                          onCheckedChange={() => selection?.onSelectedIdsChange(toggleSelectedId(selectedIds, rowId))}
+                          disabled={!rowSelectable}
+                          aria-describedby={selectionDisabledReason ? rowId + "-selection-disabled-reason" : undefined}
+                          aria-label={"Chọn hàng " + rowLabel + (selectionDisabledReason ? ". " + selectionDisabledReason : "")}
+                          title={selectionDisabledReason}
+                        />
+                        {!rowSelectable ? (
+                          <LockKeyhole className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                        ) : null}
+                        {selectionDisabledReason ? (
+                          <span id={rowId + "-selection-disabled-reason"} className="sr-only">
+                            {selectionDisabledReason}
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                   ) : null}
                   {columns.map((column) => (
@@ -223,3 +249,4 @@ export function SystemDataTable<TItem>({
     </Card>
   )
 }
+

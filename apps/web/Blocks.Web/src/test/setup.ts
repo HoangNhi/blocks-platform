@@ -48,6 +48,14 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
 
 const elementPrototype = globalThis.HTMLElement?.prototype
 
+if (elementPrototype && !("hasPointerCapture" in elementPrototype)) {
+  Object.defineProperties(elementPrototype, {
+    hasPointerCapture: { value: () => false, writable: true },
+    setPointerCapture: { value: () => undefined, writable: true },
+    releasePointerCapture: { value: () => undefined, writable: true },
+  })
+}
+
 if (elementPrototype && !("scrollIntoView" in elementPrototype)) {
   Object.defineProperty(elementPrototype, "scrollIntoView", {
     value: vi.fn(),

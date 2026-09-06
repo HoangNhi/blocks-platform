@@ -69,6 +69,11 @@ public sealed class AdminResponseContractTests
             throw new NotImplementedException();
         }
 
+        public Task<ModelRoleSave> Save(RoleSaveRequest request)
+        {
+            throw new NotImplementedException();
+        }
+
         public Task<string> DeleteList(DeleteListRequest request)
         {
             throw new NotImplementedException();

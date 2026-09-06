@@ -5,6 +5,7 @@ import type {
   UploadEmbeddedRequest,
   UploadEmbeddedResult,
   UploadTemporaryRequest,
+  UploadAvatarTemporaryRequest,
 } from "./types"
 
 type FilesApiOptions = Pick<ApiClient, "request">
@@ -102,6 +103,12 @@ export function createFilesApi(client: FilesApiOptions) {
       ),
     uploadTemporary: async (request: UploadTemporaryRequest) => {
       await client.request<unknown>("/api/files/UploadFile", {
+        method: "POST",
+        body: buildUploadFormData(request),
+      })
+    },
+    uploadAvatarTemporary: async (request: UploadAvatarTemporaryRequest) => {
+      await client.request<unknown>("/api/files/UploadFile/avatar", {
         method: "POST",
         body: buildUploadFormData(request),
       })

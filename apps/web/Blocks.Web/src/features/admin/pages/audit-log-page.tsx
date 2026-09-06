@@ -1,4 +1,4 @@
-import { Eye } from "lucide-react"
+﻿import { Eye } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,9 +10,9 @@ import { createDefaultAuditLogRequest, resetAuditLogRequest } from "../audit-log
 import { AuditLogDetailDialog } from "../components/audit-log-detail-dialog"
 import { AuditLogFilters } from "../components/audit-log-filters"
 import {
-  SystemDataTable,
-  type SystemColumn,
-} from "../components/system-data-table"
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table/data-table"
 import { SystemListPageScaffold } from "../components/system-list-page-scaffold"
 import { createSystemAdminApi } from "../system-admin-api"
 import type { AuditLogDetailModel, AuditLogModel } from "../types"
@@ -35,7 +35,7 @@ export function AuditLogPage() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [detailItem, setDetailItem] = useState<AuditLogDetailModel | null>(null)
 
-  const columns = useMemo<SystemColumn<AuditLogModel>[]>(
+  const columns = useMemo<DataTableColumn<AuditLogModel>[]>(
     () => [
       {
         key: "createdAt",
@@ -136,7 +136,7 @@ export function AuditLogPage() {
         />
       }
       tableContent={
-        <SystemDataTable
+        <DataTable
           columns={columns}
           items={items}
           getRowKey={(item) => item.id}
@@ -189,3 +189,4 @@ export function AuditLogPage() {
     </SystemListPageScaffold>
   )
 }
+

@@ -1,7 +1,7 @@
 ---
 status: approved
 owner: cross-service
-last_reviewed: 2026-08-08
+last_reviewed: 2026-09-05
 scope: registration-functional-authorization
 ---
 
@@ -75,7 +75,7 @@ PostgreSQL function bodies for fn_user_checkpermission, fn_menu_getbyuser, and r
 
 ### 5.1 Member
 
-Normal community member. New public registrations receive this role unless an authorized invitation or administrator-provisioning flow selects another registration-eligible role.
+Normal community member. New public registrations receive the sole active registration-eligible role when one exists.
 
 Stable key: member.
 
@@ -91,7 +91,7 @@ Operators may create roles such as creator, moderator, and operator. Mandatory p
 key                         stable unique identifier
 name                        editable display name
 is_system                   protected platform role
-is_registration_eligible    may be selected as registration default
+is_registration_eligible    sole active role used for new registration
 is_deleted                  existing lifecycle behavior
 ~~~
 
@@ -101,6 +101,9 @@ Rules:
 - built-in member role cannot be deleted.
 - member permissions may be edited.
 - administrator and operator roles cannot be registration eligible.
+- only one active, non-deleted role may be registration eligible at a time.
+- selecting another role clears the previous role and synchronizes `DefaultRegistrationRoleId` to the new role.
+- clearing the current role clears `DefaultRegistrationRoleId`; public registration remains unavailable until another role is selected.
 - changing registration eligibility or registration default is audited.
 
 The combined Roles & Permissions surface displays stable key, system/protected state, registration eligibility, and a derived default-registration-role indicator beside the permission matrix. Unsupported menu actions render disabled and cannot be granted.
@@ -120,7 +123,7 @@ The combined Roles & Permissions surface displays stable key, system/protected s
 - valid unexpired invitation token required.
 - existing Register route renders invitation state when a token is present; no separate invitation-acceptance route exists.
 - invitation determines target workspace membership when present.
-- invitation may select another registration-eligible role only when creator may assign that role.
+- invitation may use the current registration-eligible role only when creator may assign that role.
 - absent role selection falls back to DefaultRegistrationRoleId.
 
 ### 6.3 Administrator Provisioned

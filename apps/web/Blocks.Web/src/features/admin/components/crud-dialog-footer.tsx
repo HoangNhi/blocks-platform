@@ -5,6 +5,7 @@ import type { EntityDialogMode, EntityDialogSubmitIntent } from "../entity-dialo
 type CrudDialogFooterProps = {
   mode: EntityDialogMode | null
   isSubmitting?: boolean
+  isSaveDisabled?: boolean
   onCancel: () => void
   onSaveAndAddMore?: () => void
   submitIntent?: EntityDialogSubmitIntent | null
@@ -13,6 +14,7 @@ type CrudDialogFooterProps = {
 export function CrudDialogFooter({
   mode,
   isSubmitting = false,
+  isSaveDisabled = false,
   onCancel,
   onSaveAndAddMore,
   submitIntent,
@@ -20,7 +22,7 @@ export function CrudDialogFooter({
   const showSaveAndAddMore = mode === "create" && Boolean(onSaveAndAddMore)
 
   return (
-    <div className="flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+    <div className="shrink-0 flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
       <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
         Hủy
       </Button>
@@ -36,7 +38,7 @@ export function CrudDialogFooter({
       ) : null}
       <Button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || isSaveDisabled}
       >
         {isSubmitting && submitIntent === "save" ? "Đang lưu..." : "Lưu"}
       </Button>

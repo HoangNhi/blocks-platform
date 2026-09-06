@@ -34,6 +34,15 @@ namespace Blocks.FileService.Controllers
             return Ok(new BaseResponse(true, 200));
         }
 
+        [HttpPost("avatar")]
+        [RequestSizeLimit(52428800)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+        public async Task<IActionResult> Avatar(List<IFormFile> files, [FromForm] string FolderName)
+        {
+            await _service.Insert(files, FolderName);
+            return Ok(new BaseResponse(true, 200));
+        }
+
         [HttpPost("embed")]
         [RequestSizeLimit(52428800)]
         [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]

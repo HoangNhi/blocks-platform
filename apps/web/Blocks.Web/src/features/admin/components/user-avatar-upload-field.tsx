@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { resolveAvatarUrl } from "@/features/files/avatar-url"
 
 type UserAvatarUploadFieldProps = {
   currentAvatar: string | null
@@ -28,7 +29,7 @@ export function UserAvatarUploadField({
     [previewUrl],
   )
 
-  const displaySource = previewUrl ?? currentAvatar ?? null
+  const displaySource = previewUrl ?? resolveAvatarUrl(currentAvatar) ?? null
   const description = selectedFile
     ? `Tệp mới: ${selectedFile.name}`
     : currentAvatar

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { fireEvent, render as testingLibraryRender, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -17,7 +17,7 @@ const { mockAdminApi, mockFilesApi } = vi.hoisted(() => ({
     deleteUsers: vi.fn(),
   },
   mockFilesApi: {
-    uploadTemporary: vi.fn(),
+    uploadAvatarTemporary: vi.fn(),
   },
 }))
 
@@ -71,7 +71,7 @@ describe("UsersPage", () => {
     mockAdminApi.createUser.mockReset()
     mockAdminApi.updateUser.mockReset()
     mockAdminApi.deleteUsers.mockReset()
-    mockFilesApi.uploadTemporary.mockReset()
+    mockFilesApi.uploadAvatarTemporary.mockReset()
   })
 
   it("keeps the user form dialog open when clicking outside", async () => {
@@ -140,7 +140,7 @@ describe("UsersPage", () => {
         totalRow: 2,
       })
 
-    mockFilesApi.uploadTemporary.mockResolvedValue(undefined)
+    mockFilesApi.uploadAvatarTemporary.mockResolvedValue(undefined)
     mockAdminApi.createUser.mockResolvedValue({
       id: "user-2",
       username: "newuser",
@@ -192,14 +192,14 @@ describe("UsersPage", () => {
     await user.click(screen.getByRole("button", { name: /^Lưu và thêm tiếp$/i }))
 
     await waitFor(() => {
-      expect(mockFilesApi.uploadTemporary).toHaveBeenCalledTimes(1)
+      expect(mockFilesApi.uploadAvatarTemporary).toHaveBeenCalledTimes(1)
       expect(mockAdminApi.createUser).toHaveBeenCalledTimes(1)
     })
 
-    expect(mockFilesApi.uploadTemporary.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockFilesApi.uploadAvatarTemporary.mock.invocationCallOrder[0]).toBeLessThan(
       mockAdminApi.createUser.mock.invocationCallOrder[0],
     )
-    expect(mockFilesApi.uploadTemporary).toHaveBeenCalledWith({
+    expect(mockFilesApi.uploadAvatarTemporary).toHaveBeenCalledWith({
       folderName: expect.any(String),
       files: [expect.any(File)],
     })
@@ -331,7 +331,7 @@ describe("UsersPage", () => {
       isActived: true,
     })
 
-    mockFilesApi.uploadTemporary.mockResolvedValue(undefined)
+    mockFilesApi.uploadAvatarTemporary.mockResolvedValue(undefined)
     mockAdminApi.updateUser.mockResolvedValue({
       id: "user-1",
       username: "admin",
@@ -351,7 +351,7 @@ describe("UsersPage", () => {
     await screen.findByText("admin")
 
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
-    await user.click(await screen.findByRole("menuitem", { name: /sửa/i }))
+    await user.click(await screen.findByRole("menuitem", { name: /cập nhật/i }))
 
     await screen.findByRole("dialog")
     expect((screen.getByLabelText(/mật khẩu/i) as HTMLInputElement).value).toBe("")
@@ -366,12 +366,12 @@ describe("UsersPage", () => {
     await user.click(screen.getByRole("button", { name: /^Lưu$/i }))
 
     await waitFor(() => {
-      expect(mockFilesApi.uploadTemporary).toHaveBeenCalledTimes(1)
+      expect(mockFilesApi.uploadAvatarTemporary).toHaveBeenCalledTimes(1)
       expect(mockAdminApi.updateUser).toHaveBeenCalledTimes(1)
     })
 
     expect(await screen.findByText('Cập nhật tài khoản thành công')).toBeTruthy()
-    expect(mockFilesApi.uploadTemporary.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockFilesApi.uploadAvatarTemporary.mock.invocationCallOrder[0]).toBeLessThan(
       mockAdminApi.updateUser.mock.invocationCallOrder[0],
     )
     expect(mockAdminApi.updateUser).toHaveBeenCalledWith(
@@ -432,7 +432,7 @@ describe("UsersPage", () => {
 
     await screen.findByText("admin")
     await user.click(screen.getByRole("button", { name: /mở thao tác hàng/i }))
-    await user.click(await screen.findByRole("menuitem", { name: /sửa/i }))
+    await user.click(await screen.findByRole("menuitem", { name: /cập nhật/i }))
     await user.click(screen.getByRole("button", { name: /^Lưu$/i }))
 
     await waitFor(() => {
@@ -440,7 +440,7 @@ describe("UsersPage", () => {
         expect.objectContaining({ folderUpload: "" }),
       )
     })
-    expect(mockFilesApi.uploadTemporary).not.toHaveBeenCalled()
+    expect(mockFilesApi.uploadAvatarTemporary).not.toHaveBeenCalled()
   })
 
   it("confirms bulk delete in a dialog and restores the table", async () => {
@@ -646,3 +646,4 @@ describe("UsersPage", () => {
     expect(await screen.findByText('Xóa tài khoản thành công')).toBeTruthy()
   })
 })
+

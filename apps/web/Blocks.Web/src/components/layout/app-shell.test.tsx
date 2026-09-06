@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { useEffect } from "react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantApi } from "@/features/assistant/assistant-api";
 import type { AuthUser } from "@/features/auth/types";
 import { navigationFixture } from "@/features/navigation/fixtures";
+import { WORKSPACE_DIRTY_EVENT } from "@/features/navigation/workspace-tabs";
 
 import { AppShell } from "./app-shell";
 
@@ -32,7 +34,26 @@ const currentUser: AuthUser = {
   avatar: null,
 };
 
-function renderShell(initialEntry = "/", assistantApi?: AssistantApi) {
+function DirtyRolesContent() {
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(WORKSPACE_DIRTY_EVENT, {
+        detail: { route: "/system/identity/roles", isDirty: true },
+      }));
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.dispatchEvent(new CustomEvent(WORKSPACE_DIRTY_EVENT, {
+        detail: { route: "/system/identity/roles", isDirty: false },
+      }));
+    };
+  }, []);
+
+  return <div>Dirty roles content</div>;
+}
+
+function renderShell(initialEntry = "/", assistantApi?: AssistantApi, dirtyRoles = false) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
@@ -51,7 +72,7 @@ function renderShell(initialEntry = "/", assistantApi?: AssistantApi) {
         >
           <Route index element={<div>Overview content</div>} />
           <Route path="/system/identity/users" element={<div>Users content</div>} />
-          <Route path="/system/identity/roles" element={<div>Roles content</div>} />
+          <Route path="/system/identity/roles" element={dirtyRoles ? <DirtyRolesContent /> : <div>Roles content</div>} />
           <Route path="/plugins/tradelab" element={<div>Strategy Lab content</div>} />
         </Route>
       </Routes>
@@ -154,6 +175,44 @@ describe("AppShell workspace tabs", () => {
 
     expect(screen.getByText("Overview content")).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Users" })).toBeNull();
+  });
+
+  it("keeps dirty route on navigation cancel and follows original route after discard", async () => {
+    const actor = userEvent.setup();
+    renderShell("/system/identity/roles", undefined, true);
+
+    await actor.click(screen.getByRole("button", { name: "Identity" }));
+    await actor.click(screen.getByRole("link", { name: "Users" }));
+
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    await actor.click(screen.getByRole("button", { name: "Ở lại" }));
+    expect(screen.getByText("Dirty roles content")).toBeTruthy();
+
+    await actor.click(screen.getByRole("link", { name: "Users" }));
+    await actor.click(screen.getByRole("button", { name: "Rời đi" }));
+    expect(screen.getByText("Users content")).toBeTruthy();
+  });
+
+  it("guards closing dirty workspace tab before removing it", async () => {
+    const actor = userEvent.setup();
+    renderShell("/system/identity/roles", undefined, true);
+
+    await actor.click(screen.getByRole("button", { name: "Close Roles tab" }));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    await actor.click(screen.getByRole("button", { name: "Rời đi" }));
+
+    expect(screen.getByText("Overview content")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Roles" })).toBeNull();
+  });
+
+  it("requests native confirmation before leaving a dirty route", async () => {
+    renderShell("/system/identity/roles", undefined, true);
+    await waitFor(() => expect(screen.getByText("Dirty roles content")).toBeTruthy());
+
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it("opens assistant drawer and sends current page context to the stream client", async () => {

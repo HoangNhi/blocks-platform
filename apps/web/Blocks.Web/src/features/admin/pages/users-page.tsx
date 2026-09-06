@@ -1,4 +1,4 @@
-import { Filter, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react"
+﻿import { MoreHorizontal, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
@@ -16,7 +16,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,16 +24,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InvitationsPanel } from "@/features/admin/components/invitations-panel"
-import { SystemDataTable, type SystemColumn } from "@/features/admin/components/system-data-table"
+import { DataTable, type DataTableColumn } from "@/components/data-table/data-table"
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
 import { UserFormDialog, type UserFormErrors, type UserFormValues } from "@/features/admin/components/user-form-dialog"
 import { applyTextSearch, applyUserFilters, changePage, changePageSize, createDefaultUserPagingRequest, resetUserFilters } from "@/features/admin/system-list-state"
 import { canUseSaveAndAddMore, closeDialogState, openCreateDialog, openEditDialog, type EntityDialogSubmitIntent } from "@/features/admin/entity-dialog-state"
 import { createBrowserTokenStore } from "@/features/auth/token-store"
 import { createFilesApi } from "@/features/files/files-api"
+import { resolveAvatarUrl } from "@/features/files/avatar-url"
 import { createApiClient } from "@/lib/api/client"
 
 import { createSystemAdminApi } from "../system-admin-api"
@@ -130,7 +130,7 @@ export function UsersPage() {
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null)
   const [isDeletingUsers, setIsDeletingUsers] = useState(false)
 
-  const columns = useMemo<SystemColumn<UserModel>[]>(
+  const columns = useMemo<DataTableColumn<UserModel>[]>(
     () => [
       {
         key: "user",
@@ -138,7 +138,7 @@ export function UsersPage() {
         cell: (item) => (
           <div className="flex min-w-[220px] items-center gap-3">
             <Avatar>
-              <AvatarImage src={item.avatar ?? undefined} alt="" />
+              <AvatarImage src={resolveAvatarUrl(item.avatar)} alt="" />
               <AvatarFallback>{getInitials(item.fullname)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
@@ -325,7 +325,7 @@ export function UsersPage() {
 
     try {
       if (userForm.avatarFile) {
-        await filesApi.uploadTemporary({ folderName: userForm.folderUpload, files: [userForm.avatarFile] })
+        await filesApi.uploadAvatarTemporary({ folderName: userForm.folderUpload, files: [userForm.avatarFile] })
       }
 
       const requestBody = {
@@ -412,50 +412,15 @@ export function UsersPage() {
 
       <TabsContent value="users" className="min-h-0 flex-1 overflow-hidden">
         <Card className="h-full min-h-0 gap-0 overflow-hidden rounded-xl border-platform-border bg-background py-0 shadow-none ring-0">
-          <div className="shrink-0 border-b p-4">
-            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
-              <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex min-w-0 flex-1 gap-2">
-                  <div className="relative min-w-0 flex-1 xl:max-w-[460px]">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      type="search"
-                      className="h-10 pl-9"
-                      value={searchTerm}
-                      placeholder="Tìm tên, tài khoản hoặc email..."
-                      aria-label="Tìm tên, tài khoản hoặc email"
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                    />
-                  </div>
-                  <CollapsibleTrigger asChild>
-                    <Button type="button" variant={filtersOpen ? "secondary" : "outline"} className="gap-2">
-                      <Filter className="size-4" aria-hidden="true" />
-                      Bộ lọc
-                      {activeFilterCount > 0 ? <Badge variant="secondary" className="h-5 min-w-5 px-1.5">{activeFilterCount}</Badge> : null}
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    disabled={selectedIds.length === 0}
-                    onClick={openBulkDeleteDialog}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                    {selectedIds.length > 0 ? `Xóa danh sách (${selectedIds.length})` : "Xóa danh sách"}
-                  </Button>
-                  <Button type="button" onClick={openCreateUserDialog}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    Thêm tài khoản
-                  </Button>
-                </div>
-              </div>
-
-              <CollapsibleContent className="mt-3">
-                <div className="rounded-lg border p-3">
+          <DataTableToolbar
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Tìm tên, tài khoản hoặc email..."
+            searchAriaLabel="Tìm tên, tài khoản hoặc email"
+            filterOpen={filtersOpen}
+            onFilterOpenChange={setFiltersOpen}
+            activeFilterCount={activeFilterCount}
+            filterContent={<><div className="rounded-lg border p-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="grid gap-2 text-xs font-medium text-muted-foreground">
@@ -500,12 +465,14 @@ export function UsersPage() {
                       Đặt lại bộ lọc
                     </Button>
                   </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
+                </div></>}
+            actions={<>
+              <Button type="button" variant="outline" className="text-destructive hover:text-destructive" disabled={selectedIds.length === 0} onClick={openBulkDeleteDialog}><Trash2 className="size-4" aria-hidden="true" />{selectedIds.length > 0 ? `Xóa danh sách (${selectedIds.length})` : "Xóa danh sách"}</Button>
+              <Button type="button" onClick={openCreateUserDialog}><Plus className="size-4" aria-hidden="true" />Thêm tài khoản</Button>
+            </>}
+          />
 
-          <SystemDataTable
+        <DataTable
             variant="embedded"
             showRefresh
             className="min-h-0 flex-1"
@@ -533,7 +500,7 @@ export function UsersPage() {
                 <DropdownMenuContent align="end" className="w-32">
                   <DropdownMenuLabel>Thao tác</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => void openEditUserDialog(item.id)}>Sửa</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void openEditUserDialog(item.id)}>Cập nhật</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => openDeleteUserDialog(item)}>
                     Xóa tài khoản
@@ -641,3 +608,4 @@ export function UsersPage() {
     </div>
   )
 }
+

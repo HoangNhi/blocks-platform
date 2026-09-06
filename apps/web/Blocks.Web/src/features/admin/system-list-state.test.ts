@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest"
 
 import {
   applyUserFilters,
+  applyRoleFilters,
   applyTextSearch,
   areAllVisibleSelected,
   changePage,
   changePageSize,
   createDefaultUserPagingRequest,
+  createDefaultRolePagingRequest,
   createDefaultPagingRequest,
   resetUserFilters,
+  resetRoleFilters,
   resetPagingRequest,
   toggleAllSelectedIds,
   toggleSelectedId,
@@ -35,6 +38,33 @@ describe("system list state helpers", () => {
       pageIndex: 1,
       pageSize: 20,
       textSearch: "admin",
+    })
+  })
+
+  it("creates, applies, and resets role filters without losing search or page size", () => {
+    const request = createDefaultRolePagingRequest(50)
+    expect(request).toMatchObject({ pageIndex: 1, pageSize: 50 })
+
+    const filtered = applyRoleFilters(
+      { ...request, pageIndex: 3, textSearch: "member" },
+      { isActived: false, isSystem: false, isRegistrationEligible: true },
+    )
+    expect(filtered).toMatchObject({
+      pageIndex: 1,
+      pageSize: 50,
+      textSearch: "member",
+      isActived: false,
+      isSystem: false,
+      isRegistrationEligible: true,
+    })
+
+    expect(resetRoleFilters(filtered)).toMatchObject({
+      pageIndex: 1,
+      pageSize: 50,
+      textSearch: "member",
+      isActived: undefined,
+      isSystem: undefined,
+      isRegistrationEligible: undefined,
     })
   })
 

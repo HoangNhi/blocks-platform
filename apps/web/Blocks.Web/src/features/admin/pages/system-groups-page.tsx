@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react"
+﻿import { MoreHorizontal } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,9 +12,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { ConfirmAction } from "@/features/admin/components/confirm-action"
 import {
-  SystemDataTable,
-  type SystemColumn,
-} from "@/features/admin/components/system-data-table"
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table/data-table"
 import { SystemListPageScaffold } from "@/features/admin/components/system-list-page-scaffold"
 import { SystemGroupFormDialog, type SystemGroupFormErrors, type SystemGroupFormValues } from "@/features/admin/components/system-group-form-dialog"
 import {
@@ -101,7 +101,7 @@ export function SystemGroupsPage() {
   const [formErrors, setFormErrors] = useState<SystemGroupFormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const columns = useMemo<SystemColumn<SystemGroupModel>[]>(
+  const columns = useMemo<DataTableColumn<SystemGroupModel>[]>(
     () => [
       { key: "name", header: "Tên nhóm", cell: (item) => item.name },
       { key: "parent", header: "Nhóm cha", cell: (item) => item.parent ?? "-" },
@@ -310,7 +310,7 @@ export function SystemGroupsPage() {
         </>
       }
       tableContent={
-        <SystemDataTable
+        <DataTable
           columns={columns}
           items={items}
           getRowKey={(item) => item.id}
@@ -378,3 +378,4 @@ export function SystemGroupsPage() {
     </SystemListPageScaffold>
   )
 }
+

@@ -1,7 +1,6 @@
 using Blocks.Shared.DTOs.Base;
 using Blocks.SystemService.Controllers.Base;
 using Blocks.Shared.Common;
-using Blocks.Shared.Common;
 using Blocks.SystemService.DTOs.CoreFeature.Permission.Dtos;
 using Blocks.SystemService.DTOs.CoreFeature.Permission.Requests;
 using Blocks.SystemService.DTOs.CoreFeature.Role.Dtos;
@@ -25,7 +24,7 @@ namespace Blocks.SystemService.Controllers
 
         [HttpPost, Route("get-list")]
         [AttributePermission(PermissionKey = "admin.roles", Action = ActionType.VIEW)]
-        public async Task<IActionResult> GetList(GetListPagingRequest request)
+        public async Task<IActionResult> GetList(RoleGetListPagingRequest request)
         {
             var result = await _service.GetList(request);
             return Ok(new BaseResponse<GetListPagingResponse<ModelRoleGetListPaging>> { Data = result, Success = true });
@@ -53,6 +52,14 @@ namespace Blocks.SystemService.Controllers
         {
             var result = await _service.Update(request);
             return Ok(new BaseResponse<ModelRole> { Data = result, Success = true });
+        }
+
+        [HttpPut, Route("save")]
+        [AttributePermission(Action = ActionType.NONE)]
+        public async Task<IActionResult> Save([FromBody] RoleSaveRequest request)
+        {
+            var result = await _service.Save(request);
+            return Ok(new BaseResponse<ModelRoleSave> { Data = result, Success = true });
         }
 
         [HttpDelete, Route("delete-list")]

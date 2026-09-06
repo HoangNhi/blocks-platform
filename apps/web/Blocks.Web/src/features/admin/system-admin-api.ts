@@ -8,6 +8,9 @@ import type {
   MenuUpsertRequest,
   RegistrationSettings,
   RoleUpsertRequest,
+  RolePagingRequest,
+  RoleSaveRequest,
+  RoleSaveResult,
   SystemGroupUpsertRequest,
   UserUpsertRequest,
   UserPagingRequest,
@@ -21,6 +24,7 @@ import {
   normalizePagingResponse,
   normalizePermissionGroups,
   normalizeRoleDetail,
+  normalizeRoleSaveResult,
   normalizeRole,
   normalizeSystemGroup,
   normalizeSystemGroupDetail,
@@ -91,7 +95,7 @@ export function createSystemAdminApi(client: SystemAdminApiOptions) {
           body,
         }),
       ),
-    getRoles: async (body: PagingRequest) =>
+    getRoles: async (body: RolePagingRequest) =>
       normalizePagingResponse(
         await client.request<unknown>("/api/system/Role/get-list", {
           method: "POST",
@@ -115,6 +119,13 @@ export function createSystemAdminApi(client: SystemAdminApiOptions) {
     updateRole: async (body: RoleUpsertRequest) =>
       normalizeRoleDetail(
         await client.request<unknown>("/api/system/Role/update", {
+          method: "PUT",
+          body,
+        }),
+      ),
+    saveRole: async (body: RoleSaveRequest): Promise<RoleSaveResult> =>
+      normalizeRoleSaveResult(
+        await client.request<unknown>("/api/system/Role/save", {
           method: "PUT",
           body,
         }),
