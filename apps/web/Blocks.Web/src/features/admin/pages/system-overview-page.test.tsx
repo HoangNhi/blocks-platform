@@ -61,19 +61,20 @@ describe("minimal administration surfaces", () => {
   })
 
   it("creates invitation inside Users and reveals token once", async () => {
+    const expiresAt = `${new Date().getFullYear() + 1}-09-01T12:00`
     mockAdminApi.getRegistrationSettings.mockResolvedValue({
       registrationMode: "open",
       defaultRegistrationRoleId: "role-member",
     })
     mockAdminApi.createInvitation.mockResolvedValue({
       id: "invite-1",
-      expiresAt: "2026-09-01T00:00:00Z",
+      expiresAt: new Date(expiresAt).toISOString(),
       token: "plain-token-once",
     })
 
     render(<InvitationsPanel adminApi={mockAdminApi} />)
     const user = userEvent.setup()
-    fireEvent.change(screen.getByLabelText(/hết hạn lúc/i), { target: { value: "2026-09-01T12:00" } })
+    fireEvent.change(screen.getByLabelText(/hết hạn lúc/i), { target: { value: expiresAt } })
     await user.click(screen.getByRole("button", { name: /tạo lời mời/i }))
 
     expect(await screen.findByText("plain-token-once")).toBeTruthy()
