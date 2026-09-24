@@ -141,3 +141,59 @@ jobs:
           python-version: 3.12
       - run: python -m pip install pytest
       - run: python -m pytest -q -p no:cacheprovider tests/agent-workflow/test_publication_boundary.py
+
+  deploy-heroku:
+    name: Deploy ${{ matrix.app }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-and-test, verify-agent-assets, test-agent-workflow, test-python-services, test-frontend, boundary]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: blocks-system-service
+            dockerfile: services/system-service/Blocks.SystemService/Dockerfile
+            context: .
+          - app: blocks-api-gateway
+            dockerfile: services/api-gateway/Blocks.ApiGateway/Dockerfile
+            context: .
+          - app: blocks
+            dockerfile: apps/web/Blocks.Web/Dockerfile
+            context: apps/web/Blocks.Web
+          - app: blocks-trade-lab
+            dockerfile: plugins/tradelab/service/Dockerfile
+            context: .
+          - app: blocks-ai-video
+            dockerfile: plugins/ai-video-production/service/Blocks.AiVideoService/Dockerfile
+            context: .
+          - app: blocks-ai-assistant
+            dockerfile: services/assistant-service/Dockerfile
+            context: services/assistant-service
+    concurrency:
+      group: heroku-${{ matrix.app }}
+      cancel-in-progress: false
+    steps:
+      - name: Require Heroku credential
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: test -n "$HEROKU_API_KEY"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.0
+      - name: Install Heroku CLI
+        run: npm install --global heroku@11.10.0
+      - name: Log in to Heroku Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: printf '%s' "$HEROKU_API_KEY" | docker login registry.heroku.com -u _ --password-stdin
+      - name: Build image
+        run: docker build -f "${{ matrix.dockerfile }}" -t "registry.heroku.com/${{ matrix.app }}/web" "${{ matrix.context }}"
+      - name: Push image
+        run: docker push "registry.heroku.com/${{ matrix.app }}/web"
+      - name: Release image
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: heroku container:release web --app "${{ matrix.app }}"

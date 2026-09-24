@@ -135,9 +135,12 @@ def test_private_content_patterns_are_absent() -> None:
 def test_public_ci_is_main_only_fork_safe_and_pinned() -> None:
     workflow = ROOT / '.github' / 'workflows' / 'ci.yml'
     text = workflow.read_text(encoding='utf-8')
+    validation, deploy = text.split('\n  deploy-heroku:', 1)
     assert re.search(r'(?m)^\s+branches:\s*\[main\]\s*$', text)
     assert 'pull_request_target' not in text
-    assert '${{ secrets.' not in text
+    assert '${{ secrets.' not in validation
+    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in deploy
+    assert '${{ secrets.HEROKU_API_KEY }}' in deploy
     assert re.search(r'(?m)^\s+permissions:\s*read-all\s*$', text)
     for action in re.findall(r'(?m)^\s+uses:\s*([^\s]+)', text):
         if action.startswith('./') or action.startswith('docker://'):
