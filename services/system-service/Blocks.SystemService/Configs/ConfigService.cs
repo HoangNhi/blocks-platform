@@ -74,7 +74,6 @@ namespace Blocks.SystemService.Configs
             builder.Services.AddDbContextFactory<SystemContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("System")),
                 ServiceLifetime.Scoped);
-            builder.Services.AddHostedService<SystemMigrationHostedService>();
 
             builder.Services.AddAutoMapper(mc =>
             {

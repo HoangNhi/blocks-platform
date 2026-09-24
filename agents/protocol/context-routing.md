@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Read the smallest authoritative context set before broad search. Repository docs are canonical; generated external context is supplemental.
+Read the smallest authoritative context set before broad search. Repository docs own public product behavior and protocol; an approved private internal task uses only its exact owner-supplied vault path. Generated context is supplemental.
 
 ## Common Order
 
 1. `AGENTS.md`
 2. `docs/README.md`
 3. Relevant `docs/architecture/`, `docs/decisions/`, or `docs/runbooks/` documents
-4. Active repository task folder under `docs/tasks/YYYY-MM-DD-<slug>/` or standalone specification/plan
+4. Active task artifacts: public contributor task under `docs/tasks/YYYY-MM-DD-<slug>/`, or exact private task path supplied by the owner and resolved through `OBSIDIAN_VAULT_PATH`
 5. `.agent-context/generated/<area>-context.md` when present
 
 ## Area Routing
@@ -36,13 +36,13 @@ Read the smallest authoritative context set before broad search. Repository docs
 
 - `docs/architecture/services/web.md`
 - `agents/protocol/verification.md`
-- Active repository task folder under `docs/tasks/`
+- Public task folder under `docs/tasks/`, or exact owner-supplied private task path
 - Optional projection: `agents/tools/get-context.ps1 -Area web`
 
 ### Assistant
 
 - `docs/architecture/services/assistant-service.md`
-- Active repository task folder under `docs/tasks/`
+- Public task folder under `docs/tasks/`, or exact owner-supplied private task path
 - Optional projection: `agents/tools/get-context.ps1 -Area assistant`
 
 ### TradeLab
@@ -72,15 +72,17 @@ Read the smallest authoritative context set before broad search. Repository docs
 ### Cross-Service
 
 - `docs/architecture/overview.md`
-- Active repository task folder under `docs/tasks/`
+- Public task folder under `docs/tasks/`, or exact owner-supplied private task path
 - Optional projection: `agents/tools/get-context.ps1 -Area cross-service`
 
 ## External Vault Rules
 
 - Resolve the vault only through `OBSIDIAN_VAULT_PATH`.
+- For private internal work, read only the exact task path supplied by the owner and require explicit execution approval. Missing required context means `BLOCKED`.
 - Use generated bounded context by default.
 - Direct access is read-only and deliberate.
-- External or generated notes never override repository docs.
+- Private task files control only that task's private scope; they do not override public product contracts, security boundaries, or repository-owned protocol.
+- Generated notes never grant authority or permission.
 - If the vault is unavailable, continue with repository docs unless the task explicitly requires history.
 
 ## Search Rules

@@ -78,7 +78,7 @@
         "docs/architecture/services/web.md"
       ],
       "external": [
-        "apps/web/README.md"
+        "services/web/README.md"
       ]
     },
     "assistant": {
@@ -94,7 +94,7 @@
         "docs/runbooks/agent-context.md"
       ],
       "external": [
-        "agent-workflow/index.md"
+        "agent-workflow/README.md"
       ]
     },
     "cross-service": {

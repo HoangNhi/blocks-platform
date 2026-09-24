@@ -354,7 +354,10 @@ describe("UsersPage", () => {
     await user.click(await screen.findByRole("menuitem", { name: /cập nhật/i }))
 
     await screen.findByRole("dialog")
-    expect((screen.getByLabelText(/mật khẩu/i) as HTMLInputElement).value).toBe("")
+    const passwordInput = screen.getByLabelText(/mật khẩu/i) as HTMLInputElement
+    expect(passwordInput.value).toBe("")
+    expect(passwordInput.placeholder).toBe("********")
+    expect(screen.queryByText("Để trống nếu muốn giữ nguyên mật khẩu hiện tại.")).toBeNull()
     expect(screen.getByText("Đang dùng ảnh hiện tại.")).toBeTruthy()
 
     fireEvent.change(getFileInput(), {

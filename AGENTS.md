@@ -16,12 +16,12 @@ Current code layout:
 - `services/file-service/Blocks.FileService/`: file backend service.
 - `apps/web/Blocks.Web/`: React/Vite frontend app.
 - `platform/shared/Blocks.Shared/`: shared .NET contracts/common code.
-- `plugins/`: future plugin modules.
+- `plugins/`: future plugin modules.
 - `docs/`: approved repository knowledge, specifications, decisions, audits, and runbooks.
-- `docs/tasks/`: repository-canonical approved task folders (`docs/tasks/YYYY-MM-DD-<slug>/`).
+- `docs/tasks/`: public contributor task records and proposals (`docs/tasks/YYYY-MM-DD-<slug>/`).
 - `.agent-context/generated/`: ignored, bounded task context generated from the optional external vault.
-
-The scalable source layout is now active. Keep new code in the matching top-level area.
+
+The scalable source layout is now active. Keep new code in the matching top-level area.
 
 Local smoke-test credentials must be resolved from configured local secret store or environment. Never place credential values in this file, Obsidian, Skills, or committed test artifacts.
 
@@ -87,16 +87,29 @@ Nếu có khác biệt giữa runtime skill/plugin và protocol của repo, prot
 ## 3. Superpowers Workflow
 
 When the user invokes Superpowers, follow the relevant Superpowers skill workflow.
-
+
 Project preference:
 
-- Save approved implementation tasks under `docs/tasks/YYYY-MM-DD-<slug>/`; keep their `spec.md`, `plan.md`, `execution.md`, and `review.md` together.
+- Route each task using the private or public rules below; keep its artifacts with one owner and one execution record.
 - Treat `docs/specs/` and `docs/plans/` as transitional or standalone documentation; do not create new split approved-task artifacts there.
 - Draft service notes may live under `<OBSIDIAN_VAULT_PATH>/services/<service>/tasks/YYYY-MM-DD-task-slug/`.
 - Draft cross-service notes may live under `<OBSIDIAN_VAULT_PATH>/cross-service/YYYY-MM-DD-task-slug/`.
 - Draft agent-workflow notes may live under `<OBSIDIAN_VAULT_PATH>/agent-workflow/tasks/YYYY-MM-DD-task-slug/`.
-
-Expected task artifacts:
+
+### Private internal tasks
+
+- Approved private internal task records live in the external vault under the task owner's area. Resolve the root through `OBSIDIAN_VAULT_PATH`; never hardcode a machine-specific vault path in public files.
+- Start only from the exact task path supplied by the owner and explicit approval to execute. Read that task's `spec.md`, `plan.md`, and current `execution.md` before broad search; keep one authoritative execution record.
+- If the vault, exact task path, approval, or required context is missing or contradictory, mark the task `BLOCKED` and ask the owner. Do not guess a task, duplicate its execution, or treat generated context as authority or permission.
+- Private task notes do not override public product documentation, security boundaries, or repository-owned agent protocol.
+
+### Public contributor tasks
+
+- Keep approved public contributor task records under `docs/tasks/YYYY-MM-DD-<slug>/` with the applicable `spec.md`, `plan.md`, `execution.md`, and `review.md` together.
+- Public docs, issues, and tests must give contributors enough context to understand behavior, reproduce a report, and contribute without private vault access, private URLs, or credentials.
+- Repository docs remain authoritative for public product behavior and contributor rules; generated context and private notes are supplemental only.
+
+Expected task artifacts:
 
 - `spec.md`
 - `plan.md`

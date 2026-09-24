@@ -63,8 +63,9 @@ not persist credentials.
 are canonical repository sources. Runtime-specific skill mirrors are generated
 locally from `agents/skills-manifest.yaml` and are not committed.
 
-Use repository task folders under `docs/tasks/` for approved work. Keep plans,
-execution evidence, reviews, and validation commands with their task.
+Keep public contributor task records under `docs/tasks/YYYY-MM-DD-<slug>/` and make them self-contained; contributors do not need the private vault. Approved private internal task records live in the owner's vault area and require an exact task path plus explicit approval. Resolve the vault only through `OBSIDIAN_VAULT_PATH`; do not mirror private records into this repository.
+
+`agents/tools/new-task.ps1` remains a legacy/public scaffold. Its draft mode creates blank starter files, so do not use it for approved private internal tasks.
 
 ## Deployment Examples
 

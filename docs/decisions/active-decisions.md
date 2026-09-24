@@ -1,7 +1,7 @@
 ---
 status: approved
 owner: repository
-last_reviewed: 2026-07-26
+last_reviewed: 2026-09-24
 scope: active-decisions
 supersedes: obsidian-vault/architecture/active-decisions.md
 ---
@@ -10,7 +10,7 @@ supersedes: obsidian-vault/architecture/active-decisions.md
 
 ## Knowledge Ownership
 
-Approved implementation knowledge lives in repository `docs/`. The external Obsidian vault contains working notes, history, research, and unapproved alternatives. Repository docs win on conflict.
+Public product behavior, contracts, contributor guidance, and project protocol live in repository `docs/`. Approved private internal task specs, plans, and execution checkpoints may live in the owner's external vault task path when explicitly assigned. Private task files do not override public contracts, security boundaries, or repository protocol; contributors do not require vault access.
 
 ## Agent Assets
 
@@ -18,7 +18,7 @@ Approved implementation knowledge lives in repository `docs/`. The external Obsi
 
 ## Context Access
 
-Implementation agents use repository docs first and bounded generated context second. Direct vault access is exceptional and read-only by default.
+Agents read repository docs first, then the exact owner-supplied private task path when applicable; bounded generated context is supplemental. Vault access is read-only by default. A separate report output is writable only after owner approval and an actual boundary check.
 
 ## Structural Refactors
 

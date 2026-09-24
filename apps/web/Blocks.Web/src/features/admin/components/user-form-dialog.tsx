@@ -144,11 +144,11 @@ export function UserFormDialog({
                     id="user-password"
                     type="password"
                     value={value.password}
+                    placeholder={isEditMode ? "********" : undefined}
                     onChange={(event) => onChange(setField(value, "password", event.target.value))}
                     aria-invalid={Boolean(errors.password)}
-                    aria-describedby={errors.password ? "user-password-error" : "user-password-help"}
+                    aria-describedby={errors.password ? "user-password-error" : undefined}
                   />
-                  {isEditMode ? <p id="user-password-help" className="text-xs text-muted-foreground">Để trống nếu muốn giữ nguyên mật khẩu hiện tại.</p> : null}
                   {errors.password ? <FormMessage id="user-password-error">{errors.password}</FormMessage> : null}
                 </FormItem>
                 <FormItem className="w-full">

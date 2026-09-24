@@ -14,7 +14,8 @@
 
 ## Quy tắc cốt lõi
 
-- Repo là source of truth cho workflow cấp dự án.
+- Repo sở hữu hành vi sản phẩm public, hợp đồng và protocol cấp dự án. Spec/plan/execution của private internal task đã được duyệt lấy từ task path cụ thể do owner cung cấp trong vault.
+- Public contributor phải hiểu, tái hiện và đóng góp được chỉ bằng repo public; không yêu cầu vault private.
 - Không nhảy thẳng vào mutation khi chưa phân loại task và xác định context.
 - Mọi task phải đi theo một workflow rõ ràng: brainstorm, spec, plan, execute, verify, review.
 - Khi một domain đã có context hoặc tài liệu repository rõ ràng, task mới phải ưu tiên route theo tài liệu repository của area/service đó thay vì giữ ở `cross-service` do quán tính lịch sử.
@@ -31,3 +32,5 @@
 | UI có phương án tương tác | `mockup-ui.md` khi thực sự cần |
 | Ghi chú trung gian | `notes.md` nếu có ích |
 | Trạng thái thực thi durable cho task đang chạy | `execution.md` cho task không tầm thường |
+| Public contributor task | `docs/tasks/YYYY-MM-DD-<slug>/` trong repo, tự đủ cho contributor |
+| Private internal task | Task path rõ ràng do owner cung cấp trong vault; không tạo bản execution thứ hai trong repo |

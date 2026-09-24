@@ -434,3 +434,4 @@ FodyWeavers.xsd
 .env.*
 !/.env.example
 !/.env.*.example
+!/services/assistant-service/.env.example

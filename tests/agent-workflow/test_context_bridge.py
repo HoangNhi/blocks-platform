@@ -200,8 +200,42 @@ def test_repository_contract_uses_projection_first_paths() -> None:
     assert ":ro" in (ROOT / "docs" / "runbooks" / "agent-context.md").read_text(encoding="utf-8")
 
 
-def test_root_guide_uses_repository_task_folders_for_approved_work() -> None:
-    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+def test_root_guide_distinguishes_private_and_public_tasks() -> None:
+    guide = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Private internal tasks" in guide
+    assert "Public contributor tasks" in guide
+    assert "OBSIDIAN_VAULT_PATH" in guide
+    assert "docs/tasks/" in guide
+    assert "Save approved implementation tasks under `docs/tasks/YYYY-MM-DD-<slug>/`" not in guide
 
-    assert "Save approved implementation tasks under `docs/tasks/YYYY-MM-DD-<slug>/`" in agents
-    assert "Save approved task specifications under `docs/specs/`" not in agents
+def test_real_manifest_routes_web_and_workflow_context(tmp_path: Path) -> None:
+    live = json.loads((ROOT / ".agent-context/context-manifest.yaml").read_text(encoding="utf-8"))
+    expected = {
+        "web": "services/web/README.md",
+        "agent-workflow": "agent-workflow/README.md",
+    }
+    for area, relative in expected.items():
+        assert relative in live["areas"][area]["external"]
+        repo_root = tmp_path / area / "repo"
+        vault_root = tmp_path / area / "vault"
+        seed_repo(repo_root)
+        manifest_path = repo_root / ".agent-context/context-manifest.yaml"
+        fixture = json.loads(manifest_path.read_text(encoding="utf-8"))
+        fixture["areas"][area] = {
+            "repository": ["docs/core.md"],
+            "external": live["areas"][area]["external"],
+        }
+        manifest_path.write_text(json.dumps(fixture), encoding="utf-8")
+        source = vault_root / relative
+        source.parent.mkdir(parents=True)
+        source.write_text("approved fixture knowledge", encoding="utf-8")
+        result = run_context(repo_root, "-RequireVault", area=area, vault_path=vault_root)
+        assert result.returncode == 0, result.stderr
+        emitted = repo_root / ".agent-context/generated" / f"{area}-context.md"
+        assert f"source: vault:{relative}" in emitted.read_text(encoding="utf-8")
+        verify = run_context(repo_root, "-Verify", area=area, vault_path=vault_root)
+        assert verify.returncode == 0, verify.stderr
+        source.write_text("changed fixture knowledge", encoding="utf-8")
+        stale = run_context(repo_root, "-Verify", area=area, vault_path=vault_root)
+        assert stale.returncode != 0
+        assert "stale-context" in stale.stderr

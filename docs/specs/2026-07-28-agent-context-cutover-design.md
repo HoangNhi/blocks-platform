@@ -11,6 +11,8 @@ scope: agent-context-cutover
 
 Approved implementation task state is repository-canonical. External Obsidian remains the home for drafts, exploration, conversation history, and archived working notes.
 
+> **Limited supersession (2026-09-24):** The 2026-07-28 ownership/placement rule is superseded only for new approved private internal tasks, whose spec, plan, and execution live at an exact owner-supplied vault path. Public contributor tasks remain in `docs/tasks/`; public product docs and repository protocol remain canonical here. The historical sections below record the earlier policy and do not imply the new placement was previously active.
+
 ## Problem
 
 The repository-surface refactor preserved the external vault but changed the default agent context path from direct in-repository discovery to bounded generated projections. The current bridge covers only four areas, the current process can lack `OBSIDIAN_VAULT_PATH`, and active skills still contain obsolete repository-relative `obsidian-vault/...` reads.
