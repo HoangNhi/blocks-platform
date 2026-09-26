@@ -63,9 +63,9 @@ not persist credentials.
 are canonical repository sources. Runtime-specific skill mirrors are generated
 locally from `agents/skills-manifest.yaml` and are not committed.
 
-Keep public contributor task records under `docs/tasks/YYYY-MM-DD-<slug>/` and make them self-contained; contributors do not need the private vault. Approved private internal task records live in the owner's vault area and require an exact task path plus explicit approval. Resolve the vault only through `OBSIDIAN_VAULT_PATH`; do not mirror private records into this repository.
+All development task records and durable task evidence live only in Knowledge, resolved through `OBSIDIAN_VAULT_PATH`. Agent-led work requires access, an exact owner-approved task path and approval; missing context is `BLOCKED`, not permission to create repository task files. The repository shows code, features, contracts, operating guidance and sanitized results, not development process history. Ordinary build/test/CI does not require the vault.
 
-`agents/tools/new-task.ps1` remains a legacy/public scaffold. Its draft mode creates blank starter files, so do not use it for approved private internal tasks.
+Create a new Knowledge task with `agents/tools/new-task.ps1 -TaskPath "<owner-approved-vault-relative-task-folder>"`. It refuses existing tasks, unsafe paths and repository-local vaults. The legacy `-Mode`, `-Slug`, `-Scope`, `-Service` and `-Date` switches are removed; scaffolding never grants execution approval.
 
 ## Deployment Examples
 

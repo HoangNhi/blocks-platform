@@ -1,139 +1,83 @@
 param(
-    [ValidateSet('approved', 'draft')]
-    [string]$Mode = 'approved',
     [Parameter(Mandatory = $true)]
-    [string]$Slug,
-    [ValidateSet('service', 'cross-service', 'agent-workflow')]
-    [string]$Scope,
-    [string]$Service,
-    [string]$RepoRoot,
+    [string]$TaskPath,
     [string]$VaultPath = $env:OBSIDIAN_VAULT_PATH,
-    [datetime]$Date = (Get-Date)
+    [string]$RepoRoot = (Join-Path $PSScriptRoot '..\..')
 )
 
-function Write-Utf8NoBomFile {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path,
-        [Parameter(Mandatory = $true)]
-        [string]$Content
-    )
-
-    $encoding = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
-}
-
-$datePart = $Date.ToString('yyyy-MM-dd')
-
-if ($Mode -eq 'approved') {
-    if (-not $RepoRoot) {
-        $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-    }
-    $RepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
-    $basePath = Join-Path $RepoRoot "docs\tasks\$datePart-$Slug"
-    New-Item -ItemType Directory -Force -Path $basePath | Out-Null
-
-    $simpleFiles = @('spec.md', 'plan.md', 'review.md')
-    foreach ($file in $simpleFiles) {
-        $path = Join-Path $basePath $file
-        if (-not (Test-Path -LiteralPath $path)) {
-            Write-Utf8NoBomFile -Path $path -Content "# $file`n"
-        }
-    }
-
-    $executionPath = Join-Path $basePath 'execution.md'
-    if (-not (Test-Path -LiteralPath $executionPath)) {
-        $executionContent = @"
----
-type: execution
-status: not_started
-mode: light
-current_step: 0
-last_completed_step: 0
-next_step: ""
-updated: $datePart
----
-
-# Execution
-
-## Current State
-- Goal:
-- Current focus:
-- Last completed step:
-- Next step:
-- Blockers:
-- Key files:
-- Verification status:
-
-## Activity Log
-- $datePart 00:00 - Task scaffolded.
-"@
-        Write-Utf8NoBomFile -Path $executionPath -Content $executionContent
-    }
-
-    Write-Output $basePath
-    exit 0
-}
-
-# Draft mode
-if (-not $Scope) {
-    throw 'Scope is required when Mode=draft'
-}
+$ErrorActionPreference = 'Stop'
 
 if (-not $VaultPath -or -not (Test-Path -LiteralPath $VaultPath -PathType Container)) {
-    throw 'OBSIDIAN_VAULT_PATH must reference an existing external vault'
+    throw 'BLOCKED: OBSIDIAN_VAULT_PATH must reference an existing external Knowledge vault'
+}
+if (-not [System.IO.Path]::IsPathRooted($VaultPath)) {
+    throw 'BLOCKED: Knowledge vault must be an absolute path'
 }
 
-$VaultPath = [System.IO.Path]::GetFullPath($VaultPath)
-
-if ($Scope -eq 'service' -and -not $Service) {
-    throw 'Service is required when Scope=service'
+$segments = @($TaskPath -split '[\\/]')
+if ([System.IO.Path]::IsPathRooted($TaskPath) -or $segments.Count -lt 2) {
+    throw 'BLOCKED: TaskPath must be an exact vault-relative task folder'
 }
-
-$basePath = switch ($Scope) {
-    'cross-service' { Join-Path $VaultPath "cross-service\$datePart-$Slug" }
-    'agent-workflow' { Join-Path $VaultPath "agent-workflow\tasks\$datePart-$Slug" }
-    default { Join-Path $VaultPath "services\$Service\tasks\$datePart-$Slug" }
-}
-
-New-Item -ItemType Directory -Force -Path $basePath | Out-Null
-
-$simpleFiles = @('spec.md', 'plan.md', 'notes.md')
-foreach ($file in $simpleFiles) {
-    $path = Join-Path $basePath $file
-    if (-not (Test-Path -LiteralPath $path)) {
-        Write-Utf8NoBomFile -Path $path -Content "# $file`n"
+foreach ($segment in $segments) {
+    if ([string]::IsNullOrWhiteSpace($segment) -or $segment -in @('.', '..') -or
+        $segment -match '[<>:"|?*]' -or $segment.EndsWith('.') -or $segment.EndsWith(' ') -or
+        $segment -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)') {
+        throw 'BLOCKED: TaskPath contains an unsafe path component'
     }
 }
 
-$executionPath = Join-Path $basePath 'execution.md'
-if (-not (Test-Path -LiteralPath $executionPath)) {
-    $executionContent = @"
----
-type: execution
+$vaultRoot = [System.IO.Path]::GetFullPath($VaultPath).TrimEnd('\', '/')
+$repositoryRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+if ($vaultRoot.Equals($repositoryRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $vaultRoot.StartsWith($repositoryRoot + '\', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $repositoryRoot.StartsWith($vaultRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'BLOCKED: Knowledge vault must be outside the repository'
+}
+$basePath = [System.IO.Path]::GetFullPath((Join-Path $vaultRoot ($segments -join '\')))
+if (-not $basePath.StartsWith($vaultRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'BLOCKED: TaskPath escapes Knowledge vault'
+}
+
+$ancestor = $basePath
+while ($ancestor) {
+    if (Test-Path -LiteralPath $ancestor) {
+        $item = Get-Item -LiteralPath $ancestor -Force
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw 'BLOCKED: TaskPath and vault ancestors must be real directories, not links'
+        }
+    }
+    $ancestor = Split-Path -Path $ancestor -Parent
+}
+if (Test-Path -LiteralPath $basePath) {
+    throw 'BLOCKED: Task already exists; read its records instead of scaffolding over them'
+}
+
+New-Item -ItemType Directory -Path $basePath | Out-Null
+$datePart = (Get-Date).ToString('yyyy-MM-dd')
+$contents = [ordered]@{
+    'spec.md' = "# Specification
+"
+    'plan.md' = "# Plan
+"
+    'execution.md' = "---
 status: not_started
-mode: light
-current_step: 0
-last_completed_step: 0
-next_step: ""
+approval: required
 updated: $datePart
 ---
 
 # Execution
-
-## Current State
-- Goal:
-- Current focus:
-- Last completed step:
-- Next step:
-- Blockers:
-- Key files:
-- Verification status:
-
-## Activity Log
-- $datePart 00:00 - Task scaffolded.
-"@
-    Write-Utf8NoBomFile -Path $executionPath -Content $executionContent
+"
+    'review.md' = "# Review
+"
 }
-
+foreach ($filename in $contents.Keys) {
+    $stream = [System.IO.File]::Open((Join-Path $basePath $filename), [System.IO.FileMode]::CreateNew)
+    try {
+        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($contents[$filename])
+        $stream.Write($bytes, 0, $bytes.Length)
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
 Write-Output $basePath

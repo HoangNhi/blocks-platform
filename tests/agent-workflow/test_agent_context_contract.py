@@ -25,9 +25,13 @@ ACTIVE_SOURCES = (
 
 @pytest.fixture(autouse=True)
 def remove_generated_root_catalogs():
+    catalogs = (ROOT / ".agents", ROOT / ".claude")
+    preexisting = {catalog for catalog in catalogs if catalog.exists()}
     yield
-    for catalog in (ROOT / '.agents', ROOT / '.claude'):
-        shutil.rmtree(catalog, ignore_errors=True)
+    for catalog in catalogs:
+        if catalog not in preexisting:
+            assert catalog.resolve().parent == ROOT.resolve()
+            shutil.rmtree(catalog, ignore_errors=True)
 
 
 def test_workflow_context_areas_exist_in_manifest() -> None:
@@ -37,9 +41,11 @@ def test_workflow_context_areas_exist_in_manifest() -> None:
     assert set(declared) <= set(manifest["areas"])
 
 
-def test_routing_uses_repository_task_folders_first() -> None:
+def test_routing_requires_exact_knowledge_task() -> None:
     routing = ROUTING.read_text(encoding="utf-8")
-    assert "docs/tasks/" in routing
+    assert "exact owner-approved Knowledge task" in routing
+    assert "BLOCKED" in routing
+    assert "public contributor task under" not in routing
     assert "-Area web" in routing
     assert "-Area assistant" in routing
     assert "-Area agent-workflow" in routing

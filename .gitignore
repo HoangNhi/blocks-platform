@@ -435,3 +435,6 @@ FodyWeavers.xsd
 !/.env.example
 !/.env.*.example
 !/services/assistant-service/.env.example
+/docs/tasks/
+/docs/plans/
+/docs/superpowers/

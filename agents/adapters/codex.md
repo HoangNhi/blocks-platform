@@ -9,10 +9,10 @@ Tài liệu này giải thích cách Codex áp dụng portable protocol của Bl
 1. `AGENTS.md`
 2. `agents/protocol/core.md`
 3. `agents/protocol/context-routing.md`
-4. Active public task folder under `docs/tasks/YYYY-MM-DD-<slug>/`, or the exact owner-supplied private task path resolved through `OBSIDIAN_VAULT_PATH`
+4. Exact owner-approved Knowledge task path resolved through `OBSIDIAN_VAULT_PATH`
 5. protocol chuyên biệt theo task
 
-For private internal work, require explicit owner approval and read the spec, plan, and current execution from that one path. If the path or required context is missing, mark `BLOCKED`; do not infer it from generated context.
+For all development tasks, require Knowledge access, an exact owner-approved path and execution approval. Read spec, plan and execution from that one path. Missing context is `BLOCKED`; never use generated history or a repository task folder as fallback. Product docs and ordinary build/test/CI remain repository-local.
 
 ## Khi có Superpowers
 
@@ -31,5 +31,5 @@ For private internal work, require explicit owner approval and read the spec, pl
 ## Browser Verification
 
 - For UI functional testing and browser-based runtime verification, follow the repo's `browser-use-first` rule from `AGENTS.md`, `agents/protocol/verification.md`, and `docs/architecture/services/web.md`.
-- Prefer `.agent-context/generated/` for historical context. Do not depend on unrestricted access to `OBSIDIAN_VAULT_PATH`.
+- Generated history is supplemental; read the required task directly from its approved Knowledge path. Do not broaden filesystem access.
 - Do not treat Codex-native browser preferences or older Playwright habits as higher priority than the repo protocol.

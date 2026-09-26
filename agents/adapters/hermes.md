@@ -3,8 +3,8 @@
 ## Context Order
 
 1. Repository `AGENTS.md` and `docs/`
-2. Relevant external notes resolved through `OBSIDIAN_VAULT_PATH`
-3. Bounded context generated with `agents/tools/get-context.ps1` for implementation agents
+2. Exact owner-approved Knowledge task resolved through `OBSIDIAN_VAULT_PATH`; missing access or required records means `BLOCKED`, not repository fallback
+3. Optional bounded historical context; never a substitute for the current task records
 
 ## Vault Access
 
@@ -16,7 +16,7 @@
 ## Report Writes
 
 - Read-only remains the default for knowledge snapshots and task records.
-- Write only to a run-specific report output after owner approval and verification of the actual filesystem boundary; if that boundary is not proven, remain read-only.
+- Write only under the approved Knowledge task's `evidence/<run-id>/` after owner approval and actual filesystem boundary verification; if that boundary is not proven, remain read-only.
 - Never update task specs, plans, or execution state, and never give the browser worker credentials for public issue publication or Git pushes.
 
 For Docker terminal execution, mount the vault read-only as documented in `docs/runbooks/agent-context.md`.

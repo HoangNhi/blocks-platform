@@ -177,14 +177,14 @@ def test_required_vault_fails_clearly(tmp_path: Path) -> None:
     assert "vault-required-unavailable" in result.stderr
 
 
-def test_task_path_cannot_escape_repository(tmp_path: Path) -> None:
+def test_task_path_does_not_project_task_records_into_repo(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     seed_repo(repo_root)
-
-    result = run_context(repo_root, "-TaskPath", "../outside.md")
-
-    assert result.returncode != 0
-    assert "task-path-outside-approved-roots" in result.stderr
+    for supplied_path in ("../outside.md", "services/web/tasks/example"):
+        result = run_context(repo_root, "-TaskPath", supplied_path)
+        assert result.returncode != 0
+        assert "task-context-requires-direct-knowledge-read" in result.stderr
+        assert not (repo_root / ".agent-context/generated").exists()
 
 
 def test_repository_contract_uses_projection_first_paths() -> None:
@@ -200,13 +200,13 @@ def test_repository_contract_uses_projection_first_paths() -> None:
     assert ":ro" in (ROOT / "docs" / "runbooks" / "agent-context.md").read_text(encoding="utf-8")
 
 
-def test_root_guide_distinguishes_private_and_public_tasks() -> None:
+def test_root_guide_requires_knowledge_only_tasks() -> None:
     guide = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert "Private internal tasks" in guide
-    assert "Public contributor tasks" in guide
+    assert "Knowledge-only tasks" in guide
     assert "OBSIDIAN_VAULT_PATH" in guide
-    assert "docs/tasks/" in guide
-    assert "Save approved implementation tasks under `docs/tasks/YYYY-MM-DD-<slug>/`" not in guide
+    assert "BLOCKED" in guide
+    assert "Public contributor tasks" not in guide
+    assert "Keep approved public contributor task records" not in guide
 
 def test_real_manifest_routes_web_and_workflow_context(tmp_path: Path) -> None:
     live = json.loads((ROOT / ".agent-context/context-manifest.yaml").read_text(encoding="utf-8"))

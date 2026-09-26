@@ -100,7 +100,7 @@ MCP config lives in `%USERPROFILE%\.claude\mcp.json`. Use `agents/mcp.example.js
 - Nếu không truy xuất được dữ liệu thực tế thông qua bridge/CLI, bắt buộc hiển thị `Unknown` hoặc `Not configured` hoặc `No recent data`.
 
 ### 6. Phase Checkpoints & Completion Artifacts
-- Cuối mỗi phase thực thi, phải ghi lại checkpoint thực tế dưới dạng file `.hermes/runs/YYYY-MM-DD/hermes-overview-r2-semantics-docs-checkpoint.md` (hoặc path tương ứng) ghi rõ các file thay đổi, quyết định kiến trúc, và kết quả test/build.
+- Mọi task cần exact Knowledge path và access qua `OBSIDIAN_VAULT_PATH`. Ghi checkpoint vào task `evidence/<run-id>/`; `execution.md` giữ state duy nhất. Repo/CI chỉ công bố kết quả sản phẩm đã sanitize, không giữ task history. Thiếu access/path/approval: `BLOCKED`, không fallback.
 - Trả về đúng tín hiệu kết thúc pha (`HERMES_PHASE_SEMANTICS_DOCS_DONE`).
 
 ### 7. Bounded Context to Avoid Exhaustion

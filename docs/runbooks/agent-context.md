@@ -1,7 +1,7 @@
 ---
 status: approved
 owner: agent-workflow
-last_reviewed: 2026-09-24
+last_reviewed: 2026-09-26
 scope: external-obsidian-context
 ---
 
@@ -16,11 +16,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File agents/tools/get-context.ps1
 
 Generated files include source attribution and generation time, redact secret-like assignments, enforce a byte limit, and are written under the ignored `.agent-context/generated/` directory.
 
-## Private Task Context
+## Knowledge-only Task Context
 
-For approved private internal work, use only the exact task path supplied by the owner and resolve the vault root through `OBSIDIAN_VAULT_PATH`. Read the task's current spec, plan, and execution record; missing required context or approval means `BLOCKED`. Do not search for an alternate task or treat generated context as approval. Public product behavior and contributor rules remain in repository docs.
+Every development task lives only in Knowledge at its exact owner-approved path, resolved through `OBSIDIAN_VAULT_PATH`. Read current spec, plan and execution directly. Missing access, required context or approval is `BLOCKED`; no repo fallback or canonical task projection. Product contracts and sanitized results stay in repository docs. Ordinary build/test/CI does not require the vault.
 
-Hermes reads the handed-off knowledge snapshot. A run-specific report output may be writable only after its filesystem boundary and owner approval are verified; otherwise keep the vault read-only. Report publication and Git write credentials stay outside the browser worker.
+Create new blank records only after the destination is approved:
+
+```powershell
+./agents/tools/new-task.ps1 -TaskPath "<exact-owner-approved-vault-relative-folder>"
+```
+
+The tool refuses existing folders and unsafe or repository-local paths. Old `-Mode`, `-Slug`, `-Scope`, `-Service` and `-Date` switches are removed. Blank records are not execution approval. `get-context.ps1 -TaskPath` is retired; read task records directly. Its other options remain for optional attributed historical summaries.
+
+All durable task reports belong in the exact Knowledge task's `evidence/<run-id>/`; `execution.md` owns state. Public docs/CI may show sanitized product results, not task process history. Hermes retains read-only access to task records; a run-specific report output is writable only after explicit boundary approval. An unavailable destination is `BLOCKED`; do not broaden mounts or expose credentials.
 
 ## Hermes Docker
 
@@ -40,8 +48,8 @@ OBSIDIAN_VAULT_PATH=/knowledge/blocks
 
 ## Claude Code
 
-Use `agents/tools/launch-claude.ps1 -WithVault` only for deliberate direct research. Default Claude usage reads generated context instead.
+Agent-led development requires access to the exact approved Knowledge task. Use `agents/tools/launch-claude.ps1 -WithVault` when that explicit directory-access grant is appropriate; otherwise arrange a bounded authorized mount. Generated context is not a replacement for task access.
 
 ## Codex
 
-Prefer `.agent-context/generated/`. Do not depend on unrestricted external filesystem access.
+Read the exact approved Knowledge task directly. Use `.agent-context/generated/` only for optional history. Request bounded task access if unavailable; do not bypass filesystem restrictions.
