@@ -1,4 +1,4 @@
-version: 1
+﻿version: 1
 entries:
   - source_repo: superpowers
     source_skill_path: skills/using-superpowers
@@ -170,18 +170,21 @@ entries:
     target_name: taste-skill-v1
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/brandkit
     publish_mode: standalone
     target_name: brandkit
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/redesign-skill
     publish_mode: standalone
     target_name: redesign-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/output-skill
     publish_mode: standalone
@@ -194,48 +197,56 @@ entries:
     target_name: minimalist-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/brutalist-skill
     publish_mode: standalone
     target_name: brutalist-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/soft-skill
     publish_mode: standalone
     target_name: soft-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/image-to-code-skill
     publish_mode: standalone
     target_name: image-to-code-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/imagegen-frontend-web
     publish_mode: standalone
     target_name: imagegen-frontend-web
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/imagegen-frontend-mobile
     publish_mode: standalone
     target_name: imagegen-frontend-mobile
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/gpt-tasteskill
     publish_mode: standalone
     target_name: gpt-tasteskill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: taste-skill
     source_skill_path: skills/stitch-skill
     publish_mode: standalone
     target_name: stitch-skill
     targets: codex,agy,claude,hermes
     status: active
+    invocation: explicit
   - source_repo: agent-skills
     source_skill_path: skills/frontend-ui-engineering
     publish_mode: standalone

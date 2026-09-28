@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepoRoot,
     [string]$HermesSkillsRoot,
     [switch]$Json
@@ -35,6 +35,13 @@ foreach ($entry in $entries) {
             $classification = 'patch-required'; $reasons += 'runtime-specific-path'
         }
         if ($entry.publish_mode -eq 'skip') { $classification = 'skip-recommended'; $reasons += 'manifest-skip' }
+        if ($entry.invocation) {
+            if ($entry.invocation -ne 'explicit') { $classification = 'invalid'; $reasons += 'invalid-invocation' }
+            if (Test-Path -LiteralPath (Join-Path $skillRoot 'agents/openai.yaml')) { $classification = 'invalid'; $reasons += 'source-has-openai-policy' }
+        }
+        if ($entry.target_name -match '\.\.' -or [System.IO.Path]::IsPathRooted($entry.target_name)) {
+            $classification = 'invalid'; $reasons += 'target-name-traversal'
+        }
     }
     $results += [pscustomobject]@{ target_name = $entry.target_name; classification = $classification; reasons = @($reasons | Select-Object -Unique) }
 }

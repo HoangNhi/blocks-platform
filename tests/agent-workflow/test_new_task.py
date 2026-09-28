@@ -96,16 +96,35 @@ def test_junction_ancestor_cannot_escape_vault(tmp_path: Path) -> None:
     vault.mkdir()
     outside.mkdir()
     junction = vault / "agent-workflow"
-    created = subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         "New-Item -ItemType Junction -Path $env:TEST_JUNCTION -Target $env:TEST_TARGET | Out-Null"],
-        capture_output=True, text=True, check=False,
-        env={**os.environ, "TEST_JUNCTION": str(junction), "TEST_TARGET": str(outside)},
-    )
-    assert created.returncode == 0, created.stderr
+    if os.name == "nt":
+        created = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "New-Item -ItemType Junction -Path $env:TEST_JUNCTION -Target $env:TEST_TARGET | Out-Null"],
+            capture_output=True, text=True, check=False,
+            env={**os.environ, "TEST_JUNCTION": str(junction), "TEST_TARGET": str(outside)},
+        )
+        assert created.returncode == 0, created.stderr
+    else:
+        junction.symlink_to(outside, target_is_directory=True)
     try:
         result = run_new_task(tmp_path / "repo", vault=vault)
         assert result.returncode != 0
         assert not list(outside.iterdir())
     finally:
-        junction.rmdir()
+        if os.name == "nt":
+            junction.rmdir()
+        else:
+            junction.unlink()
+
+def test_default_repo_root_works_without_explicit_override(tmp_path: Path) -> None:
+    vault = tmp_path / 'vault'
+    vault.mkdir()
+    environment = os.environ.copy()
+    environment['OBSIDIAN_VAULT_PATH'] = str(vault)
+    result = subprocess.run(
+        ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+         str(NEW_TASK), '-TaskPath', TASK_PATH],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (vault / TASK_PATH / 'execution.md').is_file()

@@ -2,10 +2,13 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$TaskPath,
     [string]$VaultPath = $env:OBSIDIAN_VAULT_PATH,
-    [string]$RepoRoot = (Join-Path $PSScriptRoot '..\..')
+    [string]$RepoRoot
 )
 
 $ErrorActionPreference = 'Stop'
+$separator = [System.IO.Path]::DirectorySeparatorChar
+$pathComparison = if ($separator -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..\..' }
 
 if (-not $VaultPath -or -not (Test-Path -LiteralPath $VaultPath -PathType Container)) {
     throw 'BLOCKED: OBSIDIAN_VAULT_PATH must reference an existing external Knowledge vault'
@@ -28,13 +31,13 @@ foreach ($segment in $segments) {
 
 $vaultRoot = [System.IO.Path]::GetFullPath($VaultPath).TrimEnd('\', '/')
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
-if ($vaultRoot.Equals($repositoryRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-    $vaultRoot.StartsWith($repositoryRoot + '\', [System.StringComparison]::OrdinalIgnoreCase) -or
-    $repositoryRoot.StartsWith($vaultRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+if ($vaultRoot.Equals($repositoryRoot, $pathComparison) -or
+    $vaultRoot.StartsWith($repositoryRoot + $separator, $pathComparison) -or
+    $repositoryRoot.StartsWith($vaultRoot + $separator, $pathComparison)) {
     throw 'BLOCKED: Knowledge vault must be outside the repository'
 }
-$basePath = [System.IO.Path]::GetFullPath((Join-Path $vaultRoot ($segments -join '\')))
-if (-not $basePath.StartsWith($vaultRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+$basePath = [System.IO.Path]::GetFullPath((Join-Path $vaultRoot ($segments -join $separator)))
+if (-not $basePath.StartsWith($vaultRoot + $separator, $pathComparison)) {
     throw 'BLOCKED: TaskPath escapes Knowledge vault'
 }
 

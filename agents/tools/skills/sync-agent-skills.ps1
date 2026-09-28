@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepoRoot,
     [string]$HermesSkillsRoot,
     [switch]$Check
@@ -42,10 +42,24 @@ function Publish-Catalog {
     $targetEntries = @(Get-EntriesForTarget -Definition $Definition)
     foreach ($entry in $targetEntries) {
         $destination = Join-Path $Definition.Root $entry.target_name
+        $canonicalRoot = [System.IO.Path]::GetFullPath($Definition.Root).TrimEnd('\', '/')
+        $canonicalDest = [System.IO.Path]::GetFullPath($destination).TrimEnd('\', '/')
+        $separator = [System.IO.Path]::DirectorySeparatorChar
+        $comparison = if ($separator -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+        if (-not $canonicalDest.StartsWith($canonicalRoot + $separator, $comparison)) {
+            Write-Error "Invalid target_name escapes catalog root: $($entry.target_name)"
+            exit 1
+        }
+        $sourceRoot = Get-AgentSkillSourceRoot -RepoRoot $RepoRoot -Entry $entry
+        if ($Definition.Name -eq 'agents' -and $entry.invocation -eq 'explicit') {
+            if (Test-Path -LiteralPath (Join-Path $sourceRoot 'agents/openai.yaml')) {
+                Write-Error "Source already contains agents/openai.yaml for explicit entry: $($entry.target_name)"
+                exit 1
+            }
+        }
         if (Test-Path -LiteralPath $destination) {
             Remove-Item -LiteralPath $destination -Recurse -Force
         }
-        $sourceRoot = Get-AgentSkillSourceRoot -RepoRoot $RepoRoot -Entry $entry
         Copy-Item -LiteralPath $sourceRoot -Destination $destination -Recurse -Force
         Set-AgentSkillNameInFile -SkillMarkdownPath (Join-Path $destination 'SKILL.md') -TargetName $entry.target_name
         if ($entry.publish_mode -eq 'patched' -and $entry.rewrite_rules -eq 'runtime-root-prefix') {
@@ -53,6 +67,12 @@ function Publish-Catalog {
             $content = Get-Content -LiteralPath $skillMarkdown -Raw -Encoding UTF8
             $replacement = if ($Definition.Name -eq 'claude') { '.claude/skills/impeccable/' } else { '.agents/skills/impeccable/' }
             Write-Utf8NoBomFile -Path $skillMarkdown -Content $content.Replace('.claude/skills/impeccable/', $replacement)
+        }
+        if ($Definition.Name -eq 'agents' -and $entry.invocation -eq 'explicit') {
+            $metadataRoot = Join-Path $destination 'agents'
+            New-Item -ItemType Directory -Force -Path $metadataRoot | Out-Null
+            $policyContent = 'policy:' + [char]10 + '  allow_implicit_invocation: false' + [char]10
+            Write-Utf8NoBomFile -Path (Join-Path $metadataRoot 'openai.yaml') -Content $policyContent
         }
     }
     $marker = [ordered]@{

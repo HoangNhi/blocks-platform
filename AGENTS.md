@@ -18,8 +18,6 @@ Current code layout:
 - `platform/shared/Blocks.Shared/`: shared .NET contracts/common code.
 - `plugins/`: future plugin modules.
 - `docs/`: approved repository knowledge, specifications, decisions, audits, and runbooks.
-- Knowledge: all development task records and task evidence; no task folders are stored in the repository.
-- `.agent-context/generated/`: ignored, bounded historical context; not an execution record or an alternative to Knowledge.
 
 The scalable source layout is now active. Keep new code in the matching top-level area.
 
@@ -32,6 +30,8 @@ Before coding, identify the active service, app, plugin, or cross-service task.
 Read context from:
 
 - `docs/README.md`
+- `docs/runbooks/local-development.md` for build, test, and command map across areas
+- `agents/protocol/context-routing.md` for routing protocol and task context guidelines
 - the relevant `docs/architecture/services/<service>.md` document
 - relevant approved decisions and runbooks under `docs/`
 - `.agent-context/generated/<area>-context.md` when bounded historical context was generated
@@ -59,57 +59,17 @@ For workflow-review or transcript-review tasks, use extractor summaries before r
 - For UI tasks, inspect reference images and screenshots first.
 - Detailed Claude workflow lives in `agents/adapters/claude.md`.
 - No fake telemetry; show `Unknown` or `Not configured` if not verified.
-- Save durable task evidence only under the exact approved Knowledge task's `evidence/<run-id>/`. Its `execution.md` owns state. Repository docs and CI may publish sanitized feature results, not task history.
 
-If context is missing:
+## Portable Protocol and Knowledge-only tasks
 
-- For new features, UX changes, API changes, or architecture changes: stop and ask before coding.
-- For every development task, including small bugfixes: missing Knowledge access, exact task path, approval, or required task context means `BLOCKED`; never create a repository fallback.
+Repository protocol in `agents/protocol/`, `agents/manifests/` and `agents/tools/` overrides runtime skills/plugins. Read `agents/adapters/<runtime>.md` for Codex, Claude or Antigravity. When Superpowers is invoked, follow its relevant skill without overriding repo gates; conflicting task paths require stopping and explaining the conflict.
 
-## Portable Protocol
-
-Blocks lưu workflow portable cấp dự án trong `agents/`.
-
-Khi runtime hỗ trợ, agent có thể dùng skill tương thích với Superpowers như lớp tăng tốc. Tuy nhiên source of truth cho workflow của dự án vẫn là:
-
-- `agents/protocol/`
-- `agents/adapters/<runtime>.md`
-- `agents/manifests/`
-- `agents/tools/`
-
-Ưu tiên hiện tại:
-
-- Codex đọc `agents/adapters/codex.md`
-- Antigravity đọc `agents/adapters/antigravity.md`
-
-Nếu có khác biệt giữa runtime skill/plugin và protocol của repo, protocol của repo thắng.
-
-## 3. Superpowers Workflow
-
-When the user invokes Superpowers, follow the relevant Superpowers skill workflow.
-
-Project preference:
-
-### Knowledge-only tasks
-
-- Store every development task in Knowledge: spec, plan, execution, review, task mockups and durable evidence. There is no public/private storage split and no repository task projection.
-- Resolve Knowledge through `OBSIDIAN_VAULT_PATH`; use only the exact task path supplied or approved by the owner. Read its current spec, plan and execution before broad search; keep one authoritative execution record.
-- Missing vault access, exact task path, approval, or required context is `BLOCKED`. Do not guess another task, broaden worker access, or save task records in the repository.
-- New task scaffolding uses `agents/tools/new-task.ps1` with an exact vault-relative `-TaskPath`. Scaffolding is not approval to execute or overwrite an existing task.
-- Repository docs retain product behavior, architecture, contracts, decisions, runbooks and sanitized results. Extract durable product knowledge before moving task history; never replace product explanations with private links.
-- Ordinary build/test/CI uses repository code and configuration without Knowledge. Agent-led development requires Knowledge; read-only product documentation does not authorize a task.
-- Skills' default task/spec/plan locations are overridden by this rule. No new task records under docs or runtime-specific repo folders.
-
-Expected task artifacts:
-
-- `spec.md`
-- `plan.md`
-- `execution.md` for non-trivial active tasks
-- `mockup-ui.md` if UI is involved
-- `notes.md` if useful
-- `review.md` if review findings or self-review are useful
-
-If a Superpowers skill requires a conflicting path, pause and explain the conflict before proceeding.
+- Every development task, including bugfixes, requires Knowledge access, exact owner-approved task path and execution approval. Missing any requirement is `BLOCKED`; do not guess another task, broaden worker access or create repository fallbacks.
+- Resolve only that task through `OBSIDIAN_VAULT_PATH`. Read `spec.md`, `plan.md`, and current `execution.md` before broad search. Execution owns state; generated history never replaces it.
+- Keep task specs, plans, execution, review, mockups and durable evidence in Knowledge only; evidence belongs in `evidence/<run-id>/` of that exact task. Include `mockup-ui.md` for UI and `notes.md` when useful.
+- Scaffold with `agents/tools/new-task.ps1 -TaskPath <vault-relative-path>`; scaffolding neither approves execution nor permits overwriting an existing task.
+- Repository docs retain approved product behavior, architecture, contracts, decisions and runbooks. Extract durable product knowledge before moving task history; do not replace it with private links. CI may publish sanitized product results, not task records.
+- Ordinary build/test/CI is Knowledge-independent; read-only product documentation does not authorize development. New features, UX, API or architecture changes with missing context must stop before coding.
 
 ## 4. Task Classification
 

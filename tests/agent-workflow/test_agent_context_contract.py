@@ -68,3 +68,40 @@ def test_sync_publishes_corrected_blocks_ui_workflow() -> None:
         assert "obsidian-vault/" not in published
         assert ".agent-context/generated/web-context.md" in published
 
+
+def test_root_agents_routing_and_core_invariants() -> None:
+    agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "docs/runbooks/local-development.md" in agents_text
+    assert "agents/protocol/context-routing.md" in agents_text
+    assert "OBSIDIAN_VAULT_PATH" in agents_text
+    assert "BLOCKED" in agents_text
+    assert "browser-use" in agents_text
+    assert "master" in agents_text
+    assert "secret" in agents_text.lower()
+
+def test_project_codex_config_and_mcp_example_contract() -> None:
+    import json
+    import tomllib
+
+    config_path = ROOT / "agents" / "codex.example.toml"
+    assert config_path.is_file(), "Published non-secret Codex template must exist"
+    content = config_path.read_text(encoding="utf-8")
+    assert "danger-full-access" not in content
+    assert "never" not in content
+    assert "D:\\" not in content and "D:/" not in content
+    assert "OBSIDIAN_VAULT_PATH" not in content
+
+    data = tomllib.loads(content)
+    assert data.get("approval_policy") == "on-request"
+    assert data.get("sandbox_mode") == "workspace-write"
+    assert data.get("sandbox_workspace_write", {}).get("network_access") is False
+    shadcn_mcp = data.get("mcp_servers", {}).get("shadcn", {})
+    assert "shadcn@4.19.1" in " ".join(shadcn_mcp.get("args", []))
+    assert shadcn_mcp["args"][-2:] == ["--cwd", "apps/web/Blocks.Web"]
+
+    example_path = ROOT / "agents" / "mcp.example.json"
+    assert "@monotool/context7-mcp" not in example_path.read_text(encoding="utf-8")
+    example_data = json.loads(example_path.read_text(encoding="utf-8"))
+    assert "context7" not in example_data.get("mcpServers", {})
+    assert "shadcn@4.19.1" in " ".join(example_data["mcpServers"]["shadcn"]["args"])
+    assert example_data["mcpServers"]["shadcn"]["args"] == shadcn_mcp["args"]

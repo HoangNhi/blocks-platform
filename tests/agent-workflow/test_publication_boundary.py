@@ -155,8 +155,8 @@ def test_mcp_example_is_pinned_and_context_is_optional() -> None:
     for package in (
         '@playwright/mcp@0.0.78',
         '@ytsuda/ripple@0.14.1',
-        'shadcn@4.16.1',
-        '@monotool/context7-mcp@1.0.6',
+        'shadcn@4.19.1',
     ):
         assert package in mcp_text
+    assert '@monotool/context7-mcp' not in mcp_text
     assert not (ROOT / '.agent-context' / 'generated').exists()
