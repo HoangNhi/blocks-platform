@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -47,69 +48,51 @@ FORBIDDEN_CONTENT_PATTERNS = (
     '\\.herokuapp' + '\\.com',
 )
 
-SUBMODULE_ROOTS = tuple(
-    ROOT / 'agents' / 'skills' / name
-    for name in (
-        'agent-skills',
-        'browser-use',
-        'caveman',
-        'impeccable',
-        'obsidian-skills',
-        'superpowers',
-        'taste-skill',
-        'ui-ux-pro-max-skill',
-    )
-)
-
-SKIP_SCAN_DIRECTORY_NAMES = frozenset(
-    {
-        '.git',
-        'bin',
-        'node_modules',
-        'obj',
-        'dist',
-        'test-results',
-        'playwright-report',
-    }
-)
-
-
 def repository_files() -> list[Path]:
-    files = []
-    for current, directories, filenames in os.walk(ROOT):
-        current_path = Path(current)
-        directories[:] = [
-            name
-            for name in directories
-            if name not in SKIP_SCAN_DIRECTORY_NAMES
-        ]
-        if any(current_path == submodule or submodule in current_path.parents for submodule in SUBMODULE_ROOTS):
-            directories[:] = []
-            continue
-        files.extend(current_path / name for name in filenames)
-    return files
+    result = subprocess.run(
+        ['git', 'ls-files', '--cached', '-z'],
+        capture_output=True,
+        check=True,
+        cwd=ROOT,
+        text=True,
+    )
+    return [ROOT / Path(value) for value in result.stdout.split('\0') if value]
+
+
+def has_tracked_path(path: Path, files: list[Path]) -> bool:
+    return any(file == path or path in file.parents for file in files)
+
+
+def test_repository_files_exclude_untracked_workspace_files() -> None:
+    with tempfile.NamedTemporaryFile(dir=ROOT, prefix='.publication-boundary-', delete=False) as handle:
+        probe = Path(handle.name)
+
+    try:
+        assert probe not in repository_files()
+    finally:
+        probe.unlink()
 
 
 def test_forbidden_exact_paths_are_absent() -> None:
-    present = [str(path) for path in (ROOT / item for item in FORBIDDEN_EXACT_PATHS) if path.exists()]
+    files = repository_files()
+    present = [
+        str(path)
+        for item in FORBIDDEN_EXACT_PATHS
+        if has_tracked_path(path := ROOT / item, files)
+    ]
     assert not present, present
 
 
 def test_forbidden_directories_and_suffixes_are_absent() -> None:
     paths = repository_files()
-    forbidden_directories = []
-    for current, directories, _ in os.walk(ROOT):
-        current_path = Path(current)
-        forbidden_directories.extend(
-            str(current_path / name)
-            for name in directories
-            if name in FORBIDDEN_DIRECTORY_NAMES
-        )
-        directories[:] = [
-            name
-            for name in directories
-            if name not in SKIP_SCAN_DIRECTORY_NAMES
-        ]
+    forbidden_directories = sorted(
+        {
+            str(parent)
+            for path in paths
+            for parent in path.parents
+            if parent.name in FORBIDDEN_DIRECTORY_NAMES
+        }
+    )
     forbidden_suffixes = [
         str(path)
         for path in paths
@@ -159,4 +142,4 @@ def test_mcp_example_is_pinned_and_context_is_optional() -> None:
     ):
         assert package in mcp_text
     assert '@monotool/context7-mcp' not in mcp_text
-    assert not (ROOT / '.agent-context' / 'generated').exists()
+    assert not has_tracked_path(ROOT / '.agent-context' / 'generated', repository_files())
