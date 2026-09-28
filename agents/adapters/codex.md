@@ -7,10 +7,13 @@ Tài liệu này giải thích cách Codex áp dụng portable protocol của Bl
 ## Trình tự đọc
 
 1. `AGENTS.md`
-2. `agents/protocol/core.md`
-3. `agents/protocol/context-routing.md`
-4. Active repository task folder under `docs/tasks/YYYY-MM-DD-<slug>/` when one exists
-5. protocol chuyên biệt theo task
+2. `docs/runbooks/local-development.md`
+3. `agents/protocol/core.md`
+4. `agents/protocol/context-routing.md`
+5. Exact owner-approved Knowledge task path resolved through `OBSIDIAN_VAULT_PATH`
+6. Protocol chuyên biệt theo task
+
+For all development tasks, require Knowledge access, an exact owner-approved path and execution approval. Read spec, plan and execution from that one path. Missing context is `BLOCKED`; never use generated history or a repository task folder as fallback. Product docs and ordinary build/test/CI remain repository-local.
 
 ## Khi có Superpowers
 
@@ -25,9 +28,18 @@ Tài liệu này giải thích cách Codex áp dụng portable protocol của Bl
 ## Tooling
 
 - Dùng `agents/tools/` cho các bước lặp hoặc bounded workflow.
+- Preflight và kiểm tra môi trường: `agents/tools/check-agent-environment.ps1 -TaskPath <relative-task-path> -RequireTaskContext -Json`.
+- Scaffold task mới: `agents/tools/new-task.ps1 -TaskPath <relative-task-path>`.
+
+## Launch Commands
+
+- Research mode: `codex -C $repoRoot -s read-only -a on-request`
+- Coding mode: `codex -C $repoRoot -s workspace-write -a on-request --add-dir $taskRoot`
+
+Startup hướng dẫn; `$taskRoot` là tham số nhận đường dẫn thư mục task được owner duyệt, không lưu taskRoot cụ thể vào repo docs.
 
 ## Browser Verification
 
 - For UI functional testing and browser-based runtime verification, follow the repo's `browser-use-first` rule from `AGENTS.md`, `agents/protocol/verification.md`, and `docs/architecture/services/web.md`.
-- Prefer `.agent-context/generated/` for historical context. Do not depend on unrestricted access to `OBSIDIAN_VAULT_PATH`.
+- Generated history is supplemental; read the required task directly from its approved Knowledge path. Do not broaden filesystem access.
 - Do not treat Codex-native browser preferences or older Playwright habits as higher priority than the repo protocol.

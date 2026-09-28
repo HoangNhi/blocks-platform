@@ -63,8 +63,9 @@ not persist credentials.
 are canonical repository sources. Runtime-specific skill mirrors are generated
 locally from `agents/skills-manifest.yaml` and are not committed.
 
-Use repository task folders under `docs/tasks/` for approved work. Keep plans,
-execution evidence, reviews, and validation commands with their task.
+All development task records and durable task evidence live only in Knowledge, resolved through `OBSIDIAN_VAULT_PATH`. Agent-led work requires access, an exact owner-approved task path and approval; missing context is `BLOCKED`, not permission to create repository task files. The repository shows code, features, contracts, operating guidance and sanitized results, not development process history. Ordinary build/test/CI does not require the vault.
+
+Create a new Knowledge task with `agents/tools/new-task.ps1 -TaskPath "<owner-approved-vault-relative-task-folder>"`. It refuses existing tasks, unsafe paths and repository-local vaults. The legacy `-Mode`, `-Slug`, `-Scope`, `-Service` and `-Date` switches are removed; scaffolding never grants execution approval.
 
 ## Deployment Examples
 

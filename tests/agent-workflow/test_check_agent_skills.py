@@ -124,3 +124,36 @@ def test_check_fails_on_duplicate_target_names() -> None:
     result = run_check(repo_root)
     assert result.returncode != 0
     assert "duplicate-target-name" in result.stderr
+
+def test_check_rejects_invalid_invocation_or_preexisting_policy() -> None:
+    temp_root = make_temp_dir()
+    repo_root = temp_root / "repo"
+    skill_root = repo_root / "agents" / "skills" / "solo" / "skills" / "alpha"
+    (skill_root / "agents").mkdir(parents=True)
+    (skill_root / "SKILL.md").write_text("---\nname: alpha\ndescription: demo\n---\n", encoding="utf-8")
+    (skill_root / "agents" / "openai.yaml").write_text("preexisting policy\n", encoding="utf-8")
+
+    (repo_root / "agents").mkdir(parents=True, exist_ok=True)
+    (repo_root / "agents" / "skills-manifest.yaml").write_text(
+        textwrap.dedent(
+            """\
+            version: 1
+            entries:
+              - source_repo: solo
+                source_skill_path: skills/alpha
+                publish_mode: standalone
+                target_name: alpha
+                targets: codex
+                status: active
+                invocation: invalid-value
+            """
+        ),
+        encoding="utf-8",
+    )
+    result = run_check(repo_root)
+    assert result.returncode != 0
+    data = json.loads(result.stdout)
+    entry = [e for e in data["entries"] if e["target_name"] == "alpha"][0]
+    assert entry["classification"] == "invalid"
+    assert "invalid-invocation" in entry["reasons"]
+    assert "source-has-openai-policy" in entry["reasons"]

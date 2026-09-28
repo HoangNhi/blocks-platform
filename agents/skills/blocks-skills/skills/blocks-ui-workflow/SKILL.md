@@ -17,7 +17,7 @@ Before frontend-facing changes, read:
 - `docs/README.md`
 - `docs/architecture/services/web.md`
 - `agents/protocol/verification.md`
-- the active `docs/tasks/YYYY-MM-DD-<slug>/` folder when one exists
+- the exact owner-approved Knowledge task through `OBSIDIAN_VAULT_PATH`; missing task access or required context is `BLOCKED`, with no repository fallback
 - `.agent-context/generated/web-context.md` only when historical context is useful
 - plugin context when the UI belongs to a plugin
 - `apps/web/Blocks.Web/components.json`

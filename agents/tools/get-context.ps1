@@ -61,6 +61,7 @@ function Protect-ContextContent {
 }
 
 try {
+    if ($TaskPath) { throw 'task-context-requires-direct-knowledge-read: read the exact approved task in OBSIDIAN_VAULT_PATH' }
     if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..\..' }
     $RepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
     $manifestPath = Join-Path $RepoRoot '.agent-context\context-manifest.yaml'
@@ -140,10 +141,6 @@ try {
     $candidates = @()
     foreach ($relativePath in @($manifest.canonical) + @($areaRule.repository)) {
         $candidates += [pscustomobject]@{ Kind = 'repository'; Root = $RepoRoot; RelativePath = [string]$relativePath }
-    }
-    if ($TaskPath) {
-        $null = Resolve-ChildPath -Root $RepoRoot -RelativePath $TaskPath -ErrorCode 'task-path-outside-approved-roots'
-        $candidates += [pscustomobject]@{ Kind = 'repository'; Root = $RepoRoot; RelativePath = $TaskPath }
     }
     if ($vaultAvailable) {
         foreach ($relativePath in @($areaRule.external)) {

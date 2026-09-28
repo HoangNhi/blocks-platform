@@ -14,7 +14,8 @@
 
 ## Quy tắc cốt lõi
 
-- Repo là source of truth cho workflow cấp dự án.
+- Repo sở hữu hành vi sản phẩm public, hợp đồng và protocol cấp dự án. Mọi spec/plan/execution/review và evidence của task chỉ nằm trong Knowledge tại exact task path do owner duyệt.
+- Repo giữ code, feature, contract, runbook và kết quả; không lưu lịch sử development. Agent thực thi task phải có Knowledge access; thiếu thì `BLOCKED`, không fallback. Build/test/CI sản phẩm thông thường không cần vault.
 - Không nhảy thẳng vào mutation khi chưa phân loại task và xác định context.
 - Mọi task phải đi theo một workflow rõ ràng: brainstorm, spec, plan, execute, verify, review.
 - Khi một domain đã có context hoặc tài liệu repository rõ ràng, task mới phải ưu tiên route theo tài liệu repository của area/service đó thay vì giữ ở `cross-service` do quán tính lịch sử.
@@ -31,3 +32,5 @@
 | UI có phương án tương tác | `mockup-ui.md` khi thực sự cần |
 | Ghi chú trung gian | `notes.md` nếu có ích |
 | Trạng thái thực thi durable cho task đang chạy | `execution.md` cho task không tầm thường |
+| Mọi development task | Exact owner-approved path trong Knowledge qua `OBSIDIAN_VAULT_PATH`; không có bản sao trong repo |
+| Task evidence | `evidence/<run-id>/` trong chính task; `execution.md` giữ state duy nhất |

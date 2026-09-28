@@ -155,3 +155,65 @@ def test_sync_rewrites_impeccable_runtime_root_for_agents_output() -> None:
     assert "node .claude/skills/impeccable/scripts/context.mjs" in claude_text
     assert not agents_skill.read_bytes().startswith(b"\xef\xbb\xbf")
     assert not claude_skill.read_bytes().startswith(b"\xef\xbb\xbf")
+
+def test_sync_publishes_explicit_invocation_policy_for_agents_only() -> None:
+    temp_root = make_temp_dir()
+    repo_root = temp_root / "repo"
+    skill_root = repo_root / "agents" / "skills" / "solo" / "skills" / "alpha"
+    skill_root.mkdir(parents=True)
+    (skill_root / "SKILL.md").write_text(
+        "---\nname: alpha\ndescription: demo\n---\n",
+        encoding="utf-8",
+    )
+    (repo_root / "agents" / "skills-manifest.yaml").write_text(
+        textwrap.dedent(
+            """\
+            version: 1
+            entries:
+              - source_repo: solo
+                source_skill_path: skills/alpha
+                publish_mode: standalone
+                target_name: alpha
+                targets: codex,agy,claude
+                status: active
+                invocation: explicit
+            """
+        ),
+        encoding="utf-8",
+    )
+    result = run_sync(repo_root)
+    assert result.returncode == 0, result.stderr
+    policy = repo_root / ".agents" / "skills" / "alpha" / "agents" / "openai.yaml"
+    assert policy.read_text(encoding="utf-8") == "policy:\n  allow_implicit_invocation: false\n"
+    assert not (skill_root / "agents" / "openai.yaml").exists()
+    assert not (repo_root / ".claude" / "skills" / "alpha" / "agents" / "openai.yaml").exists()
+
+    # Repeat sync preserves policy without drift
+    result2 = run_sync(repo_root)
+    assert result2.returncode == 0, result2.stderr
+    assert policy.read_text(encoding="utf-8") == "policy:\n  allow_implicit_invocation: false\n"
+
+def test_sync_rejects_target_name_traversal() -> None:
+    temp_root = make_temp_dir()
+    repo_root = temp_root / "repo"
+    skill_root = repo_root / "agents" / "skills" / "solo" / "skills" / "alpha"
+    skill_root.mkdir(parents=True)
+    (skill_root / "SKILL.md").write_text("---\nname: alpha\ndescription: demo\n---\n", encoding="utf-8")
+    (repo_root / "agents" / "skills-manifest.yaml").write_text(
+        textwrap.dedent(
+            """\
+            version: 1
+            entries:
+              - source_repo: solo
+                source_skill_path: skills/alpha
+                publish_mode: standalone
+                target_name: ../outside-escape
+                targets: codex
+                status: active
+            """
+        ),
+        encoding="utf-8",
+    )
+    result = run_sync(repo_root)
+    assert result.returncode != 0
+    assert not (temp_root / "outside-escape").exists()

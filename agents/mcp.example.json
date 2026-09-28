@@ -10,11 +10,7 @@
     },
     "shadcn": {
       "command": "npx",
-      "args": ["-y", "shadcn@4.16.1", "mcp"]
-    },
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@monotool/context7-mcp@1.0.6"]
+      "args": ["-y", "shadcn@4.19.1", "mcp", "--cwd", "apps/web/Blocks.Web"]
     }
   }
 }

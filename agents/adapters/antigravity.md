@@ -10,7 +10,8 @@ Tài liệu này giúp Antigravity làm việc với Blocks theo phong cách tư
 2. `agents/protocol/core.md`
 3. `agents/protocol/context-routing.md`
 4. `agents/protocol/superpowers-compat.md`
-5. protocol chuyên biệt theo task
+5. Exact Knowledge task đã được owner duyệt qua `OBSIDIAN_VAULT_PATH`; thiếu access/path/approval hoặc context bắt buộc thì `BLOCKED`, không fallback vào repo.
+6. protocol chuyên biệt theo task
 
 ## Cách áp dụng
 
@@ -22,4 +23,4 @@ Tài liệu này giúp Antigravity làm việc với Blocks theo phong cách tư
 
 - Nếu không có browser capability, phải báo giới hạn verify UI.
 - Nếu không có script execution, phải nêu rõ bước nào cần người dùng hoặc runtime khác hỗ trợ.
-- Nếu có artifact system riêng, có thể dùng để đính kèm plan hoặc review nhưng không thay đổi cấu trúc artifact chuẩn của repo.
+- Artifact system riêng chỉ hiển thị hoặc dẫn tới task Knowledge; không tạo bản spec/plan/review/execution bền vững thứ hai trong repo.
