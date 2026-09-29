@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import success_response
 from tradelab_api.core.config import settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.live_credentials import (
     LiveCredentialCreateRequest,
@@ -75,15 +76,16 @@ def _mutation_payload(result) -> dict:
 def create_live_credential_route(
     request: LiveCredentialCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = create_live_credential(
-        LiveCredentialRepository(session),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_live_credential_provider(),
         request=LiveCredentialCreateRequestData(
             label=request.label,
             confirm_create=request.confirm_create,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             metadata=request.metadata,
             secret=_secret_request(request.api_key, request.api_secret),
         ),
@@ -94,8 +96,8 @@ def create_live_credential_route(
 
 
 @router.get("/live/credentials")
-def list_live_credentials_route(session: Session = Depends(get_db_session)) -> JSONResponse:
-    repository = LiveCredentialRepository(session)
+def list_live_credentials_route(session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    repository = LiveCredentialRepository(session, actor.workspace_id, actor.user_id)
     payload = [
         LiveCredentialMetadataResponse.model_validate(serialize_credential_ref(row)).model_dump(mode="json", by_alias=True)
         for row in repository.list_credential_refs()
@@ -104,8 +106,8 @@ def list_live_credentials_route(session: Session = Depends(get_db_session)) -> J
 
 
 @router.get("/live/credentials/{credential_ref_id}")
-def get_live_credential_route(credential_ref_id: UUID, session: Session = Depends(get_db_session)) -> JSONResponse:
-    row = LiveCredentialRepository(session).get_credential_ref(credential_ref_id)
+def get_live_credential_route(credential_ref_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    row = LiveCredentialRepository(session, actor.workspace_id, actor.user_id).get_credential_ref(credential_ref_id)
     if row is None:
         return success_response({"status": "not_found", "reasonCode": "live_credential_not_found"}, status_code=404)
     payload = LiveCredentialMetadataResponse.model_validate(serialize_credential_ref(row)).model_dump(mode="json", by_alias=True)
@@ -117,14 +119,15 @@ def validate_live_credential_route(
     credential_ref_id: UUID,
     request: LiveCredentialValidateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = validate_live_credential(
-        LiveCredentialRepository(session),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         credential_ref_id,
         request=LiveCredentialValidateRequestData(
             confirm_validate=request.confirm_validate,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
         provider=build_live_credential_provider(),
         validation_client=build_binance_account_validation_client(),
@@ -141,15 +144,16 @@ def rotate_live_credential_route(
     credential_ref_id: UUID,
     request: LiveCredentialRotateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = rotate_live_credential(
-        LiveCredentialRepository(session),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_live_credential_provider(),
         credential_ref_id,
         request=LiveCredentialRotateRequestData(
             confirm_rotate=request.confirm_rotate,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             secret=_secret_request(request.api_key, request.api_secret),
         ),
     )
@@ -163,15 +167,16 @@ def revoke_live_credential_route(
     credential_ref_id: UUID,
     request: LiveCredentialRevokeRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = revoke_live_credential(
-        LiveCredentialRepository(session),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_live_credential_provider(),
         credential_ref_id,
         request=LiveCredentialRevokeRequestData(
             confirm_revoke=request.confirm_revoke,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
     )
     if result.should_commit:

@@ -583,6 +583,21 @@ class BacktestEngine:
 
 
 def persist_backtest_execution(session: Session, execution: BacktestExecution) -> None:
+    ws_id = getattr(execution.bot_run, "workspace_id", None)
+    if ws_id is not None:
+        if execution.result is not None:
+            execution.result.workspace_id = ws_id
+        for signal in execution.signals:
+            signal.workspace_id = ws_id
+        for intent in execution.order_intents:
+            intent.workspace_id = ws_id
+        for order in execution.trade_orders:
+            order.workspace_id = ws_id
+        for log in execution.logs:
+            log.workspace_id = ws_id
+        for pos in execution.positions:
+            pos.workspace_id = ws_id
+
     session.add(execution.bot_run)
     if execution.result is not None:
         session.add(execution.result)

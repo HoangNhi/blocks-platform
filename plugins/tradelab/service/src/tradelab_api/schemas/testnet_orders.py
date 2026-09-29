@@ -8,13 +8,13 @@ from uuid import UUID
 from pydantic import Field
 
 from .common import CamelModel
+from .ownership_validation import OwnershipMutationModel
 
-class TestnetOrderPreviewRequest(CamelModel):
+class TestnetOrderPreviewRequest(OwnershipMutationModel):
     confirm_preview_only: bool = False
     idempotency_key: str
     client_action_id: str
     source: str = "strategy_lab"
-    actor: str = "local-user"
     strategy_id: UUID
     strategy_version_id: UUID
     source_run_id: UUID | None = None
@@ -144,10 +144,9 @@ class TestnetOrderListResponse(CamelModel):
     safety_status: str = "assisted_testnet_order_list_read_only"
     items: list[TestnetOrderListItemResponse] = Field(default_factory=list)
 
-class TestnetOrderConfirmSubmitRequest(CamelModel):
+class TestnetOrderConfirmSubmitRequest(OwnershipMutationModel):
     confirm_testnet_order: bool = False
     idempotency_key: str
-    actor: str = "local-user"
 
 class TestnetOrderConfirmSubmitResponse(CamelModel):
     status: str
@@ -165,11 +164,10 @@ class TestnetOrderConfirmSubmitResponse(CamelModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class TestnetOrderCancelRequest(CamelModel):
+class TestnetOrderCancelRequest(OwnershipMutationModel):
     confirm_testnet_cancel: bool = False
     idempotency_key: str
     reason: str = "user_requested"
-    actor: str = "local-user"
 
 
 class TestnetOrderCancelResponse(CamelModel):
@@ -186,11 +184,10 @@ class TestnetOrderCancelResponse(CamelModel):
     audit_event_ids: list[str] = Field(default_factory=list)
     details: dict[str, Any] = Field(default_factory=dict)
 
-class TestnetOrderReconcileRequest(CamelModel):
+class TestnetOrderReconcileRequest(OwnershipMutationModel):
     order_id: UUID
     confirm_testnet_reconcile: bool = False
     trigger: str = "manual"
-    actor: str = "local-user"
 
 class TestnetOrderReconcileResponse(CamelModel):
     status: str
@@ -207,10 +204,9 @@ class TestnetOrderReconcileResponse(CamelModel):
     audit_event_ids: list[str] = Field(default_factory=list)
     details: dict[str, Any] = Field(default_factory=dict)
 
-class TestnetOrderJournalProjectionRequest(CamelModel):
+class TestnetOrderJournalProjectionRequest(OwnershipMutationModel):
     confirm_testnet_journal_projection: bool = False
     source: str = "strategy_lab"
-    actor: str = "local-user"
 
 class TestnetOrderJournalProjectionResponse(CamelModel):
     status: str

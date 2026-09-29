@@ -115,3 +115,9 @@ For research, replace the invocation with `codex -C $repoRoot -s read-only -a on
 ## Runtime smoke
 
 Run `bash platform/apphost/validate-browser-smoke.sh` in an environment containing setsid, uv, dotnet and node, with locally configured BLOCKS_SMOKE_POSTGRES_* values. Use BLOCKS_SMOKE_ENVIRONMENT=Production for a production-mode smoke check. An unavailable runtime is not a PASS result; capture task evidence only in the exact Knowledge task.
+
+## TradeLab ownership test safety
+
+TradeLab tests block SQLAlchemy connections unless the actual PostgreSQL database is named `tradelab_test` and `TRADELAB_TEST_DATABASE_RESET=true` is explicitly set. Enabling this flag permits destructive test resets; use only a separately approved disposable target, never application or production data. Database-dependent skips are not migration or tenant-isolation evidence.
+
+Ownership migrations are maintenance operations, not application startup work. Obtain an approved target, backup/window and rollback procedure before invoking them. Private startup seeding is disabled. The operator-only baseline CLI requires `--workspace-id <UUID> --actor-id <UUID>`; it never infers either identity and must run only against an approved target.

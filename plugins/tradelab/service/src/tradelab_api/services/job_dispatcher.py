@@ -41,23 +41,7 @@ class JobDispatcher:
         self.stats = DispatcherStats()
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-            
-        try:
-            from sqlalchemy import text
-            session = self._session_factory()
-            session.execute(text("UPDATE bot_run SET status='failed', pipeline_status='failed' WHERE status IN ('queued', 'running', 'waiting_for_data')"))
-            session.execute(text("UPDATE market_data_import_job SET status='failed' WHERE status IN ('queued', 'running')"))
-            session.commit()
-            session.close()
-            print("CLEARED ALL STUCK BOT RUNS", flush=True)
-        except Exception as e:
-            print(f"Failed to clear runs: {e}")
-            
-        self._stop_event.clear()
-        self._thread = Thread(target=self._run_loop, name="tradelab-job-dispatcher", daemon=True)
-        self._thread.start()
+        raise RuntimeError("workspace_authority_recheck_unavailable")
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -66,37 +50,7 @@ class JobDispatcher:
             self._thread = None
 
     def poll_once(self) -> DispatcherStats:
-        session = self._session_factory()
-        try:
-            market_repository = MarketDataRepository(session)
-            run_repository = RunRepository(session)
-            strategy_repository = StrategyRepository(session)
-            benchmark_repository = BenchmarkRepository(session)
-
-            import_job = market_repository.claim_next_queued_import_job(worker_id=self._worker_id)
-            if import_job is not None:
-                self._execute_import_job(session, market_repository, run_repository, import_job)
-                self.stats.processed_import_jobs += 1
-
-            next_run = run_repository.claim_next_queued_bot_run()
-            if next_run is not None:
-                self._execute_backtest_run(
-                    session,
-                    market_repository,
-                    run_repository,
-                    strategy_repository,
-                    benchmark_repository,
-                    next_run,
-                )
-                self.stats.processed_backtests += 1
-
-            session.commit()
-            return self.stats
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+        raise RuntimeError("workspace_authority_recheck_unavailable")
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():

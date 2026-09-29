@@ -54,13 +54,14 @@ public sealed class AuthorizationController : BaseController<AuthorizationContro
             });
         }
 
-        bool hasPermission;
+        ScopedAuthorizationResult result;
         try
         {
-            hasPermission = await _authorizationService.CheckAsync(
+            result = await _authorizationService.CheckScopedAsync(
                 userId,
                 request.PermissionKey,
                 request.Action,
+                request.WorkspaceId,
                 cancellationToken: HttpContext.RequestAborted);
         }
         catch (Exception)
@@ -70,7 +71,44 @@ public sealed class AuthorizationController : BaseController<AuthorizationContro
 
         return Ok(new BaseResponse<FunctionalPermissionCheckResponse>
         {
-            Data = new FunctionalPermissionCheckResponse { HasPermission = hasPermission },
+            Data = new FunctionalPermissionCheckResponse
+            {
+                HasPermission = result.HasPermission,
+                UserId = result.UserId,
+                Username = result.Username,
+                WorkspaceId = result.WorkspaceId
+            },
+            Success = true
+        });
+    }
+
+    [HttpGet("workspaces")]
+    public async Task<IActionResult> GetWorkspaces()
+    {
+        var userIdClaim = User.Claims.FirstOrDefault(claim => claim.Type == "name")?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new BaseResponse<string>
+            {
+                Success = false,
+                StatusCode = 401,
+                Message = "Bạn chưa đăng nhập"
+            });
+        }
+
+        List<WorkspaceAccessDto> workspaces;
+        try
+        {
+            workspaces = await _authorizationService.GetUserWorkspacesAsync(userId, HttpContext.RequestAborted);
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return Ok(new BaseResponse<List<WorkspaceAccessDto>>
+        {
+            Data = workspaces,
             Success = true
         });
     }

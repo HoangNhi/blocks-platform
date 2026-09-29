@@ -13,7 +13,7 @@ from tradelab_api.services.testnet_order_state_repository import TestnetOrderSta
 
 from test_testnet_order_state_repository import _intent_payload
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 @pytest.fixture()

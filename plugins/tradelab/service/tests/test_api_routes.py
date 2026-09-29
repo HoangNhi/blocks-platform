@@ -1,12 +1,5 @@
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
-
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -95,7 +88,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
                 "slug": f"test-group-{suffix}",
                 "description": "Integration test group",
                 "metadata": {"visibility": "test", "purpose": "automated_test_fixture"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -113,7 +105,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -128,7 +119,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
 def on_candle(ctx):
     return None
 """.strip(),
-                "created_by": "codex",
             },
         ),
         201,
@@ -209,7 +199,6 @@ def test_paper_draft_bot_creation_is_allowed_without_creating_run() -> None:
                 "runtime_config": {"exchange": "binance"},
                 "risk_config": {"max_order_percent": 10},
                 "metadata": {"purpose": "paper-draft-boundary"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -256,7 +245,6 @@ def test_paper_draft_bot_creation_accepts_credential_boundary_metadata() -> None
                         "updatedAt": "2026-05-16T00:00:00Z",
                     }
                 },
-                "created_by": "codex",
             },
         ),
         201,
@@ -293,7 +281,6 @@ def test_bot_creation_rejects_credential_boundary_secret_like_fields_without_ech
                         "nested": {"privateKey": "PRIVATE-WAS-HERE"},
                     }
                 },
-                "created_by": "codex",
             },
         ),
         400,
@@ -329,7 +316,6 @@ def test_bot_creation_rejects_invalid_credential_boundary_status() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {"credentialBoundary": {"status": "paper_trading_enabled"}},
-                "created_by": "codex",
             },
         ),
         400,
@@ -367,7 +353,6 @@ def test_paper_non_draft_bot_creation_is_rejected_with_machine_readable_error() 
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         400,
@@ -401,7 +386,6 @@ def test_live_bot_creation_is_rejected_with_machine_readable_error() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         400,
@@ -526,7 +510,6 @@ def test_paper_draft_with_credential_boundary_is_still_not_runnable() -> None:
                         },
                     }
                 },
-                "created_by": "codex",
             },
         ),
         201,
@@ -572,7 +555,6 @@ def test_backtest_preflight_and_pipeline_use_envelopes() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -1049,7 +1031,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
                 "slug": f"group-{suffix}",
                 "description": "Integration test group",
                 "metadata": {"visibility": "test", "purpose": "automated_test_fixture"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -1067,7 +1048,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -1082,7 +1062,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
 def on_candle(ctx):
     return None
 """.strip(),
-                "created_by": "codex",
             },
         ),
         201,
@@ -1685,13 +1664,30 @@ def test_preflight_blocks_api_bypass() -> None:
             volume=Decimal("10"),
             source="tradelab-local-fill-smoke-fixture",
         )
-        session.add_all([bot, c1, c2, c3])
+        session.add(bot)
+        for c in [c1, c2, c3]:
+            existing_c = session.query(MarketCandle).filter(
+                MarketCandle.exchange == c.exchange,
+                MarketCandle.symbol == c.symbol,
+                MarketCandle.timeframe == c.timeframe,
+                MarketCandle.open_time == c.open_time,
+            ).first()
+            if existing_c is not None:
+                existing_c.source = c.source
+            else:
+                session.add(c)
         session.commit()
         bot_id = bot.id
     finally:
         session.close()
 
     try:
+        with SessionLocal(bind=get_engine()) as session:
+            initial_repair_job_count = session.query(MarketDataImportJob).filter(
+                MarketDataImportJob.dataset_key == "binance:BTCUSDT:1h",
+                MarketDataImportJob.job_type == "repair"
+            ).count()
+
         response = client.post(
             f"/api/tradelab/bots/{bot_id}/backtests",
             json={
@@ -1716,7 +1712,7 @@ def test_preflight_blocks_api_bypass() -> None:
                 MarketDataImportJob.dataset_key == "binance:BTCUSDT:1h",
                 MarketDataImportJob.job_type == "repair"
             ).count()
-            assert job_count == 0
+            assert job_count == initial_repair_job_count
     finally:
         with SessionLocal(bind=get_engine()) as session:
             session.query(MarketCandle).filter(MarketCandle.source == "tradelab-local-fill-smoke-fixture").delete()

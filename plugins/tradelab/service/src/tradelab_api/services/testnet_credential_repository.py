@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
@@ -11,8 +11,17 @@ from tradelab_api.services.credential_redaction import sanitize_credential_paylo
 
 
 class TestnetCredentialRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        workspace_id: UUID,
+        owner_user_id: UUID,
+    ) -> None:
+        if not isinstance(workspace_id, UUID) or not isinstance(owner_user_id, UUID):
+            raise ValueError("Verified workspace_id and owner_user_id are required.")
         self.session = session
+        self.workspace_id = workspace_id
+        self.owner_user_id = owner_user_id
 
     def create_credential_ref(
         self,
@@ -29,6 +38,8 @@ class TestnetCredentialRepository:
         actor: str,
     ) -> TestnetCredentialRef:
         row = TestnetCredentialRef(
+            workspace_id=self.workspace_id,
+            owner_user_id=self.owner_user_id,
             exchange=exchange,
             environment=environment,
             label=label,
@@ -57,6 +68,7 @@ class TestnetCredentialRepository:
         metadata: dict[str, Any] | None = None,
     ) -> TestnetCredentialAuditEvent:
         row = TestnetCredentialAuditEvent(
+            workspace_id=self.workspace_id,
             credential_ref_id=credential_ref_id,
             action=action,
             actor=actor,
@@ -71,7 +83,6 @@ class TestnetCredentialRepository:
         self.session.flush()
         return row
 
-
     def create_secret_row(
         self,
         *,
@@ -82,6 +93,7 @@ class TestnetCredentialRepository:
         actor: str,
     ) -> TestnetCredentialSecret:
         row = TestnetCredentialSecret(
+            workspace_id=self.workspace_id,
             credential_ref_id=credential_ref_id,
             vault_secret_ref=vault_secret_ref,
             vault_provider="local_dev_encrypted",
@@ -94,30 +106,46 @@ class TestnetCredentialRepository:
         return row
 
     def get_active_secret_by_ref(self, vault_secret_ref: str) -> TestnetCredentialSecret | None:
-        statement = select(TestnetCredentialSecret).where(
+        statement = select(TestnetCredentialSecret).join(
+            TestnetCredentialRef,
+            TestnetCredentialRef.id == TestnetCredentialSecret.credential_ref_id,
+        ).where(
+            TestnetCredentialRef.workspace_id == self.workspace_id,
+            TestnetCredentialRef.owner_user_id == self.owner_user_id,
+            TestnetCredentialRef.is_deleted.is_(False),
             TestnetCredentialSecret.vault_secret_ref == vault_secret_ref,
             TestnetCredentialSecret.is_active.is_(True),
             TestnetCredentialSecret.is_deleted.is_(False),
         )
+        statement = statement.where(TestnetCredentialSecret.workspace_id == self.workspace_id)
         return self.session.scalars(statement).first()
 
     def deactivate_secret_rows(self, *, credential_ref_id: UUID, actor: str) -> None:
-        statement = select(TestnetCredentialSecret).where(
+        statement = select(TestnetCredentialSecret).join(
+            TestnetCredentialRef,
+            TestnetCredentialRef.id == TestnetCredentialSecret.credential_ref_id,
+        ).where(
+            TestnetCredentialRef.workspace_id == self.workspace_id,
+            TestnetCredentialRef.owner_user_id == self.owner_user_id,
+            TestnetCredentialRef.is_deleted.is_(False),
             TestnetCredentialSecret.credential_ref_id == credential_ref_id,
             TestnetCredentialSecret.is_active.is_(True),
             TestnetCredentialSecret.is_deleted.is_(False),
         )
+        statement = statement.where(TestnetCredentialSecret.workspace_id == self.workspace_id)
         for row in self.session.scalars(statement).all():
             row.is_active = False
             row.updated_by = actor
+
     def get_credential_ref(self, credential_ref_id: UUID) -> TestnetCredentialRef | None:
-        return self.session.get(TestnetCredentialRef, credential_ref_id)
+        stmt = select(TestnetCredentialRef).where(TestnetCredentialRef.id == credential_ref_id)
+        stmt = stmt.where(TestnetCredentialRef.workspace_id == self.workspace_id)
+        stmt = stmt.where(TestnetCredentialRef.owner_user_id == self.owner_user_id)
+        return self.session.scalars(stmt).first()
 
     def list_credential_refs(self) -> list[TestnetCredentialRef]:
-        statement = (
-            select(TestnetCredentialRef)
-            .where(TestnetCredentialRef.is_deleted.is_(False))
-            .order_by(TestnetCredentialRef.created_at.desc())
-        )
+        statement = select(TestnetCredentialRef).where(TestnetCredentialRef.is_deleted.is_(False))
+        statement = statement.where(TestnetCredentialRef.workspace_id == self.workspace_id)
+        statement = statement.where(TestnetCredentialRef.owner_user_id == self.owner_user_id)
+        statement = statement.order_by(TestnetCredentialRef.created_at.desc())
         return list(self.session.scalars(statement).all())
-

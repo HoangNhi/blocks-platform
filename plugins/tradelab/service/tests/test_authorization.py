@@ -15,10 +15,16 @@ from tradelab_api.core.authorization import (
 from tradelab_api.main import app
 
 
-def build_request(path: str = '/api/tradelab/strategies', authorization: str | None = 'Bearer token') -> Request:
+def build_request(
+    path: str = '/api/tradelab/strategies',
+    authorization: str | None = 'Bearer token',
+    workspace_id: str | None = '11111111-1111-1111-1111-111111111111',
+) -> Request:
     headers = []
     if authorization is not None:
         headers.append((b'authorization', authorization.encode()))
+    if workspace_id is not None:
+        headers.append((b'x-workspace-id', workspace_id.encode()))
     scope = {
         'type': 'http',
         'method': 'GET',
@@ -170,7 +176,10 @@ def test_tradelab_route_denies_without_functional_permission(
 
     response = TestClient(app).get(
         '/api/tradelab/strategies',
-        headers={'Authorization': 'Bearer token'},
+        headers={
+            'Authorization': 'Bearer token',
+            'X-Workspace-Id': '11111111-1111-1111-1111-111111111111',
+        },
     )
 
     assert response.status_code == status_code

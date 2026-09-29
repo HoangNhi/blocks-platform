@@ -5,38 +5,35 @@ from typing import Any
 from pydantic import Field
 
 from .common import CamelModel
+from .ownership_validation import OwnershipMutationModel
 
 
-class TestnetCredentialCreateRequest(CamelModel):
+class TestnetCredentialCreateRequest(OwnershipMutationModel):
     label: str
     confirm_create: bool = False
     idempotency_key: str
-    actor: str = "local-user"
     metadata: dict[str, Any] = Field(default_factory=dict)
     api_key: str | None = None
     api_secret: str | None = None
 
 
-class TestnetCredentialValidateRequest(CamelModel):
+class TestnetCredentialValidateRequest(OwnershipMutationModel):
     confirm_validate: bool = False
     idempotency_key: str
-    actor: str = "local-user"
     fake_can_withdraw: bool = False
     fake_margin_or_futures_enabled: bool = False
 
 
-class TestnetCredentialRotateRequest(CamelModel):
+class TestnetCredentialRotateRequest(OwnershipMutationModel):
     confirm_rotate: bool = False
     idempotency_key: str
-    actor: str = "local-user"
     api_key: str | None = None
     api_secret: str | None = None
 
 
-class TestnetCredentialRevokeRequest(CamelModel):
+class TestnetCredentialRevokeRequest(OwnershipMutationModel):
     confirm_revoke: bool = False
     idempotency_key: str
-    actor: str = "local-user"
 
 
 class TestnetCredentialMutationResponse(CamelModel):

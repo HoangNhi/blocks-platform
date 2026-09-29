@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import os
 
 from fastapi.testclient import TestClient
-
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.main import app  # noqa: E402
 from tradelab_api.services.testnet_order_cancel import TestnetOrderCancelResult  # noqa: E402
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def test_cancel_route_returns_success_envelope_and_commits(monkeypatch) -> None:
@@ -34,7 +31,6 @@ def test_cancel_route_returns_success_envelope_and_commits(monkeypatch) -> None:
             "confirmTestnetCancel": True,
             "idempotencyKey": "cancel-api-1",
             "reason": "user_requested",
-            "actor": "admin",
         },
     )
 

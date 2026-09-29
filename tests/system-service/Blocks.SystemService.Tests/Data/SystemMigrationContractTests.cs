@@ -17,7 +17,7 @@ public class SystemMigrationContractTests
         Assert.Equal(resources.Order(StringComparer.Ordinal), resources);
         Assert.EndsWith(".000_test.sql", resources[0], StringComparison.Ordinal);
         Assert.EndsWith(".001_test.sql", resources[1], StringComparison.Ordinal);
-        Assert.Equal("select 1;\n", SystemMigrationHostedService.ReadMigrationSql(typeof(SystemMigrationContractTests).Assembly, resources[0]));
+        Assert.Equal("select 1;\n", SystemMigrationHostedService.ReadMigrationSql(typeof(SystemMigrationContractTests).Assembly, resources[0]).Replace("\r\n", "\n"));
     }
 
     [Fact]

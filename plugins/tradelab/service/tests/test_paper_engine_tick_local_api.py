@@ -6,7 +6,7 @@ from tradelab_api.api import paper as paper_api
 from tradelab_api.main import app
 from tradelab_api.services.paper_engine_tick_local import PaperEngineTickLocalResult
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 def assert_success_envelope(response, semantic_status: int) -> dict[str, object]:
     assert response.status_code == 200

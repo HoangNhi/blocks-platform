@@ -46,6 +46,17 @@ def install_exception_handlers(app: FastAPI) -> None:
     async def _handle_validation_exception(_: Request, exc: RequestValidationError) -> JSONResponse:
         errors = exc.errors()
         first_error = errors[0]["msg"] if errors else "Validation failed."
+        is_ownership_spoof = any("governed by server security context" in str(e) for e in errors)
+        if is_ownership_spoof:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "Success": False,
+                    "StatusCode": 422,
+                    "Data": None,
+                    "Message": first_error,
+                },
+            )
         return error_response(400, first_error)
 
     @app.exception_handler(Exception)

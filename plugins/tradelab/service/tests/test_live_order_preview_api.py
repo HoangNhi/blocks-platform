@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-import os
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
 from tradelab_api.main import app  # noqa: E402
@@ -16,7 +13,7 @@ from tradelab_api.services.live_order_preview import LiveOrderPreviewResult  # n
 
 apply_schema_compatibility()
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 @pytest.fixture()
@@ -56,7 +53,6 @@ def test_preview_route_blocks_by_default_kill_switch() -> None:
             "idempotencyKey": "preview-1",
             "clientActionId": "action-1",
             "source": "strategy_lab",
-            "actor": "admin",
             "strategyId": str(uuid4()),
             "strategyVersionId": str(uuid4()),
             "credentialRefId": str(uuid4()),
@@ -115,7 +111,6 @@ def test_preview_route_blocks_when_real_mode_is_open_but_proof_window_is_closed(
             "idempotencyKey": "preview-proof-window-1",
             "clientActionId": "action-proof-window-1",
             "source": "strategy_lab",
-            "actor": "admin",
             "strategyId": str(uuid4()),
             "strategyVersionId": str(uuid4()),
             "credentialRefId": str(uuid4()),

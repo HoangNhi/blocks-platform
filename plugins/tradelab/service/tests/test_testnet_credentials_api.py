@@ -8,7 +8,7 @@ from tradelab_api.api import testnet_credentials as credentials_api
 from tradelab_api.main import app
 from tradelab_api.services.testnet_credential_vault import TestnetCredentialMutationResult as MutationResult
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def assert_success_envelope(response, semantic_status: int) -> dict[str, object]:
@@ -59,7 +59,6 @@ def test_create_testnet_credential_route_returns_success_envelope_and_commits(mo
                     "label": "Fake testnet",
                     "confirmCreate": True,
                     "idempotencyKey": "click-1",
-                    "actor": "admin",
                     "metadata": {"safe": "yes"},
                 },
             ),
@@ -112,7 +111,6 @@ def test_create_testnet_credential_real_secret_payload_is_blocked_without_echo(m
             "label": "Fake testnet",
             "confirmCreate": True,
             "idempotencyKey": "click-secret",
-            "actor": "admin",
             "metadata": {"apiSecret": "SECRET-WAS-HERE"},
         },
     )

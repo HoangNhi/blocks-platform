@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload
 
 from tradelab_api.db.models import (
     BacktestPosition,
@@ -16,14 +16,17 @@ from tradelab_api.db.models import (
     StrategySignal,
     TradeOrder,
 )
+from tradelab_api.services.scoped_repository import ScopedRepository
 
-from .repository_base import CRUDRepository
 
-
-class RunRepository(CRUDRepository[BotRun]):
+class RunRepository(ScopedRepository[BotRun]):
     model = BotRun
 
+    def __init__(self, session: Session, workspace_id: UUID) -> None:
+        super().__init__(session, workspace_id)
+
     def create_bot_run(self, **fields: object) -> BotRun:
+        fields.pop("workspace_id", None)
         return self.create(BotRun(**fields))
 
     def list_bot_runs(
@@ -33,15 +36,15 @@ class RunRepository(CRUDRepository[BotRun]):
         status: str | None = None,
         limit: int | None = None,
     ) -> list[BotRun]:
-        query = self.session.query(BotRun)
+        stmt = self._base_select()
         if strategy_id is not None:
-            query = query.filter(BotRun.strategy_id == strategy_id)
+            stmt = stmt.where(BotRun.strategy_id == strategy_id)
         if status is not None:
-            query = query.filter(BotRun.status == status)
-        query = query.order_by(BotRun.created_at.desc())
+            stmt = stmt.where(BotRun.status == status)
+        stmt = stmt.order_by(BotRun.created_at.desc())
         if limit is not None:
-            query = query.limit(limit)
-        return list(query.all())
+            stmt = stmt.limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
 
     def list_completed_bot_runs(
         self,
@@ -49,13 +52,13 @@ class RunRepository(CRUDRepository[BotRun]):
         strategy_id: UUID | None = None,
         limit: int | None = None,
     ) -> list[BotRun]:
-        query = self.session.query(BotRun).filter(BotRun.status == "completed")
+        stmt = self._base_select().where(BotRun.status == "completed")
         if strategy_id is not None:
-            query = query.filter(BotRun.strategy_id == strategy_id)
-        query = query.order_by(BotRun.finished_at.desc().nullslast(), BotRun.created_at.desc())
+            stmt = stmt.where(BotRun.strategy_id == strategy_id)
+        stmt = stmt.order_by(BotRun.finished_at.desc().nullslast(), BotRun.created_at.desc())
         if limit is not None:
-            query = query.limit(limit)
-        return list(query.all())
+            stmt = stmt.limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
 
     def list_strategy_pipeline_runs(
         self,
@@ -66,19 +69,19 @@ class RunRepository(CRUDRepository[BotRun]):
         newest_first: bool = True,
         limit: int | None = None,
     ) -> list[BotRun]:
-        query = self.session.query(BotRun)
+        stmt = self._base_select()
         status_filters = [BotRun.pipeline_status.in_(tuple(sorted(pipeline_statuses)))]
         if include_run_status:
             status_filters.append(BotRun.status.in_(tuple(sorted(pipeline_statuses))))
-        query = query.filter(BotRun.strategy_id == strategy_id).filter(or_(*status_filters))
+        stmt = stmt.where(BotRun.strategy_id == strategy_id, or_(*status_filters))
         last_activity = func.coalesce(BotRun.finished_at, BotRun.started_at, BotRun.created_at)
         if newest_first:
-            query = query.order_by(last_activity.desc(), BotRun.created_at.desc())
+            stmt = stmt.order_by(last_activity.desc(), BotRun.created_at.desc())
         else:
-            query = query.order_by(last_activity.asc(), BotRun.created_at.asc())
+            stmt = stmt.order_by(last_activity.asc(), BotRun.created_at.asc())
         if limit is not None:
-            query = query.limit(limit)
-        return list(query.all())
+            stmt = stmt.limit(limit)
+        return list(self.session.execute(stmt).scalars().all())
 
     def get_bot_run(self, run_id: UUID) -> BotRun | None:
         return self.get_by_id(run_id, active_only=False)
@@ -89,10 +92,10 @@ class RunRepository(CRUDRepository[BotRun]):
             .where(MarketDataImportJob.id == BotRun.data_job_id)
             .scalar_subquery()
         )
-        run = (
-            self.session.query(BotRun)
-            .filter(BotRun.status == "queued")
-            .filter(
+        stmt = (
+            self._base_select()
+            .where(BotRun.status == "queued")
+            .where(
                 or_(
                     BotRun.data_job_id.is_(None),
                     data_job_status == "completed",
@@ -101,8 +104,9 @@ class RunRepository(CRUDRepository[BotRun]):
             )
             .order_by(BotRun.created_at.asc())
             .with_for_update(skip_locked=True)
-            .first()
+            .limit(1)
         )
+        run = self.session.execute(stmt).scalar_one_or_none()
         if run is None:
             return None
         run.status = "running"
@@ -138,6 +142,8 @@ class RunRepository(CRUDRepository[BotRun]):
         *,
         link_status: str = "waiting",
     ) -> None:
+        if getattr(run, "workspace_id", None) != self.workspace_id:
+            raise PermissionError("Cannot link data job for run belonging to another workspace.")
         run.data_job_id = import_job.id
         run.pipeline_context = {
             **dict(run.pipeline_context or {}),
@@ -148,42 +154,61 @@ class RunRepository(CRUDRepository[BotRun]):
         self.session.flush()
 
     def list_bot_run_logs(self, run_id: UUID) -> list[StrategyLog]:
-        return list(
-            self.session.query(StrategyLog)
-            .filter(StrategyLog.bot_run_id == run_id)
+        run = self.get_bot_run(run_id)
+        if run is None:
+            return []
+        stmt = (
+            select(StrategyLog)
+            .where(StrategyLog.bot_run_id == run_id, StrategyLog.workspace_id == self.workspace_id)
             .order_by(StrategyLog.created_at)
-            .all()
         )
+        return list(self.session.execute(stmt).scalars().all())
 
     def list_bot_run_orders(self, run_id: UUID) -> list[TradeOrder]:
-        return list(
-            self.session.query(TradeOrder)
+        run = self.get_bot_run(run_id)
+        if run is None:
+            return []
+        stmt = (
+            select(TradeOrder)
             .options(joinedload(TradeOrder.order_intent).joinedload(OrderIntent.strategy_signal))
-            .filter(TradeOrder.bot_run_id == run_id)
+            .where(TradeOrder.bot_run_id == run_id, TradeOrder.workspace_id == self.workspace_id)
             .order_by(TradeOrder.created_at)
-            .all()
         )
+        return list(self.session.execute(stmt).scalars().all())
 
     def list_bot_run_signals(self, run_id: UUID) -> list[StrategySignal]:
-        return list(
-            self.session.query(StrategySignal)
-            .filter(StrategySignal.bot_run_id == run_id)
+        run = self.get_bot_run(run_id)
+        if run is None:
+            return []
+        stmt = (
+            select(StrategySignal)
+            .where(StrategySignal.bot_run_id == run_id, StrategySignal.workspace_id == self.workspace_id)
             .order_by(StrategySignal.created_at)
-            .all()
         )
+        return list(self.session.execute(stmt).scalars().all())
 
     def get_bot_run_result(self, run_id: UUID) -> BacktestResult | None:
-        return self.session.query(BacktestResult).filter(BacktestResult.bot_run_id == run_id).one_or_none()
+        run = self.get_bot_run(run_id)
+        if run is None:
+            return None
+        stmt = select(BacktestResult).where(
+            BacktestResult.bot_run_id == run_id,
+            BacktestResult.workspace_id == self.workspace_id,
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
 
     def list_bot_run_trades(self, run_id: UUID) -> list[TradeOrder]:
         return self.list_bot_run_orders(run_id)
 
     def get_backtest_positions(self, run_id: UUID) -> list[BacktestPosition]:
-        return (
-            self.session.query(BacktestPosition)
-            .filter(BacktestPosition.run_id == run_id)
-            .all()
+        run = self.get_bot_run(run_id)
+        if run is None:
+            return []
+        stmt = select(BacktestPosition).where(
+            BacktestPosition.run_id == run_id,
+            BacktestPosition.workspace_id == self.workspace_id,
         )
+        return list(self.session.execute(stmt).scalars().all())
 
     def get_bot_run_analysis_inputs(self, run_id: UUID) -> dict[str, object]:
         run = self.get_bot_run(run_id)

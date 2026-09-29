@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import error_response, success_response
 from tradelab_api.core.config import get_settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.paper import (
     PaperEngineTickLocalRequest,
@@ -99,9 +100,10 @@ def get_paper_scheduler_status_route(request: Request) -> JSONResponse:
 def preview_paper_session(
     request: PaperSessionPreviewRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id)
     market_repository = MarketDataRepository(session)
     risk_policy_override = (
         request.risk_policy_override.model_dump(mode="python", exclude_none=True)
@@ -134,9 +136,10 @@ def preview_paper_session(
 def start_paper_session_route(
     request: PaperSessionStartRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id)
     market_repository = MarketDataRepository(session)
     paper_repository = PaperSessionRepository(session)
     risk_policy_override = (
@@ -180,6 +183,7 @@ def start_paper_session_route(
 def tick_local_paper_engine_route(
     request: PaperEngineTickLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = execute_local_paper_engine_tick(
         session,
@@ -202,6 +206,7 @@ def run_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionRunLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = execute_local_paper_session_run(
         session,
@@ -226,6 +231,7 @@ def cancel_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionCancelLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     paper_repository = PaperSessionRepository(session)
     result = execute_local_paper_session_cancel(
@@ -249,6 +255,7 @@ def resume_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionResumeLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     paper_repository = PaperSessionRepository(session)
     result = execute_local_paper_session_resume(
@@ -275,9 +282,10 @@ def retry_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionRetryLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id)
     market_repository = MarketDataRepository(session)
     paper_repository = PaperSessionRepository(session)
     result = execute_local_paper_session_retry(
@@ -309,6 +317,7 @@ def list_paper_sessions_route(
     status: str | None = None,
     limit: int | None = None,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     paper_repository = PaperSessionRepository(session)
     try:
@@ -330,6 +339,7 @@ def list_paper_sessions_route(
 def get_paper_session_resume_readiness_route(
     session_id: UUID,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     paper_repository = PaperSessionRepository(session)
     try:
@@ -344,6 +354,7 @@ def get_paper_session_resume_readiness_route(
 def get_paper_session_detail_route(
     session_id: UUID,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     paper_repository = PaperSessionRepository(session)
     try:

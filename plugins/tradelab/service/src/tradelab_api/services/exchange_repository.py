@@ -5,9 +5,10 @@ from uuid import UUID
 from tradelab_api.db.models import ExchangeConnection, ExchangeSymbol
 
 from .repository_base import CRUDRepository
+from .scoped_repository import ScopedCredentialRepository
 
 
-class ExchangeRepository(CRUDRepository[ExchangeConnection]):
+class ExchangeConnectionRepository(ScopedCredentialRepository[ExchangeConnection]):
     model = ExchangeConnection
 
     def create_exchange_connection(self, **fields: object) -> ExchangeConnection:
@@ -21,6 +22,9 @@ class ExchangeRepository(CRUDRepository[ExchangeConnection]):
 
     def update_exchange_connection(self, connection: ExchangeConnection, **fields: object) -> ExchangeConnection:
         return self.update(connection, **fields)
+
+class ExchangeRepository(CRUDRepository[ExchangeSymbol]):
+    model = ExchangeSymbol
 
     def create_exchange_symbol(self, **fields: object) -> ExchangeSymbol:
         obj = ExchangeSymbol(**fields)
