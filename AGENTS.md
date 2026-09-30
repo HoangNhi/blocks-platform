@@ -144,7 +144,7 @@ Prefer:
 
 Deployment and branch rules:
 
-- Production branch is `master`; production PRs, CI/CD targets, and deployment checks use `master` unless user explicitly changes branch strategy.
+- Production branch is `main`; production PRs, CI/CD targets, and deployment checks use `main` unless user explicitly changes branch strategy.
 - For this lab-style deployment, apply requested non-secret production settings directly in the owning service's `appsettings.Production.json` before introducing external secret infrastructure.
 - Secret values remain outside committed configuration and documentation.
 

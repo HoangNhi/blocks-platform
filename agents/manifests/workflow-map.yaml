@@ -37,6 +37,7 @@ workflows:
     protocols:
       - agents/protocol/core.md
       - agents/protocol/context-routing.md
+      - agents/protocol/development-workflow.md
       - agents/protocol/review-workflow.md
     artifacts:
       - spec.md
