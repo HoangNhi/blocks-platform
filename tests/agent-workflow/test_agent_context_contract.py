@@ -76,7 +76,7 @@ def test_root_agents_routing_and_core_invariants() -> None:
     assert "OBSIDIAN_VAULT_PATH" in agents_text
     assert "BLOCKED" in agents_text
     assert "browser-use" in agents_text
-    assert "master" in agents_text
+    assert "Production branch is `main`" in agents_text
     assert "secret" in agents_text.lower()
 
 def test_project_codex_config_and_mcp_example_contract() -> None:

@@ -106,6 +106,11 @@ jobs:
       - name: Check TradeLab Ruff
         working-directory: plugins/tradelab/service
         run: uv run --python 3.12 --locked ruff check .
+      - name: Build isolated TradeLab runner
+        run: |
+          docker build -t tradelab-ci-runner plugins/tradelab/runner
+          runner_image=$(docker image inspect --format '{{.Id}}' tradelab-ci-runner)
+          echo "TRADELAB_RUNNER_IMAGE=$runner_image" >> "$GITHUB_ENV"
       - name: Test TradeLab service
         working-directory: plugins/tradelab/service
         run: uv run --python 3.12 --locked pytest -q
