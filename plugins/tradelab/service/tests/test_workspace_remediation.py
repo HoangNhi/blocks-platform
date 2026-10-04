@@ -47,7 +47,7 @@ async def test_authority_attribute_cannot_bypass_authentication():
 @pytest.mark.parametrize("operation", ["update", "soft_delete"])
 def test_legacy_objects_cannot_be_mutated(operation):
     session = RecordingSession()
-    repository = BotRepository(session, uuid4())
+    repository = BotRepository(session, uuid4(), uuid4())
     legacy = Bot(workspace_id=None)
     with pytest.raises(PermissionError):
         getattr(repository, operation)(legacy)
@@ -60,7 +60,7 @@ def test_detached_legacy_object_cannot_be_created():
     legacy = Bot(id=uuid4(), workspace_id=None)
     make_transient_to_detached(legacy)
     with pytest.raises(PermissionError):
-        BotRepository(session, uuid4()).create(legacy)
+        BotRepository(session, uuid4(), uuid4()).create(legacy)
     assert session.calls == []
     assert legacy.workspace_id is None
 
@@ -69,7 +69,7 @@ def test_legacy_group_cannot_be_adopted():
     session = RecordingSession()
     group = StrategyGroup(workspace_id=None)
     with pytest.raises(PermissionError):
-        StrategyRepository(session, uuid4()).update_strategy_group(group, name="adopted")
+        StrategyRepository(session, uuid4(), uuid4()).update_strategy_group(group, name="adopted")
     assert group.workspace_id is None
     assert session.calls == []
 

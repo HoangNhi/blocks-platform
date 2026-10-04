@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
 from uuid import UUID, uuid4
 
 from cryptography.fernet import Fernet
@@ -11,7 +12,6 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -44,6 +44,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -54,20 +55,20 @@ def db_session() -> Iterator[Session]:
 
 def _strategy(session: Session):
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    group = StrategyGroup(name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     return strategy, version
 
 
 def _credential(session: Session, *, status: str = "validated_live_read_only", can_trade: bool = True, can_withdraw: bool = False):
-    return CredentialRepository(session).create_credential_ref(
+    return CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_live",
         label="Submit credential",
@@ -87,21 +88,21 @@ def _submitted_context(session: Session, *, status: str = "submitted", local_dev
     preview_id, intent_id = _preview(session, credential_id=credential.id)
     submit = _submit(session, preview_id, live_order_submit_kill_switch_enabled=False)
     assert submit.status == "submitted"
-    repository = OrderStateRepository(session)
+    repository = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.get_intent(intent_id)
     assert intent is not None
     if status != intent.status or reconciliation_required:
         repository.update_intent_status(intent, status=status, reason_code="state_override", reconciliation_required=reconciliation_required, actor="admin")
         session.flush()
-    return repository, CredentialRepository(session), intent, session, provider
+    return repository, CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), intent, session, provider
 
 
 def _preview(session: Session, *, credential_id: UUID | None = None):
     strategy, version = _strategy(session)
     credential_ref_id = credential_id or _credential(session).id
     result = preview_live_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderPreviewRequestData(
             confirm_preview_only=True,
             idempotency_key=f"preview-key-{uuid4()}",
@@ -125,7 +126,7 @@ def _preview(session: Session, *, credential_id: UUID | None = None):
         live_order_submit_kill_switch_enabled=False,
     )
     assert result.preview_id is not None
-    preview = OrderStateRepository(session).get_preview(UUID(result.preview_id))
+    preview = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_preview(UUID(result.preview_id))
     assert preview is not None
     preview.expires_at = datetime.now(UTC) + timedelta(minutes=15)
     session.flush()
@@ -141,7 +142,7 @@ def _submit(session: Session, preview_id: UUID, **overrides):
         live_order_submit_kill_switch_enabled=False,
     )
     values.update(overrides)
-    return confirm_submit_live_order(OrderStateRepository(session), CredentialRepository(session), LiveOrderConfirmSubmitRequestData(**values))
+    return confirm_submit_live_order(OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), LiveOrderConfirmSubmitRequestData(**values))
 
 
 def _request(order_id, **overrides) -> LiveOrderCancelRequestData:
@@ -159,7 +160,7 @@ def _request(order_id, **overrides) -> LiveOrderCancelRequestData:
 
 
 def _encrypted_submit_credential(session: Session, provider: LocalDevEncryptedCredentialVaultProvider):
-    repository = CredentialRepository(session)
+    repository = CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     created = create_live_credential(
         repository,
         provider,

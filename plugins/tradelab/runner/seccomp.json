@@ -1,0 +1,9 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "architectures": ["SCMP_ARCH_X86_64", "SCMP_ARCH_AARCH64"],
+  "syscalls": [{
+    "action": "SCMP_ACT_ALLOW",
+    "names": ["read", "write", "readv", "writev", "pread64", "pwrite64", "open", "openat", "close", "close_range", "stat", "fstat", "fstatfs", "statfs", "lstat", "newfstatat", "statx", "lseek", "mmap", "mprotect", "munmap", "mremap", "brk", "madvise", "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "sigaltstack", "arch_prctl", "set_tid_address", "set_robust_list", "rseq", "futex", "getrandom", "prlimit64", "getrlimit", "getrusage", "getcwd", "chdir", "access", "faccessat", "faccessat2", "readlink", "readlinkat", "getdents64", "sysinfo", "clock_gettime", "clock_getres", "gettimeofday", "getpid", "gettid", "getuid", "geteuid", "getgid", "getegid", "sched_getaffinity", "uname", "poll", "ppoll", "pselect6", "select", "dup", "dup2", "dup3", "fcntl", "ioctl", "ftruncate", "truncate", "mkdir", "mkdirat", "unlink", "unlinkat", "rename", "renameat", "renameat2", "fchmod", "chmod", "fchown", "utimensat", "times", "clock_nanosleep", "nanosleep", "fadvise64", "execve", "execveat", "exit", "exit_group"]
+  }]
+}

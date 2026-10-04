@@ -76,7 +76,7 @@ class SqlAlchemyPaperArtifactWriter:
                 f"Paper session not found for session_id={result.session_id!r}.",
             )
         paper_session = self.session.get(PaperSession, session_id)
-        if paper_session is None:
+        if paper_session is None or paper_session.ownership_verified_at is None:
             raise PaperArtifactWriterError(
                 "paper_session_not_found",
                 f"Paper session not found for session_id={session_id}.",

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
 from uuid import UUID, uuid4
 
 from cryptography.fernet import Fernet
@@ -11,7 +12,6 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -54,6 +54,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -64,20 +65,20 @@ def db_session() -> Iterator[Session]:
 
 def _strategy(session: Session):
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    group = StrategyGroup(name="Phase 19.3A Group", slug=f"phase-19-3a-group-{suffix}", metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Phase 19.3A Group", slug=f"phase-19-3a-group-{suffix}", metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Phase 19.3A Strategy", slug=f"phase-19-3a-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Phase 19.3A Strategy", slug=f"phase-19-3a-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     return strategy, version
 
 
 def _credential(session: Session, *, status: str = "stored_testnet_only", can_trade: bool = True, can_withdraw: bool = False, margin: bool = False):
-    return CredentialRepository(session).create_credential_ref(
+    return CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_testnet",
         label="Submit credential",
@@ -95,8 +96,8 @@ def _preview(session: Session, *, expires_at_offset_minutes: int = 15, credentia
     strategy, version = _strategy(session)
     credential_ref_id = credential_id or _credential(session).id
     result = preview_testnet_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         TestnetOrderPreviewRequestData(
             confirm_preview_only=True,
             idempotency_key=f"preview-key-{uuid4()}",
@@ -119,7 +120,7 @@ def _preview(session: Session, *, expires_at_offset_minutes: int = 15, credentia
         ),
     )
     assert result.preview_id is not None
-    preview = OrderStateRepository(session).get_preview(UUID(result.preview_id))
+    preview = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_preview(UUID(result.preview_id))
     assert preview is not None
     preview.expires_at = datetime.now(UTC) + timedelta(minutes=expires_at_offset_minutes)
     session.flush()
@@ -136,8 +137,8 @@ def _submit(session: Session, preview_id: UUID, **overrides):
     )
     values.update(overrides)
     return confirm_submit_testnet_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         TestnetOrderConfirmSubmitRequestData(**values),
     )
 
@@ -194,8 +195,8 @@ def test_confirm_submit_kill_switch_blocks_before_submit(db_session: Session) ->
 def test_confirm_submit_persists_fake_submitted_state(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id)
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
-    events = OrderStateRepository(db_session).list_events_for_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
+    events = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id)
 
     assert result.status == "submitted"
     assert result.reason_code == "testnet_order_submit_fake_accepted"
@@ -215,9 +216,9 @@ def test_confirm_submit_persists_fake_submitted_state(db_session: Session) -> No
 def test_confirm_submit_replays_without_new_events(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     first = _submit(db_session, preview_id)
-    first_event_count = len(OrderStateRepository(db_session).list_events_for_intent(intent_id))
+    first_event_count = len(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id))
     second = _submit(db_session, preview_id)
-    second_event_count = len(OrderStateRepository(db_session).list_events_for_intent(intent_id))
+    second_event_count = len(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id))
 
     assert second.status == first.status
     assert second.exchange_order_id == first.exchange_order_id
@@ -230,7 +231,7 @@ def test_confirm_submit_unknown_blocks_later_submit(db_session: Session) -> None
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id, idempotency_key="timeout_unknown")
     blocked = _submit(db_session, preview_id, idempotency_key="submit-key-2")
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "unknown"
     assert result.reason_code == "testnet_order_submit_unknown_state"
@@ -245,7 +246,7 @@ def test_confirm_submit_unknown_blocks_later_submit(db_session: Session) -> None
 def test_confirm_submit_fake_rejected_maps_to_rejected(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id, idempotency_key="rejected")
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "rejected"
     assert result.reason_code == "testnet_order_submit_fake_rejected"
@@ -258,8 +259,8 @@ def test_confirm_submit_real_mode_network_disabled_blocks_before_vault_read(db_s
     provider = _local_dev_provider()
     transport = RecordingTransport(httpx.Response(200, json={"orderId": 1}))
     result = confirm_submit_testnet_order(
-        OrderStateRepository(db_session),
-        CredentialRepository(db_session),
+        OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         TestnetOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_testnet_order=True,
@@ -325,7 +326,7 @@ def test_confirm_submit_real_mode_blocks_fake_vault_provider(db_session: Session
 
 
 def _encrypted_submit_credential(session: Session, provider: LocalDevEncryptedCredentialVaultProvider):
-    repository = CredentialRepository(session)
+    repository = CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     created = create_testnet_credential(
         repository,
         provider,
@@ -363,8 +364,8 @@ def _submit_real(session: Session, preview_id: UUID, provider: LocalDevEncrypted
     )
     values.update(overrides)
     return confirm_submit_testnet_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         TestnetOrderConfirmSubmitRequestData(**values),
         vault_provider=provider,
         http_client=httpx.Client(transport=transport),
@@ -378,8 +379,8 @@ def test_confirm_submit_real_success_persists_submitted_state(db_session: Sessio
     transport = RecordingTransport(httpx.Response(200, json={"orderId": 98765, "clientOrderId": "tltn-client", "status": "NEW", "executedQty": "0", "cummulativeQuoteQty": "0"}))
 
     result = _submit_real(db_session, preview_id, provider, transport)
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
-    events = OrderStateRepository(db_session).list_events_for_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
+    events = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id)
 
     assert result.status == "submitted"
     assert result.reason_code == "testnet_order_submit_binance_accepted"
@@ -403,7 +404,7 @@ def test_confirm_submit_real_timeout_persists_unknown_and_blocks_new_submit(db_s
 
     result = _submit_real(db_session, preview_id, provider, httpx.MockTransport(handler))
     blocked = _submit_real(db_session, preview_id, provider, RecordingTransport(httpx.Response(200, json={"orderId": 1})), idempotency_key="real-submit-2")
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "unknown"
     assert result.reason_code == "testnet_order_submit_binance_timeout_unknown"
@@ -420,7 +421,7 @@ def test_confirm_submit_real_rejected_persists_rejected_state(db_session: Sessio
     transport = RecordingTransport(httpx.Response(400, json={"code": -1013, "msg": "Filter failure"}))
 
     result = _submit_real(db_session, preview_id, provider, transport)
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "rejected"
     assert result.reason_code == "testnet_order_submit_binance_rejected"

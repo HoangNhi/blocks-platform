@@ -67,6 +67,7 @@ def test_idempotent_candle_upsert_and_failed_job_records_error() -> None:
         timeframe="1h",
         start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         end_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        created_by="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     )
     second = import_candles(
         repository,
@@ -76,6 +77,7 @@ def test_idempotent_candle_upsert_and_failed_job_records_error() -> None:
         timeframe="1h",
         start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         end_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        created_by="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     )
 
     assert first.rows_imported == 1
@@ -92,6 +94,7 @@ def test_idempotent_candle_upsert_and_failed_job_records_error() -> None:
         timeframe="1h",
         start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         end_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        created_by="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     )
 
     assert failed.rows_imported == 0
@@ -111,6 +114,7 @@ def test_import_candles_paginates_until_the_requested_end() -> None:
         timeframe="1h",
         start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         end_at=datetime(2026, 2, 20, tzinfo=timezone.utc),
+        created_by="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     )
 
     assert result.rows_imported == 1005
@@ -124,6 +128,24 @@ def test_symbol_sync_uses_repository_upsert() -> None:
 
     assert len(synced) == 1
     assert repository.symbols[0]["symbol"] == "BTCUSDT"
+
+
+def test_import_candles_requires_authenticated_creator() -> None:
+    repository = FakeMarketDataRepository()
+    creator_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+    import_candles(
+        repository,
+        FakeKlineClient(),
+        exchange="binance",
+        symbol="BTCUSDT",
+        timeframe="1h",
+        start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        created_by=creator_id,
+    )
+
+    assert repository.jobs[-1]["created_by"] == creator_id
 
 
 def test_execute_import_job_refreshes_coverage_from_full_dataset() -> None:

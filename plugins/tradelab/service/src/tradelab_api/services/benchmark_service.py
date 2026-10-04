@@ -21,7 +21,7 @@ class BenchmarkService:
     run_repository: RunRepository
     benchmark_repository: BenchmarkRepository
 
-    def start_repeat_benchmark(self, baseline_run_id: UUID, *, created_by: str | None = None) -> BenchmarkRunCheck:
+    def start_repeat_benchmark(self, baseline_run_id: UUID, *, created_by: str) -> BenchmarkRunCheck:
         baseline = self.run_repository.get_bot_run(baseline_run_id)
         if baseline is None:
             raise ValueError("Baseline run not found.")
@@ -59,10 +59,11 @@ class BenchmarkService:
             pipeline_status="queued",
             data_job_id=None,
             error_message=None,
-            created_by=created_by or "trade-lab",
+            created_by=created_by,
         )
         repeat_input_fingerprint = build_benchmark_input_fingerprint(repeat)
         return self.benchmark_repository.create_check(
+            workspace_id=baseline.workspace_id,
             baseline_run_id=baseline.id,
             repeat_run_id=repeat.id,
             strategy_id=baseline.strategy_id,
@@ -77,7 +78,7 @@ class BenchmarkService:
             tolerance_policy={"mode": "exact"},
             metric_diffs={},
             status="running",
-            created_by=created_by or "trade-lab",
+            created_by=created_by,
         )
 
     def finalize_for_run(self, repeat_run_id: UUID) -> BenchmarkRunCheck | None:

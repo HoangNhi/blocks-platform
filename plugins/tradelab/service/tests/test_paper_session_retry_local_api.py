@@ -71,7 +71,7 @@ def test_retry_local_route_returns_queued_envelope_and_commits(monkeypatch) -> N
                     "confirmLocalPaperRetry": True,
                     "idempotencyKey": "retry-click-1",
                     "reason": "user_requested",
-                    "actor": "admin",
+                    "actor": "spoofed-client-actor",
                 },
             ),
             201,
@@ -85,7 +85,7 @@ def test_retry_local_route_returns_queued_envelope_and_commits(monkeypatch) -> N
             "confirm": True,
             "idempotency_key": "retry-click-1",
             "reason": "user_requested",
-            "actor": "admin",
+            "actor": "00000000-0000-0000-0000-000000000001",
             "kill_switch_enabled": False,
         }
     ]

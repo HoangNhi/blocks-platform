@@ -451,7 +451,7 @@ def reset_local_fill_fixture(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    strategy_repository = StrategyRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     settings = get_settings()
     try:
@@ -473,8 +473,8 @@ def reset_paper_runtime_fixture(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    strategy_repository = StrategyRepository(session, actor.workspace_id)
-    bot_repository = BotRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     settings = get_settings()
     try:
@@ -496,6 +496,7 @@ def reset_paper_runtime_fixture(
 def create_market_data_import_job(
     request: ImportJobCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     repository = MarketDataRepository(session)
     client = BinanceSpotClient()
@@ -507,6 +508,7 @@ def create_market_data_import_job(
         timeframe=request.timeframe,
         start_at=request.start_at,
         end_at=request.end_at,
+        created_by=str(actor.user_id),
     )
     session.commit()
     payload = {"job": serialize_model(result.job) if result.job is not None else None, "rows_imported": result.rows_imported}

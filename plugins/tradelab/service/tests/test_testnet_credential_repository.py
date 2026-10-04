@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
-import os
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Base  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -20,6 +20,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -29,7 +30,7 @@ def db_session() -> Iterator[Session]:
 
 
 def test_repository_persists_metadata_and_audit_with_redaction(db_session: Session) -> None:
-    repository = CredentialRepository(db_session)
+    repository = CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
 
     credential = repository.create_credential_ref(
         exchange="binance_spot",
@@ -69,7 +70,7 @@ def test_credential_ref_table_has_no_secret_material_columns() -> None:
     assert forbidden.isdisjoint({column.name for column in table.columns})
 
 def test_repository_persists_encrypted_secret_without_plaintext(db_session: Session) -> None:
-    repository = CredentialRepository(db_session)
+    repository = CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     credential = repository.create_credential_ref(
         exchange="binance_spot",
         environment="binance_testnet",
@@ -97,7 +98,7 @@ def test_repository_persists_encrypted_secret_without_plaintext(db_session: Sess
 
 
 def test_repository_deactivates_active_secret_rows(db_session: Session) -> None:
-    repository = CredentialRepository(db_session)
+    repository = CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     credential = repository.create_credential_ref(
         exchange="binance_spot",
         environment="binance_testnet",

@@ -7,6 +7,7 @@ from tradelab_api.services.scoped_repository import ScopedRepository, ScopedCred
 from tradelab_api.services.bot_repository import BotRepository
 from tradelab_api.services.strategy_repository import StrategyRepository
 from tradelab_api.services.live_credential_repository import LiveCredentialRepository
+from tradelab_api.db.models import Bot, Strategy, StrategyVersion
 
 
 def test_scoped_repository_requires_workspace_id() -> None:
@@ -22,6 +23,8 @@ def test_scoped_credential_repository_requires_owner_user_id() -> None:
 def test_bot_repository_cross_workspace_isolation() -> None:
     ws_a = uuid4()
     ws_b = uuid4()
+    user_a = uuid4()
+    user_b = uuid4()
 
     class FakeSession:
         def __init__(self):
@@ -31,11 +34,20 @@ def test_bot_repository_cross_workspace_isolation() -> None:
         def refresh(self, obj): pass
 
     session = FakeSession()
-    repo_a = BotRepository(session, ws_a)
-    bot = repo_a.create_bot(strategy_id=uuid4(), name="Bot A", symbol="BTC", timeframe="1h", mode="backtest", status="draft")
+    bot = Bot(
+        id=uuid4(),
+        workspace_id=ws_a,
+        created_by=str(user_a),
+        strategy_id=uuid4(),
+        name="Bot A",
+        symbol="BTC",
+        timeframe="1h",
+        mode="backtest",
+        status="draft",
+    )
     assert bot.workspace_id == ws_a
 
-    repo_b = BotRepository(session, ws_b)
+    repo_b = BotRepository(session, ws_b, user_b)
     # Updating object from workspace A using repo B raises PermissionError
     with pytest.raises(PermissionError, match="another workspace"):
         repo_b.update(bot, name="Hacked Name")
@@ -47,6 +59,8 @@ def test_bot_repository_cross_workspace_isolation() -> None:
 def test_strategy_repository_scopes_versions() -> None:
     ws_a = uuid4()
     ws_b = uuid4()
+    user_a = uuid4()
+    user_b = uuid4()
 
     class FakeSession:
         def __init__(self):
@@ -56,9 +70,18 @@ def test_strategy_repository_scopes_versions() -> None:
         def refresh(self, obj): pass
 
     session = FakeSession()
-    repo_a = StrategyRepository(session, ws_a)
-    strat = repo_a.create_strategy(name="Strat", slug="strat", status="active")
-    version = repo_a.create_strategy_version(
+    strat = Strategy(
+        id=uuid4(),
+        workspace_id=ws_a,
+        created_by=str(user_a),
+        name="Strat",
+        slug="strat",
+        status="active",
+    )
+    version = StrategyVersion(
+        id=uuid4(),
+        workspace_id=ws_a,
+        created_by=str(user_a),
         strategy_id=strat.id,
         version_number=1,
         source_code="pass",
@@ -68,7 +91,7 @@ def test_strategy_repository_scopes_versions() -> None:
     assert strat.workspace_id == ws_a
     assert version.workspace_id == ws_a
 
-    repo_b = StrategyRepository(session, ws_b)
+    repo_b = StrategyRepository(session, ws_b, user_b)
     with pytest.raises(PermissionError, match="another workspace"):
         repo_b.update(strat, name="New Name")
 

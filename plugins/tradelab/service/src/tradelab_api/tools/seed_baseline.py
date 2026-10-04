@@ -15,7 +15,9 @@ def main() -> None:
     args = parser.parse_args()
     with SessionLocal(bind=get_engine()) as session:
         try:
-            result = seed_baseline_fixture(session, workspace_id=args.workspace_id, created_by=str(args.actor_id))
+            result = seed_baseline_fixture(
+                session, workspace_id=args.workspace_id, owner_user_id=args.actor_id
+            )
             session.commit()
         except Exception:
             session.rollback()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 
 import pytest
@@ -21,6 +23,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -43,7 +46,7 @@ def test_missing_testnet_order_detail_returns_not_found_envelope() -> None:
     assert payload["Data"]["reasonCode"] == "testnet_order_not_found"
 
 def test_order_detail_includes_cancel_reconcile_events_and_attempts(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
     repository.add_event(
         intent_id=intent.id,

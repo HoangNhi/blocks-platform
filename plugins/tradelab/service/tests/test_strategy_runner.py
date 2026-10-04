@@ -74,7 +74,7 @@ def test_runtime_exception_surfaces_as_failed_run() -> None:
     assert "boom" in (result.error_message or "")
 
 
-def test_timeout_surfaces_as_failed_run(monkeypatch) -> None:
+def test_executor_timeout_fails_closed_before_strategy_launch(monkeypatch) -> None:
     from tradelab_api.services import strategy_runner as module
 
     def fake_run(*args, **kwargs):  # noqa: ANN001
@@ -91,7 +91,8 @@ def test_timeout_surfaces_as_failed_run(monkeypatch) -> None:
     )
 
     assert result.success is False
-    assert result.timed_out is True
+    assert result.timed_out is False
+    assert "executor verification failed" in result.error_message
 
 def test_os_error_surfaces_as_non_timeout_failed_run(monkeypatch, tmp_path: Path) -> None:
     from tradelab_api.services import strategy_runner as module

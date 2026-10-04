@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import os
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from dataclasses import replace
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -10,11 +11,6 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
 
 from tradelab_api.db.models import (  # noqa: E402
     Base,
@@ -68,13 +64,15 @@ def db_session() -> Iterator[Session]:
 
 
 def _create_strategy_tree(session: Session) -> dict[str, UUID]:
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     suffix = uuid4().hex[:10]
     group = StrategyGroup(
         name=f"Paper Writer Group {suffix}",
         slug=f"paper-writer-group-{suffix}",
         description="Automated writer test group",
         metadata_={"visibility": "test", "purpose": "paper_artifact_writer"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(group)
     session.flush()
@@ -88,7 +86,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         runtime_config={},
         risk_config={},
         metadata_={"visibility": "test", "purpose": "paper_artifact_writer"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(strategy)
     session.flush()
@@ -100,7 +99,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         source_hash=f"hash-{suffix}",
         validation_status="valid",
         validation_message=None,
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(version)
     session.flush()
@@ -117,7 +117,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         runtime_config={},
         risk_config={},
         metadata_={"visibility": "test", "purpose": "paper_artifact_writer"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(bot)
     session.flush()
@@ -157,7 +158,8 @@ def _create_paper_session(session: Session) -> PaperSession:
         },
         reason_code="paper_session_running",
         error_message=None,
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(paper_session)
     session.flush()

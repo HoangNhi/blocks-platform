@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -9,6 +10,8 @@ from uuid import uuid4
 from tradelab_api.db.models import BenchmarkRunCheck
 from tradelab_api.services.benchmark_repository import BenchmarkRepository
 from tradelab_api.services.benchmark_service import BenchmarkService
+
+TEST_ACTOR_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 class FakeSession:
     def __init__(self) -> None:
@@ -47,6 +50,7 @@ class FakeRunRepository:
         self.created_fields: dict[str, object] | None = None
         self.baseline = SimpleNamespace(
             id=uuid4(),
+            workspace_id=uuid4(),
             bot_id=uuid4(),
             strategy_id=uuid4(),
             strategy_version_id=uuid4(),
@@ -108,7 +112,7 @@ def test_create_benchmark_check_sets_core_fields() -> None:
         input_fingerprint="input-a",
         result_fingerprint="result-a",
         tolerance_policy={"mode": "exact"},
-        created_by="trade-lab",
+        created_by=TEST_ACTOR_ID,
     )
 
     assert check in session.items
@@ -120,29 +124,32 @@ def test_create_benchmark_check_sets_core_fields() -> None:
     assert check.result_fingerprint == "result-a"
     assert check.tolerance_policy == {"mode": "exact"}
     assert check.status == "pending"
-    assert check.created_by == "trade-lab"
+    assert check.created_by == TEST_ACTOR_ID
 
 def test_start_repeat_benchmark_creates_repeat_run_and_check() -> None:
     run_repository = FakeRunRepository()
     benchmark_repository = BenchmarkRepository(FakeSession())
     service = BenchmarkService(run_repository=run_repository, benchmark_repository=benchmark_repository)
 
-    check = service.start_repeat_benchmark(run_repository.baseline.id, created_by="trade-lab")
+    check = service.start_repeat_benchmark(run_repository.baseline.id, created_by=TEST_ACTOR_ID)
 
     assert run_repository.created_fields is not None
     assert run_repository.created_fields["run_type"] == "benchmark_repeat"
     assert run_repository.created_fields["status"] == "queued"
     assert run_repository.created_fields["pipeline_status"] == "queued"
     assert run_repository.created_fields["runtime_config"] == run_repository.baseline.runtime_config
+    assert run_repository.created_fields["created_by"] == TEST_ACTOR_ID
     assert check.baseline_run_id == run_repository.baseline.id
+    assert check.workspace_id == run_repository.baseline.workspace_id
     assert check.repeat_run_id is not None
     assert check.status == "running"
+    assert check.created_by == TEST_ACTOR_ID
 
 def test_finalize_for_run_marks_matching_repeat() -> None:
     run_repository = FakeRunRepository()
     benchmark_repository = BenchmarkRepository(FakeSession())
     service = BenchmarkService(run_repository=run_repository, benchmark_repository=benchmark_repository)
-    check = service.start_repeat_benchmark(run_repository.baseline.id, created_by="trade-lab")
+    check = service.start_repeat_benchmark(run_repository.baseline.id, created_by=TEST_ACTOR_ID)
     assert run_repository.repeat is not None
     run_repository.repeat.status = "completed"
 
@@ -154,3 +161,14 @@ def test_finalize_for_run_marks_matching_repeat() -> None:
     assert finalized.status == "matched"
     json.dumps(finalized.metric_diffs)
     assert finalized.metric_diffs["final_equity"]["baseline"] == "1000.00"
+
+
+def test_start_repeat_benchmark_requires_authenticated_creator() -> None:
+    run_repository = FakeRunRepository()
+    service = BenchmarkService(
+        run_repository=run_repository,
+        benchmark_repository=BenchmarkRepository(FakeSession()),
+    )
+
+    with pytest.raises(TypeError):
+        service.start_repeat_benchmark(run_repository.baseline.id)

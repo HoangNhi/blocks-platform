@@ -21,3 +21,8 @@ def test_settings_environment_overrides_env_local_file(tmp_path, monkeypatch) ->
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://environment/database")
 
     assert Settings().database_url == "postgresql+psycopg://environment/database"
+
+def test_settings_loads_system_service_authorization_key_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEM_SERVICE_AUTHORIZATION_KEY", "local-secret")
+
+    assert Settings().system_service_authorization_key.get_secret_value() == "local-secret"

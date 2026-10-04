@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tradelab_api.db.models import BotRun
@@ -74,11 +75,19 @@ class TestnetOrderJournalProjectionResult:
 
 
 class SqlAlchemyRunRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, workspace_id: UUID | None = None, owner_user_id: UUID | None = None) -> None:
         self.session = session
+        self.workspace_id = workspace_id
+        self.owner_user_id = owner_user_id
+        if (workspace_id is None) != (owner_user_id is None):
+            raise ValueError("Run scope requires both workspace and owner.")
 
     def get_run(self, run_id: UUID) -> BotRun | None:
-        return self.session.get(BotRun, run_id)
+        if self.workspace_id is not None:
+            from tradelab_api.services.run_repository import RunRepository
+
+            return RunRepository(self.session, self.workspace_id, self.owner_user_id).get_bot_run(run_id)
+        return self.session.scalar(select(BotRun).where(BotRun.id == run_id))
 
 
 def project_testnet_order_to_journal(

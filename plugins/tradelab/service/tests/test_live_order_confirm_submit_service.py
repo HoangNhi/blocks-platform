@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
 from uuid import UUID, uuid4
 
 from cryptography.fernet import Fernet
@@ -11,7 +12,6 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -43,6 +43,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -53,20 +54,20 @@ def db_session() -> Iterator[Session]:
 
 def _strategy(session: Session):
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    group = StrategyGroup(name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     return strategy, version
 
 
 def _credential(session: Session, *, status: str = "validated_live_read_only", can_trade: bool = True, can_withdraw: bool = False):
-    return CredentialRepository(session).create_credential_ref(
+    return CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_live",
         label="Submit credential",
@@ -88,7 +89,7 @@ def _real_credential(session: Session):
         idempotency_key=f"secret-{uuid4()}",
         secret=LiveCredentialSecretRequestData(api_key="api-key-1", api_secret="api-secret-1"),
     )
-    repository = CredentialRepository(session)
+    repository = CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     credential = repository.create_credential_ref(
         exchange="binance_spot",
         environment="binance_live",
@@ -115,8 +116,8 @@ def _preview(session: Session, *, credential_id: UUID | None = None):
     strategy, version = _strategy(session)
     credential_ref_id = credential_id or _credential(session).id
     result = preview_live_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderPreviewRequestData(
             confirm_preview_only=True,
             idempotency_key=f"preview-key-{uuid4()}",
@@ -140,7 +141,7 @@ def _preview(session: Session, *, credential_id: UUID | None = None):
         live_order_submit_kill_switch_enabled=False,
     )
     assert result.preview_id is not None
-    preview = OrderStateRepository(session).get_preview(UUID(result.preview_id))
+    preview = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_preview(UUID(result.preview_id))
     assert preview is not None
     preview.expires_at = datetime.now(UTC) + timedelta(minutes=15)
     session.flush()
@@ -150,8 +151,8 @@ def _preview(session: Session, *, credential_id: UUID | None = None):
 def _preview_real(session: Session, *, credential_id: UUID):
     strategy, version = _strategy(session)
     result = preview_live_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderPreviewRequestData(
             confirm_preview_only=True,
             idempotency_key=f"preview-key-{uuid4()}",
@@ -180,7 +181,7 @@ def _preview_real(session: Session, *, credential_id: UUID):
         vault_provider_name="local_dev_encrypted",
     )
     assert result.preview_id is not None
-    preview = OrderStateRepository(session).get_preview(UUID(result.preview_id))
+    preview = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_preview(UUID(result.preview_id))
     assert preview is not None
     preview.expires_at = datetime.now(UTC) + timedelta(minutes=15)
     session.flush()
@@ -197,8 +198,8 @@ def _submit(session: Session, preview_id: UUID, **overrides):
     )
     values.update(overrides)
     return confirm_submit_live_order(
-        OrderStateRepository(session),
-        CredentialRepository(session),
+        OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderConfirmSubmitRequestData(**values),
     )
 
@@ -219,7 +220,7 @@ def test_confirm_submit_blocks_secret_like_idempotency(db_session: Session) -> N
 
 def test_confirm_submit_blocks_expired_preview(db_session: Session) -> None:
     preview_id, _ = _preview(db_session)
-    preview = OrderStateRepository(db_session).get_preview(preview_id)
+    preview = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_preview(preview_id)
     assert preview is not None
     preview.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     db_session.flush()
@@ -242,8 +243,8 @@ def test_confirm_submit_blocks_unsafe_credential(db_session: Session) -> None:
 def test_confirm_submit_kill_switch_blocks_before_submit(db_session: Session) -> None:
     preview_id, _ = _preview(db_session)
     result = confirm_submit_live_order(
-        OrderStateRepository(db_session),
-        CredentialRepository(db_session),
+        OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_live_order=True,
@@ -261,8 +262,8 @@ def test_confirm_submit_kill_switch_blocks_before_submit(db_session: Session) ->
 def test_confirm_submit_persists_fake_submitted_state(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id)
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
-    events = OrderStateRepository(db_session).list_events_for_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
+    events = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id)
 
     assert result.status == "submitted"
     assert result.reason_code == "live_order_submit_fake_accepted"
@@ -280,9 +281,9 @@ def test_confirm_submit_persists_fake_submitted_state(db_session: Session) -> No
 def test_confirm_submit_replays_without_new_events(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     first = _submit(db_session, preview_id)
-    first_event_count = len(OrderStateRepository(db_session).list_events_for_intent(intent_id))
+    first_event_count = len(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id))
     second = _submit(db_session, preview_id)
-    second_event_count = len(OrderStateRepository(db_session).list_events_for_intent(intent_id))
+    second_event_count = len(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).list_events_for_intent(intent_id))
 
     assert second.status == first.status
     assert second.exchange_order_id == first.exchange_order_id
@@ -295,7 +296,7 @@ def test_confirm_submit_unknown_blocks_later_submit(db_session: Session) -> None
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id, idempotency_key="timeout_unknown")
     blocked = _submit(db_session, preview_id, idempotency_key="submit-key-2")
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "unknown"
     assert result.reason_code == "live_order_submit_fake_unknown_state"
@@ -309,7 +310,7 @@ def test_confirm_submit_unknown_blocks_later_submit(db_session: Session) -> None
 def test_confirm_submit_fake_rejected_maps_to_rejected(db_session: Session) -> None:
     preview_id, intent_id = _preview(db_session)
     result = _submit(db_session, preview_id, idempotency_key="rejected")
-    intent = OrderStateRepository(db_session).get_intent(intent_id)
+    intent = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).get_intent(intent_id)
 
     assert result.status == "rejected"
     assert result.reason_code == "live_order_submit_fake_rejected"
@@ -320,8 +321,8 @@ def test_confirm_submit_fake_rejected_maps_to_rejected(db_session: Session) -> N
 def test_confirm_submit_real_mode_blocks_when_proof_window_is_closed(db_session: Session) -> None:
     preview_id, _ = _preview(db_session)
     result = confirm_submit_live_order(
-        OrderStateRepository(db_session),
-        CredentialRepository(db_session),
+        OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
+        CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_live_order=True,
@@ -344,7 +345,7 @@ def test_confirm_submit_real_mode_blocks_when_proof_window_is_closed(db_session:
 
 def test_confirm_submit_real_mode_consumes_budget_after_accept(db_session: Session) -> None:
     credential, provider = _real_credential(db_session)
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     repository.open_proof_window(
         actor="phase20-operator",
         reason="phase20_one_fill_proof",
@@ -368,7 +369,7 @@ def test_confirm_submit_real_mode_consumes_budget_after_accept(db_session: Sessi
 
     result = confirm_submit_live_order(
         repository,
-        CredentialRepository(db_session),
+        CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         LiveOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_live_order=True,

@@ -16,6 +16,8 @@ from tradelab_api.db.session import (
 from tradelab_api.services.dataset_fill_scheduler import BackgroundFillScheduler
 from tradelab_api.services.job_dispatcher import JobDispatcher
 from tradelab_api.services.paper_session_scheduler import PaperSessionScheduler
+from tradelab_api.tools.ownership_provenance_migration import verify_ownership_provenance_schema
+from tradelab_api.db.session import get_engine
 
 
 @asynccontextmanager
@@ -28,7 +30,10 @@ async def lifespan(app: FastAPI):
     app.state.paper_session_scheduler = paper_session_scheduler
     verify_database_connection()
     apply_schema_compatibility()
+    verify_ownership_provenance_schema(get_engine())
     try:
+        if get_settings().tradelab_job_dispatcher_enabled:
+            dispatcher.start()
         background_fill_scheduler.start()
         yield
     finally:

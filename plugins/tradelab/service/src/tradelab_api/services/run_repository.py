@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.orm import Session, joinedload
 
 from tradelab_api.db.models import (
@@ -16,18 +16,78 @@ from tradelab_api.db.models import (
     StrategySignal,
     TradeOrder,
 )
-from tradelab_api.services.scoped_repository import ScopedRepository
+from tradelab_api.services.bot_repository import BotRepository
+from tradelab_api.services.scoped_repository import PrivateOwnerRepository
+from tradelab_api.services.strategy_repository import StrategyRepository
+from tradelab_api.db.models import Bot, Strategy, StrategyVersion
 
 
-class RunRepository(ScopedRepository[BotRun]):
+class RunRepository(PrivateOwnerRepository[BotRun]):
     model = BotRun
 
-    def __init__(self, session: Session, workspace_id: UUID) -> None:
-        super().__init__(session, workspace_id)
+    def __init__(self, session: Session, workspace_id: UUID, owner_user_id: UUID) -> None:
+        super().__init__(session, workspace_id, owner_user_id)
+
+    def _base_select(self):
+        return (
+            super()._base_select()
+            .join(Strategy, Strategy.id == BotRun.strategy_id)
+            .join(StrategyVersion, StrategyVersion.id == BotRun.strategy_version_id)
+            .outerjoin(Bot, Bot.id == BotRun.bot_id)
+            .where(
+                Strategy.workspace_id == self.workspace_id,
+                Strategy.created_by == str(self.owner_user_id),
+                BotRun.strategy_id.in_(StrategyRepository(self.session, self.workspace_id, self.owner_user_id)._base_select().with_only_columns(Strategy.id)),
+                StrategyVersion.strategy_id == BotRun.strategy_id,
+                StrategyVersion.workspace_id == self.workspace_id,
+                StrategyVersion.created_by == str(self.owner_user_id),
+                or_(BotRun.bot_id.is_(None), and_(
+                    BotRun.bot_id.in_(BotRepository(self.session, self.workspace_id, self.owner_user_id)._base_select().with_only_columns(Bot.id)),
+                    Bot.workspace_id == self.workspace_id,
+                    Bot.created_by == str(self.owner_user_id),
+                    Bot.strategy_id == BotRun.strategy_id,
+                )),
+            )
+        )
 
     def create_bot_run(self, **fields: object) -> BotRun:
         fields.pop("workspace_id", None)
+        self._validate_relationships(fields)
+        if fields.get("run_type", "backtest") == "backtest" and fields.get("status", "queued") == "queued":
+            self.session.execute(text("SELECT pg_advisory_xact_lock(841012)"))
+            global_count = self.session.scalar(select(func.count(BotRun.id)).where(BotRun.run_type == "backtest", BotRun.status == "queued")) or 0
+            user_count = self.session.scalar(select(func.count(BotRun.id)).where(BotRun.run_type == "backtest", BotRun.status == "queued", BotRun.created_by == str(self.owner_user_id))) or 0
+            if global_count >= 100 or user_count >= 20:
+                raise ValueError("Backtest queued quota exceeded.")
         return self.create(BotRun(**fields))
+
+    def _validate_relationships(self, fields: dict[str, object]) -> None:
+        strategy_id = fields.get("strategy_id")
+        version_id = fields.get("strategy_version_id")
+        if not isinstance(strategy_id, UUID) or not isinstance(version_id, UUID):
+            raise PermissionError("Run strategy and version must belong to the current owner.")
+
+        strategy_repository = StrategyRepository(
+            self.session, self.workspace_id, self.owner_user_id
+        )
+        strategy = strategy_repository.get_strategy(strategy_id)
+        version = strategy_repository.get_strategy_version(version_id)
+        if strategy is None or version is None or version.strategy_id != strategy.id:
+            raise PermissionError("Run strategy version must belong to the selected strategy.")
+
+        bot_id = fields.get("bot_id")
+        if bot_id is not None:
+            bot = (
+                BotRepository(self.session, self.workspace_id, self.owner_user_id).get_bot(bot_id)
+                if isinstance(bot_id, UUID)
+                else None
+            )
+            if (
+                bot is None
+                or bot.strategy_id != strategy.id
+                or bot.strategy_version_id not in (None, version.id)
+            ):
+                raise PermissionError("Run bot must belong to the selected strategy and version.")
 
     def list_bot_runs(
         self,
@@ -103,7 +163,7 @@ class RunRepository(ScopedRepository[BotRun]):
                 )
             )
             .order_by(BotRun.created_at.asc())
-            .with_for_update(skip_locked=True)
+            .with_for_update(skip_locked=True, of=BotRun)
             .limit(1)
         )
         run = self.session.execute(stmt).scalar_one_or_none()
@@ -121,19 +181,36 @@ class RunRepository(ScopedRepository[BotRun]):
         self.session.refresh(run)
         return run
 
-    def complete_bot_run(self, run: BotRun, *, status: str, error_message: str | None = None) -> BotRun:
-        run.status = status
-        run.pipeline_status = status
-        run.pipeline_context = {
-            **dict(run.pipeline_context or {}),
-            "state": status,
-            "runId": str(run.id),
-        }
-        run.finished_at = datetime.now(timezone.utc)
-        run.error_message = error_message
-        self.session.flush()
-        self.session.refresh(run)
-        return run
+    def complete_bot_run(self, run: BotRun, *, status: str, error_message: str | None = None) -> BotRun | None:
+        if getattr(run, "status", None) not in ("running", "queued"):
+            return None
+        if run.workspace_id != self.workspace_id or run.created_by != str(self.owner_user_id):
+            raise PermissionError("Cannot complete another owner's run.")
+        if status not in ("completed", "failed", "cancelled"):
+            raise ValueError("Completion requires a terminal status.")
+        statement = (
+            update(BotRun)
+            .where(
+                BotRun.id == run.id,
+                BotRun.workspace_id == self.workspace_id,
+                BotRun.created_by == str(self.owner_user_id),
+                BotRun.status.in_(("running", "queued")),
+            )
+            .values(
+                status=status,
+                pipeline_status=status,
+                pipeline_context={
+                    **dict(run.pipeline_context or {}),
+                    "state": status,
+                    "runId": str(run.id),
+                },
+                finished_at=datetime.now(timezone.utc),
+                error_message=error_message,
+            )
+            .returning(BotRun)
+            .execution_options(synchronize_session=False, populate_existing=True)
+        )
+        return self.session.execute(statement).scalar_one_or_none()
 
     def link_data_job(
         self,
@@ -142,16 +219,33 @@ class RunRepository(ScopedRepository[BotRun]):
         *,
         link_status: str = "waiting",
     ) -> None:
-        if getattr(run, "workspace_id", None) != self.workspace_id:
-            raise PermissionError("Cannot link data job for run belonging to another workspace.")
-        run.data_job_id = import_job.id
-        run.pipeline_context = {
-            **dict(run.pipeline_context or {}),
-            "dataJobId": str(import_job.id),
-            "dataJobStatus": import_job.status,
-            "dataJobType": import_job.job_type,
-        }
-        self.session.flush()
+        if (
+            getattr(run, "workspace_id", None) != self.workspace_id
+            or getattr(run, "created_by", None) != str(self.owner_user_id)
+        ):
+            raise PermissionError("Cannot link data job for run belonging to another owner.")
+
+        stored_job = self.session.execute(
+            select(MarketDataImportJob).where(MarketDataImportJob.id == import_job.id)
+        ).scalar_one_or_none()
+        if (
+            stored_job is None
+            or stored_job.exchange != run.exchange
+            or stored_job.symbol != run.symbol
+            or stored_job.timeframe != run.timeframe
+        ):
+            raise PermissionError("Data job must match the run's shared market-data selection.")
+
+        self.update(
+            run,
+            data_job_id=stored_job.id,
+            pipeline_context={
+                **dict(run.pipeline_context or {}),
+                "dataJobId": str(stored_job.id),
+                "dataJobStatus": stored_job.status,
+                "dataJobType": stored_job.job_type,
+            },
+        )
 
     def list_bot_run_logs(self, run_id: UUID) -> list[StrategyLog]:
         run = self.get_bot_run(run_id)

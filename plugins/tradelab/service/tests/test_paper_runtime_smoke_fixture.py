@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import os
+from conftest import bind_test_context
+
+from conftest import DEFAULT_TEST_HEADERS, DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID
+
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
 
 from tradelab_api.api import exchange as exchange_api  # noqa: E402
 from tradelab_api.db.models import (  # noqa: E402
@@ -63,6 +62,9 @@ from tradelab_api.services.strategy_validator import validate_strategy_source  #
 
 Base.metadata.create_all(bind=get_engine())
 
+TEST_WORKSPACE_ID = UUID("00000000-0000-0000-0000-000000000001")
+TEST_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
+
 
 def _settings(*, enabled: bool = True, environment: str = "local", database_url: str = "postgresql+psycopg://user:password@localhost:5432/tradelab_smoke") -> SimpleNamespace:
     return SimpleNamespace(
@@ -77,6 +79,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, TEST_WORKSPACE_ID, TEST_OWNER_ID)
     try:
         yield session
     finally:
@@ -87,8 +90,8 @@ def db_session() -> Iterator[Session]:
 
 def _repositories(session: Session):
     return (
-        StrategyRepository(session),
-        BotRepository(session),
+        StrategyRepository(session, TEST_WORKSPACE_ID, TEST_OWNER_ID),
+        BotRepository(session, TEST_WORKSPACE_ID, TEST_OWNER_ID),
         MarketDataRepository(session),
     )
 
@@ -198,7 +201,8 @@ def test_reset_creates_strategy_bot_candles_and_queued_session(db_session: Sessi
     assert session.status == "queued"
     assert session.mode == "paper"
     assert session.dataset_key == PAPER_RUNTIME_SMOKE_DATASET_KEY
-    assert session.created_by == PAPER_RUNTIME_SMOKE_ACTOR
+    assert session.created_by == str(TEST_OWNER_ID)
+    assert session.workspace_id == TEST_WORKSPACE_ID
     assert session.source_snapshot["strategyVersionId"] == str(result.strategy_version_id)
     assert session.gate_context["source"] == PAPER_RUNTIME_SMOKE_ACTOR
     assert bot is not None
@@ -218,7 +222,8 @@ def test_reset_is_idempotent_and_keeps_one_queued_fixture_session(db_session: Se
     fixture_sessions = (
         db_session.query(PaperSession)
         .filter(
-            PaperSession.created_by == PAPER_RUNTIME_SMOKE_ACTOR,
+            PaperSession.created_by == str(TEST_OWNER_ID),
+            PaperSession.workspace_id == TEST_WORKSPACE_ID,
             PaperSession.dataset_key == PAPER_RUNTIME_SMOKE_DATASET_KEY,
         )
         .all()
@@ -248,7 +253,7 @@ def test_reset_can_create_cancelled_resumable_fixture_session(db_session: Sessio
 
     session = db_session.get(PaperSession, result.paper_session_id)
     readiness = build_paper_session_resume_readiness(
-        PaperSessionRepository(db_session),
+        PaperSessionRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         session_id=result.paper_session_id,
     )
 
@@ -265,7 +270,7 @@ def test_cancelled_resumable_fixture_session_can_resume_locally(db_session: Sess
     result = _reset(db_session, session_state="cancelled_resumable")
 
     resume = execute_local_paper_session_resume(
-        PaperSessionRepository(db_session),
+        PaperSessionRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID),
         settings=_settings(),
         session_id=result.paper_session_id,
         request=PaperSessionResumeLocalRequestData(
@@ -297,9 +302,10 @@ def test_reset_restores_soft_deleted_strategy_fixture_rows(db_session: Session) 
     group = db_session.query(StrategyGroup).filter(StrategyGroup.slug == PAPER_RUNTIME_SMOKE_GROUP_SLUG).one_or_none()
     if group is None:
         group = StrategyGroup(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             name="deleted smoke group",
             slug=PAPER_RUNTIME_SMOKE_GROUP_SLUG,
-            created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            created_by=str(TEST_OWNER_ID),
         )
         db_session.add(group)
         db_session.flush()
@@ -309,11 +315,12 @@ def test_reset_restores_soft_deleted_strategy_fixture_rows(db_session: Session) 
     strategy = db_session.query(Strategy).filter(Strategy.slug == PAPER_RUNTIME_SMOKE_STRATEGY_SLUG).one_or_none()
     if strategy is None:
         strategy = Strategy(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             strategy_group_id=group.id,
             name="deleted smoke strategy",
             slug=PAPER_RUNTIME_SMOKE_STRATEGY_SLUG,
             status="draft",
-            created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            created_by=str(TEST_OWNER_ID),
         )
         db_session.add(strategy)
         db_session.flush()
@@ -376,7 +383,7 @@ def test_fixture_session_runs_through_paper_engine_and_persists_artifacts(db_ses
     assert any(event.action == "paper_strategy_runtime_prepared" for event in session.audit_events)
 
 
-def test_paper_scheduler_processes_explicit_queued_fixture_session(db_session: Session) -> None:
+def test_paper_scheduler_keeps_private_session_queued_without_authority(db_session: Session) -> None:
     result = _reset(db_session)
     fixture_session = db_session.get(PaperSession, result.paper_session_id)
     assert fixture_session is not None
@@ -400,16 +407,16 @@ def test_paper_scheduler_processes_explicit_queued_fixture_session(db_session: S
     db_session.expire_all()
     session = db_session.get(PaperSession, result.paper_session_id)
 
-    assert state.last_tick_status == "processed"
-    assert state.last_session_id == str(result.paper_session_id)
-    assert state.candles_processed >= 1
-    assert state.orders_created >= PAPER_RUNTIME_SMOKE_EXPECTED_ORDERS_MIN
-    assert state.fills_created >= PAPER_RUNTIME_SMOKE_EXPECTED_FILLS_MIN
-    assert state.snapshots_created >= PAPER_RUNTIME_SMOKE_EXPECTED_SNAPSHOTS_MIN
-    assert state.last_reason_code == "paper_engine_completed"
+    assert state.last_tick_status == "skipped"
+    assert state.last_skip_reason == "workspace_authority_recheck_unavailable"
+    assert state.last_session_id is None
+    assert state.candles_processed == 0
+    assert state.orders_created == 0
+    assert state.fills_created == 0
+    assert state.snapshots_created == 0
     assert session is not None
-    assert session.status == "completed"
-    assert session.reason_code == "paper_engine_completed"
+    assert session.status == "queued"
+    assert session.reason_code == "paper_session_queued"
 
 def test_reset_deletes_existing_resume_checkpoint_before_artifacts(db_session: Session) -> None:
     fixture = _reset(db_session)
@@ -434,7 +441,7 @@ def test_reset_deletes_existing_resume_checkpoint_before_artifacts(db_session: S
         drawdown_pct=0,
         exposure_notional=0,
         artifact_key="fixture-checkpoint-snapshot",
-        created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+        created_by=str(TEST_OWNER_ID),
     )
     db_session.add(snapshot)
     db_session.flush()
@@ -460,7 +467,7 @@ def test_reset_deletes_existing_resume_checkpoint_before_artifacts(db_session: S
         strategy_runtime_state_status="stateless_between_candles",
         checkpoint_source="persisted",
         reason_code="paper_engine_checkpoint_persisted",
-        created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+        created_by=str(TEST_OWNER_ID),
     )
     db_session.add(checkpoint)
     db_session.flush()
@@ -484,106 +491,43 @@ def test_reset_deletes_existing_resume_checkpoint_before_artifacts(db_session: S
     assert db_session.get(PaperSession, reset_result.paper_session_id).status == "queued"
 
 
-def test_api_route_commits_on_success(monkeypatch) -> None:
+def test_fixture_reset_keeps_another_workspaces_private_session(db_session: Session) -> None:
+    first = _reset(db_session)
+    workspace, owner = uuid4(), uuid4()
+    bind_test_context(db_session, workspace, owner)
+    second = reset_paper_runtime_smoke_fixture(
+        StrategyRepository(db_session, workspace, owner),
+        BotRepository(db_session, workspace, owner),
+        MarketDataRepository(db_session),
+        settings=_settings(), confirm_fixture_reset=True,
+    )
+    assert second.deleted_fixture_sessions == 0
+    assert db_session.get(PaperSession, first.paper_session_id) is not None
+    created = db_session.get(PaperSession, second.paper_session_id)
+    assert created.workspace_id == workspace
+    assert created.created_by == str(owner)
+
+
+@pytest.mark.parametrize("confirm", [False, True])
+def test_tenant_cannot_reset_fixture_or_commit(monkeypatch, confirm) -> None:
     from fastapi.testclient import TestClient
+    from unittest.mock import MagicMock
 
-    class FakeSession:
-        def __init__(self) -> None:
-            self.commits = 0
-            self.rollbacks = 0
-
-        def commit(self) -> None:
-            self.commits += 1
-
-        def rollback(self) -> None:
-            self.rollbacks += 1
-
-        def close(self) -> None:
-            pass
-
-    fake_session = FakeSession()
-
-    def fake_reset(strategy_repository, bot_repository, market_repository, *, settings, confirm_fixture_reset, session_state):
-        assert session_state == "queued"
-        return SimpleNamespace(
-            paper_session_id=uuid4(),
-            bot_id=uuid4(),
-            strategy_id=uuid4(),
-            strategy_version_id=uuid4(),
-            strategy_slug="tradelab-paper-runtime-smoke",
-            strategy_group_id=uuid4(),
-            strategy_group_slug="tradelab-paper-runtime-smoke-fixtures",
-            dataset_key=PAPER_RUNTIME_SMOKE_DATASET_KEY,
-            exchange="binance",
-            symbol=PAPER_RUNTIME_SMOKE_SYMBOL,
-            timeframe="1h",
-            requested_start_at=PAPER_RUNTIME_SMOKE_START_AT,
-            requested_end_at=PAPER_RUNTIME_SMOKE_END_AT,
-            expected_orders_min=2,
-            expected_fills_min=2,
-            expected_snapshots_min=6,
-            seeded_rows=6,
-            deleted_fixture_sessions=0,
-            deleted_fixture_candles=0,
-            safety_status=PAPER_RUNTIME_SMOKE_SAFETY_STATUS,
-        )
-
-    monkeypatch.setattr("tradelab_api.api.exchange.reset_paper_runtime_smoke_fixture", fake_reset)
+    fake_session = MagicMock()
+    reset = MagicMock(side_effect=AssertionError("Tenant reached operator reset"))
+    monkeypatch.setattr("tradelab_api.api.exchange.reset_paper_runtime_smoke_fixture", reset)
     app.dependency_overrides[exchange_api.get_db_session] = lambda: fake_session
     try:
-        response = TestClient(app).post(
+        response = TestClient(app, headers=DEFAULT_TEST_HEADERS).post(
             "/api/tradelab/smoke/paper-runtime-fixture/reset",
-            json={"confirmFixtureReset": True},
+            json={"confirmFixtureReset": confirm},
         )
     finally:
         app.dependency_overrides.pop(exchange_api.get_db_session, None)
-
-    payload = response.json()
-    assert response.status_code == 200
-    assert payload["Success"] is True
-    assert payload["StatusCode"] == 200
-    assert payload["Data"]["safetyStatus"] == PAPER_RUNTIME_SMOKE_SAFETY_STATUS
-    assert fake_session.commits == 1
-    assert fake_session.rollbacks == 0
-
-
-def test_api_route_does_not_commit_on_guard_failure(monkeypatch) -> None:
-    from fastapi.testclient import TestClient
-
-    class FakeSession:
-        def __init__(self) -> None:
-            self.commits = 0
-
-        def commit(self) -> None:
-            self.commits += 1
-
-        def close(self) -> None:
-            pass
-
-    fake_session = FakeSession()
-
-    def fake_reset(strategy_repository, bot_repository, market_repository, *, settings, confirm_fixture_reset, session_state):
-        raise PaperRuntimeSmokeFixtureValidationError(
-            "paper_runtime_fixture_confirmation_required",
-            "Paper runtime smoke fixture reset requires explicit confirmation.",
-        )
-
-    monkeypatch.setattr("tradelab_api.api.exchange.reset_paper_runtime_smoke_fixture", fake_reset)
-    app.dependency_overrides[exchange_api.get_db_session] = lambda: fake_session
-    try:
-        response = TestClient(app).post(
-            "/api/tradelab/smoke/paper-runtime-fixture/reset",
-            json={"confirmFixtureReset": False},
-        )
-    finally:
-        app.dependency_overrides.pop(exchange_api.get_db_session, None)
-
-    payload = response.json()
-    assert response.status_code == 200
-    assert payload["Success"] is False
-    assert payload["StatusCode"] == 400
-    assert payload["Data"]["reasonCode"] == "paper_runtime_fixture_confirmation_required"
-    assert fake_session.commits == 0
+    assert response.status_code == 403
+    assert response.json()["Success"] is False
+    reset.assert_not_called()
+    fake_session.commit.assert_not_called()
 
 
 def test_reset_blocks_when_canonical_postgresql_url(db_session: Session) -> None:

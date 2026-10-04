@@ -12,6 +12,7 @@ DISALLOWED_MUTATION_FIELDS = frozenset({
     "actor",
     "workspace_id", "workspaceId",
     "owner_user_id", "ownerUserId",
+    "ownership_verified_at", "ownershipVerifiedAt",
 })
 
 

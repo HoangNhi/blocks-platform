@@ -114,7 +114,7 @@ def list_bots(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = BotRepository(session, actor.workspace_id)
+    repository = BotRepository(session, actor.workspace_id, actor.user_id)
     return success_response({"items": [serialize_model(item) for item in repository.list_bots()]})
 
 def _execution_mode_not_enabled_response(mode: str | None) -> JSONResponse:
@@ -152,7 +152,7 @@ def create_bot(
             credential_boundary_error.data,
         )
 
-    strategy_repo = StrategyRepository(session, actor.workspace_id)
+    strategy_repo = StrategyRepository(session, actor.workspace_id, actor.user_id)
     strategy = strategy_repo.get_strategy(request.strategy_id)
     if strategy is None:
         return error_response(status.HTTP_404_NOT_FOUND, "Strategy not found in active workspace.")
@@ -167,7 +167,7 @@ def create_bot(
         if connection is None:
             return error_response(status.HTTP_404_NOT_FOUND, "Exchange connection not found in active workspace.")
 
-    repository = BotRepository(session, actor.workspace_id)
+    repository = BotRepository(session, actor.workspace_id, actor.user_id)
     bot = repository.create_bot(
         strategy_id=request.strategy_id,
         strategy_version_id=request.strategy_version_id,
@@ -193,13 +193,13 @@ def preflight_bot_backtest(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session, actor.workspace_id)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
     bot = bot_repository.get_bot(bot_id)
     if bot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found.")
     if not is_runnable_execution_mode(bot.mode):
         return _execution_mode_not_runnable_response(bot.mode)
-    strategy_version = _resolve_strategy_version(session, bot)
+    strategy_version = _resolve_strategy_version(session, bot, actor.user_id)
     if strategy_version is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bot has no strategy version.")
 
@@ -223,16 +223,16 @@ def start_bot_backtest(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session, actor.workspace_id)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     bot = bot_repository.get_bot(bot_id)
     if bot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found.")
     if not is_runnable_execution_mode(bot.mode):
         return _execution_mode_not_runnable_response(bot.mode)
 
-    strategy_version = _resolve_strategy_version(session, bot)
+    strategy_version = _resolve_strategy_version(session, bot, actor.user_id)
     if strategy_version is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bot has no strategy version.")
 
@@ -313,7 +313,7 @@ def start_bot_backtest(
         pipeline_status="queued",
         data_job_id=None,
         error_message=None,
-        created_by="trade-lab",
+        created_by=str(actor.user_id),
     )
 
     import_job = None
@@ -323,7 +323,7 @@ def start_bot_backtest(
             run_repository,
             bot_run,
             preflight,
-            created_by="trade-lab",
+            created_by=str(actor.user_id),
         )
         bot_run.data_job_id = import_job.id
         bot_run.pipeline_status = "waiting_for_data"
@@ -332,7 +332,7 @@ def start_bot_backtest(
             bot_run_id=bot_run.id,
             link_status="waiting",
             metadata={"source": "run-backtest"},
-            created_by="trade-lab",
+            created_by=str(actor.user_id),
         )
     elif preflight.active_job_id is not None:
         existing_job = market_repository.get_import_job(UUID(preflight.active_job_id))
@@ -345,7 +345,7 @@ def start_bot_backtest(
                 bot_run_id=bot_run.id,
                 link_status="waiting",
                 metadata={"source": "run-backtest", "joined": True},
-                created_by="trade-lab",
+                created_by=str(actor.user_id),
             )
 
     session.commit()
@@ -368,7 +368,7 @@ def list_bot_runs(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     return success_response(
         {"items": [serialize_model(item) for item in repository.list_bot_runs(strategy_id=strategy_id, status=status, limit=limit)]}
     )
@@ -376,7 +376,7 @@ def list_bot_runs(
 
 @router.get("/bot-runs/{run_id}")
 def get_bot_run(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     run = repository.get_bot_run(run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot run not found.")
@@ -389,7 +389,7 @@ def get_bot_run(run_id: UUID, session: Session = Depends(get_db_session), actor:
 
 @router.get("/bot-runs/{run_id}/analysis")
 def get_bot_run_analysis(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     inputs = repository.get_bot_run_analysis_inputs(run_id)
     run = inputs["run"]
     if run is None:
@@ -419,7 +419,7 @@ def create_manual_signal_package(
             {"reasonCode": "manual_signal_confirmation_required"},
         )
 
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     inputs = repository.get_bot_run_analysis_inputs(run_id)
     run = inputs["run"]
     if run is None:
@@ -463,7 +463,7 @@ def create_research_robustness_gate(
             {"reasonCode": "research_robustness_confirmation_required"},
         )
 
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     inputs = repository.get_bot_run_analysis_inputs(run_id)
     run = inputs["run"]
     if run is None:
@@ -494,7 +494,7 @@ def create_research_robustness_gate(
 
 @router.get("/bot-runs/{run_id}/execution-journal")
 def list_execution_journal_entries(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     run = run_repository.get_bot_run(run_id)
     if run is None:
         return error_response(
@@ -502,7 +502,7 @@ def list_execution_journal_entries(run_id: UUID, session: Session = Depends(get_
             "Bot run not found.",
             {"reasonCode": "execution_journal_source_run_not_found"},
         )
-    repository = ExecutionJournalRepository(session)
+    repository = ExecutionJournalRepository(session, actor.workspace_id, actor.user_id)
     return success_response(
         {"items": [_serialize_execution_journal_entry(entry) for entry in repository.list_entries_for_run(run_id)]}
     )
@@ -514,7 +514,7 @@ def create_execution_journal_entry(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     run = run_repository.get_bot_run(run_id)
     if run is None:
         return error_response(
@@ -534,7 +534,7 @@ def create_execution_journal_entry(
     except ExecutionJournalBlocked as exc:
         return error_response(status.HTTP_400_BAD_REQUEST, str(exc), {"reasonCode": exc.reason_code})
 
-    repository = ExecutionJournalRepository(session)
+    repository = ExecutionJournalRepository(session, actor.workspace_id, actor.user_id)
     entry = repository.create_entry(
         source_run_id=run.id,
         strategy_id=getattr(run, "strategy_id", None),
@@ -549,14 +549,14 @@ def create_execution_journal_entry(
         safety_status="manual_execution_journal_only",
         notes=request.notes,
         fills=_journal_fill_rows(request),
-        created_by="trade-lab",
+        created_by=str(actor.user_id),
     )
     session.commit()
     return success_response(_serialize_execution_journal_entry(entry))
 
 @router.get("/execution-journal/{entry_id}")
 def get_execution_journal_entry(entry_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = ExecutionJournalRepository(session)
+    repository = ExecutionJournalRepository(session, actor.workspace_id, actor.user_id)
     entry = repository.get_entry(entry_id)
     if entry is None:
         return error_response(
@@ -573,7 +573,7 @@ def update_execution_journal_entry(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    repository = ExecutionJournalRepository(session)
+    repository = ExecutionJournalRepository(session, actor.workspace_id, actor.user_id)
     entry = repository.get_entry(entry_id)
     if entry is None:
         return error_response(
@@ -581,7 +581,7 @@ def update_execution_journal_entry(
             "Execution journal entry not found.",
             {"reasonCode": "execution_journal_entry_not_found"},
         )
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     run = run_repository.get_bot_run(entry.source_run_id)
     if run is None:
         return error_response(
@@ -617,7 +617,7 @@ def update_execution_journal_entry(
 
 @router.delete("/execution-journal/{entry_id}")
 def delete_execution_journal_entry(entry_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = ExecutionJournalRepository(session)
+    repository = ExecutionJournalRepository(session, actor.workspace_id, actor.user_id)
     entry = repository.get_entry(entry_id)
     if entry is None:
         return error_response(
@@ -706,11 +706,11 @@ def start_benchmark_repeat(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Benchmark repeat requires same-input confirmation.",
         )
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     benchmark_repository = BenchmarkRepository(session)
     service = BenchmarkService(run_repository=run_repository, benchmark_repository=benchmark_repository)
     try:
-        check = service.start_repeat_benchmark(run_id, created_by="trade-lab")
+        check = service.start_repeat_benchmark(run_id, created_by=str(actor.user_id))
     except ValueError as exc:
         message = str(exc)
         if "not found" in message.lower():
@@ -721,13 +721,16 @@ def start_benchmark_repeat(
 
 @router.get("/bot-runs/{run_id}/benchmark-checks")
 def list_benchmark_checks(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
+    if run_repository.get_bot_run(run_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot run not found.")
     repository = BenchmarkRepository(session)
     latest = repository.get_latest_for_run(run_id)
     return success_response({"latest": _serialize_benchmark_check(latest) if latest is not None else None})
 
 @router.get("/bot-runs/{run_id}/pipeline")
 def get_bot_run_pipeline(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     run = run_repository.get_bot_run(run_id)
     if run is None:
@@ -742,12 +745,12 @@ def get_strategy_job_visibility(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    strategy_repository = StrategyRepository(session, actor.workspace_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     if strategy_repository.get_strategy(strategy_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy not found.")
 
     normalized_limit = max(1, min(limit, JOB_VISIBILITY_MAX_LIMIT))
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     active_runs = run_repository.list_strategy_pipeline_runs(
         strategy_id=strategy_id,
@@ -797,7 +800,7 @@ def get_bot_run_chart(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    run_repository = RunRepository(session, actor.workspace_id)
+    run_repository = RunRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     run = run_repository.get_bot_run(run_id)
     if run is None:
@@ -830,7 +833,7 @@ def get_bot_run_trade_detail(
     session: Session = Depends(get_db_session),
     actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     inputs = repository.get_bot_run_analysis_inputs(run_id)
     run = inputs["run"]
     if run is None:
@@ -849,25 +852,27 @@ def get_bot_run_trade_detail(
 
 @router.get("/bot-runs/{run_id}/logs")
 def list_bot_run_logs(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     return success_response({"items": [serialize_model(item) for item in repository.list_bot_run_logs(run_id)]})
 
 
 @router.get("/bot-runs/{run_id}/orders")
 def list_bot_run_orders(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     return success_response({"items": [serialize_model(item) for item in repository.list_bot_run_orders(run_id)]})
 
 
 @router.get("/bot-runs/{run_id}/result")
 def get_bot_run_result(run_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
-    repository = RunRepository(session, actor.workspace_id)
+    repository = RunRepository(session, actor.workspace_id, actor.user_id)
     result = repository.get_bot_run_result(run_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backtest result not found.")
     return success_response(_serialize_result(result))
-def _resolve_strategy_version(session: Session, bot: Bot) -> StrategyVersion | None:
-    strategy_repository = StrategyRepository(session, bot.workspace_id)
+def _resolve_strategy_version(
+    session: Session, bot: Bot, owner_user_id: UUID
+) -> StrategyVersion | None:
+    strategy_repository = StrategyRepository(session, bot.workspace_id, owner_user_id)
     if bot.strategy_version_id is not None:
         version = strategy_repository.get_strategy_version(bot.strategy_version_id)
         if version is not None and version.strategy_id == bot.strategy_id:

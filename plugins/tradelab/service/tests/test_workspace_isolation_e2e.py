@@ -110,10 +110,21 @@ def test_same_workspace_different_user_cannot_read_another_users_connection() ->
         pytest.skip("same-workspace credential E2E requires peer token and seeded connection ID")
 
     with httpx.Client(base_url=env["TRADELAB_E2E_BASE_URL"], timeout=10.0) as client:
+        owner_response = client.get(
+            f"/api/tradelab/live/credentials/{alice_connection_id}",
+            headers=_headers(env["TRADELAB_E2E_ALICE_TOKEN"], env["TRADELAB_E2E_ALICE_WORKSPACE_ID"]),
+        )
+        owner_payload = _assert_envelope_status(owner_response, 200)
+        assert owner_payload["Data"]["credentialRefId"] == alice_connection_id
         response = client.get(
             f"/api/tradelab/live/credentials/{alice_connection_id}",
             headers=_headers(alice_peer_token, env["TRADELAB_E2E_ALICE_WORKSPACE_ID"]),
         )
+        missing_response = client.get(
+            f"/api/tradelab/live/credentials/{uuid4()}",
+            headers=_headers(alice_peer_token, env["TRADELAB_E2E_ALICE_WORKSPACE_ID"]),
+        )
 
     payload = _assert_envelope_status(response, 404)
-    assert payload["Success"] is False
+    assert payload == _assert_envelope_status(missing_response, 404)
+    assert payload["Data"] == {"status": "not_found", "reasonCode": "live_credential_not_found"}

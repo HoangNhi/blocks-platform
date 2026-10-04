@@ -55,13 +55,16 @@ class TenantScopedMixin:
     )
 
 
+class OwnershipProvenanceMixin:
+    ownership_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 class CredentialRootMixin(TenantScopedMixin):
     owner_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True, index=True
     )
 
 
-class StrategyGroup(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class StrategyGroup(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "strategy_group"
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="uq_strategy_group_workspace_slug"),
@@ -80,7 +83,7 @@ class StrategyGroup(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, Mu
     )
 
 
-class Strategy(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class Strategy(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "strategy"
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="uq_strategy_workspace_slug"),
@@ -119,7 +122,7 @@ class Strategy(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, Mutable
     bots: Mapped[list["Bot"]] = relationship(back_populates="strategy")
 
 
-class StrategyVersion(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class StrategyVersion(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "strategy_version"
 
     strategy_id: Mapped[UUID] = mapped_column(
@@ -145,7 +148,7 @@ class StrategyVersion(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, 
     )
 
 
-class Bot(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class Bot(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "bot"
 
     strategy_id: Mapped[UUID] = mapped_column(
@@ -178,7 +181,7 @@ class Bot(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatu
     bot_runs: Mapped[list["BotRun"]] = relationship(back_populates="bot")
 
 
-class ExchangeConnection(Base, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
+class ExchangeConnection(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "exchange_connection"
 
     exchange: Mapped[str] = mapped_column(Text, nullable=False)
@@ -195,7 +198,7 @@ class ExchangeConnection(Base, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMi
     status: Mapped[str] = mapped_column(Text, nullable=False)
 
 
-class TestnetCredentialRef(Base, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
+class TestnetCredentialRef(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "testnet_credential_ref"
     __table_args__ = (
         CheckConstraint("exchange IN ('binance_spot')", name="ck_testnet_credential_ref_exchange"),
@@ -274,7 +277,7 @@ class TestnetCredentialAuditEvent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, 
 
     credential_ref: Mapped["TestnetCredentialRef | None"] = relationship(back_populates="audit_events")
 
-class TestnetOrderIntent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class TestnetOrderIntent(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "testnet_order_intent"
     __table_args__ = (
         UniqueConstraint("intent_key", name="uq_testnet_order_intent_key"),
@@ -358,7 +361,7 @@ class TestnetOrderIntent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixi
         order_by="TestnetReconciliationAttempt.attempt_no",
     )
 
-class TestnetOrderPreview(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class TestnetOrderPreview(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "testnet_order_preview"
     __table_args__ = (
         UniqueConstraint("preview_key", name="uq_testnet_order_preview_key"),
@@ -485,7 +488,7 @@ class TestnetReconciliationAttempt(Base, UUIDPrimaryKeyMixin, TenantScopedMixin,
 
     intent: Mapped["TestnetOrderIntent"] = relationship(back_populates="reconciliation_attempts")
 
-class LiveCredentialRef(Base, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
+class LiveCredentialRef(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, CredentialRootMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "live_credential_ref"
     __table_args__ = (
         CheckConstraint("exchange IN ('binance_spot')", name="ck_live_credential_ref_exchange"),
@@ -603,7 +606,7 @@ class LivePilotControl(Base, UUIDPrimaryKeyMixin, AuditMixin, MutableStatusMixin
     )
 
 
-class LiveOrderIntent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class LiveOrderIntent(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "live_order_intent"
     __table_args__ = (
         UniqueConstraint("intent_key", name="uq_live_order_intent_key"),
@@ -666,7 +669,7 @@ class LiveOrderIntent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, 
     )
 
 
-class LiveOrderPreview(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class LiveOrderPreview(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "live_order_preview"
     __table_args__ = (
         UniqueConstraint("preview_key", name="uq_live_order_preview_key"),
@@ -895,7 +898,7 @@ class BenchmarkRunCheck(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin
     baseline_run: Mapped["BotRun"] = relationship(foreign_keys=[baseline_run_id])
     repeat_run: Mapped["BotRun | None"] = relationship(foreign_keys=[repeat_run_id])
 
-class BotRun(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
+class BotRun(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin):
     __tablename__ = "bot_run"
 
     bot_id: Mapped[UUID | None] = mapped_column(
@@ -1094,7 +1097,7 @@ class StrategyLog(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
     bot_run: Mapped["BotRun"] = relationship(back_populates="logs")
 
 
-class ManualTradeJournalEntry(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class ManualTradeJournalEntry(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "manual_trade_journal_entry"
     __table_args__ = (
         CheckConstraint("side IN ('long', 'short', 'flat_or_watch')", name="ck_manual_trade_journal_entry_side"),
@@ -1166,7 +1169,7 @@ class ManualTradeJournalFill(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, Audit
 
     journal_entry: Mapped["ManualTradeJournalEntry"] = relationship(back_populates="fills")
 
-class PaperSession(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
+class PaperSession(Base, OwnershipProvenanceMixin, UUIDPrimaryKeyMixin, TenantScopedMixin, AuditMixin, MutableStatusMixin):
     __tablename__ = "paper_session"
     __table_args__ = (
         CheckConstraint("mode = 'paper'", name="ck_paper_session_mode_paper"),

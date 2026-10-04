@@ -125,7 +125,7 @@ class SqlAlchemyPaperEngineSessionSource:
         error_message: str | None = None,
     ) -> None:
         row = self.session.get(PaperSession, UUID(session_id))
-        if row is None:
+        if row is None or row.ownership_verified_at is None:
             return
         now = _utcnow()
         row.status = status

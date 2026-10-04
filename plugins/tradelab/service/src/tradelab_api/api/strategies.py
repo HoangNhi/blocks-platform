@@ -92,7 +92,7 @@ def list_strategy_groups(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     return success_response({"items": [serialize_model(item) for item in repository.list_strategy_groups()]})
 
 
@@ -102,7 +102,7 @@ def create_strategy_group(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     group = repository.create_strategy_group(
         name=request.name,
         slug=request.slug,
@@ -120,7 +120,7 @@ def get_strategy_group(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     group = repository.get_strategy_group(group_id)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy group not found.")
@@ -133,7 +133,7 @@ def list_strategies(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     return success_response(
         {"items": [serialize_model(item) for item in repository.list_strategies(strategy_group_id=strategy_group_id)]}
     )
@@ -145,7 +145,7 @@ def create_strategy(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     if request.strategy_group_id is not None:
         group = repository.get_strategy_group(request.strategy_group_id)
         if group is None:
@@ -172,7 +172,7 @@ def get_strategy(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     strategy = repository.get_strategy(strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy not found.")
@@ -188,7 +188,7 @@ def update_strategy(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     strategy = repository.get_strategy(strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy not found.")
@@ -219,7 +219,7 @@ def create_strategy_version(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     strategy = repository.get_strategy(strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy not found.")
@@ -251,7 +251,7 @@ def list_strategy_versions(
     actor: SecurityActor = Depends(get_current_actor),
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
-    repository = StrategyRepository(session, actor.workspace_id)
+    repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     strategy = repository.get_strategy(strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Strategy not found.")
