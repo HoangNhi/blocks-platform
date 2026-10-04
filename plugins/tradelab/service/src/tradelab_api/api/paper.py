@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import error_response, success_response
 from tradelab_api.core.config import get_settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.paper import (
     PaperEngineTickLocalRequest,
@@ -99,9 +100,10 @@ def get_paper_scheduler_status_route(request: Request) -> JSONResponse:
 def preview_paper_session(
     request: PaperSessionPreviewRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     risk_policy_override = (
         request.risk_policy_override.model_dump(mode="python", exclude_none=True)
@@ -134,11 +136,12 @@ def preview_paper_session(
 def start_paper_session_route(
     request: PaperSessionStartRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     risk_policy_override = (
         request.risk_policy_override.model_dump(mode="python", exclude_none=True)
         if request.risk_policy_override is not None
@@ -162,7 +165,7 @@ def start_paper_session_route(
             idempotency_key=request.idempotency_key,
             confirm_start=request.confirm_start,
             source=request.source,
-            actor=request.actor,
+            actor=str(actor.user_id),
             kill_switch_status=build_paper_kill_switch_status(get_settings()),
         )
     except PaperSessionStartValidationError as exc:
@@ -180,6 +183,7 @@ def start_paper_session_route(
 def tick_local_paper_engine_route(
     request: PaperEngineTickLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = execute_local_paper_engine_tick(
         session,
@@ -202,6 +206,7 @@ def run_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionRunLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = execute_local_paper_session_run(
         session,
@@ -226,8 +231,9 @@ def cancel_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionCancelLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     result = execute_local_paper_session_cancel(
         paper_repository,
         settings=get_settings(),
@@ -235,7 +241,7 @@ def cancel_local_paper_session_route(
         request=PaperSessionCancelLocalRequestData(
             confirm_local_paper_cancel=request.confirm_local_paper_cancel,
             reason=request.reason,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
     )
     if result.should_commit:
@@ -249,8 +255,9 @@ def resume_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionResumeLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     result = execute_local_paper_session_resume(
         paper_repository,
         settings=get_settings(),
@@ -259,7 +266,7 @@ def resume_local_paper_session_route(
             confirm_local_paper_resume=request.confirm_local_paper_resume,
             idempotency_key=request.idempotency_key,
             reason=request.reason,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
         kill_switch_status=build_paper_kill_switch_status(get_settings()),
         readiness_builder=build_paper_session_resume_readiness,
@@ -275,11 +282,12 @@ def retry_local_paper_session_route(
     session_id: UUID,
     request: PaperSessionRetryLocalRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    bot_repository = BotRepository(session)
-    strategy_repository = StrategyRepository(session)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     result = execute_local_paper_session_retry(
         bot_repository,
         strategy_repository,
@@ -291,7 +299,7 @@ def retry_local_paper_session_route(
             confirm_local_paper_retry=request.confirm_local_paper_retry,
             idempotency_key=request.idempotency_key,
             reason=request.reason,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
         kill_switch_status=build_paper_kill_switch_status(get_settings()),
     )
@@ -309,8 +317,9 @@ def list_paper_sessions_route(
     status: str | None = None,
     limit: int | None = None,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     try:
         result = build_paper_session_observability(
             paper_repository,
@@ -330,8 +339,9 @@ def list_paper_sessions_route(
 def get_paper_session_resume_readiness_route(
     session_id: UUID,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     try:
         readiness = build_paper_session_resume_readiness(paper_repository, session_id=session_id)
     except PaperSessionResumeReadinessValidationError as exc:
@@ -344,8 +354,9 @@ def get_paper_session_resume_readiness_route(
 def get_paper_session_detail_route(
     session_id: UUID,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    paper_repository = PaperSessionRepository(session)
+    paper_repository = PaperSessionRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id)
     try:
         detail = build_paper_session_detail(paper_repository, session_id=session_id)
     except PaperSessionDetailValidationError as exc:

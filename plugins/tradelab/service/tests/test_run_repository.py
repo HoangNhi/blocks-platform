@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
+from conftest import bind_test_context
 
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -30,6 +25,9 @@ apply_schema_compatibility()
 
 def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
     session = SessionLocal(bind=get_engine())
+    test_workspace_id = uuid4()
+    test_owner_id = uuid4()
+    bind_test_context(session, test_workspace_id, test_owner_id)
     run_id = uuid4()
     group_id = uuid4()
     strategy_id = uuid4()
@@ -37,15 +35,17 @@ def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
     slug_suffix = uuid4().hex[:8]
     group = StrategyGroup(
         id=group_id,
+        workspace_id=test_workspace_id,
         name=f"Run Repository Group {slug_suffix}",
         slug=f"run-repository-group-{slug_suffix}",
         description="Run repository regression fixture",
         metadata_={},
         created_at=datetime.now(timezone.utc),
-        created_by="codex",
+        created_by=str(test_owner_id),
     )
     strategy = Strategy(
         id=strategy_id,
+        workspace_id=test_workspace_id,
         strategy_group_id=group_id,
         name=f"Run Repository Strategy {slug_suffix}",
         slug=f"run-repository-strategy-{slug_suffix}",
@@ -56,10 +56,11 @@ def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
         risk_config={},
         metadata_={},
         created_at=datetime.now(timezone.utc),
-        created_by="codex",
+        created_by=str(test_owner_id),
     )
     version = StrategyVersion(
         id=version_id,
+        workspace_id=test_workspace_id,
         strategy_id=strategy_id,
         version_number=1,
         source_code="def on_candle(ctx):\n    return None\n",
@@ -67,10 +68,11 @@ def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
         validation_status="valid",
         validation_message=None,
         created_at=datetime.now(timezone.utc),
-        created_by="codex",
+        created_by=str(test_owner_id),
     )
     run = BotRun(
         id=run_id,
+        workspace_id=test_workspace_id,
         strategy_id=strategy_id,
         strategy_version_id=version_id,
         run_type="backtest",
@@ -90,7 +92,7 @@ def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
         pipeline_status="queued",
         error_message=None,
         created_at=datetime.now(timezone.utc),
-        created_by="codex",
+        created_by=str(test_owner_id),
     )
     try:
         session.add_all([group, strategy, version])
@@ -99,7 +101,9 @@ def test_claim_and_complete_bot_run_keep_pipeline_status_in_sync() -> None:
         session.add(run)
         session.commit()
 
-        repository = RunRepository(session)
+        repository = RunRepository(
+            session, workspace_id=test_workspace_id, owner_user_id=test_owner_id
+        )
         claimed = repository.claim_next_queued_bot_run()
         assert claimed is not None
         assert claimed.id == run_id

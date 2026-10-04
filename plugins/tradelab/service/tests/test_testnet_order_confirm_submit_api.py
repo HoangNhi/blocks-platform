@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.api import testnet_orders as orders_api
 from tradelab_api.main import app
@@ -16,7 +13,7 @@ from tradelab_api.schemas.testnet_orders import (
 )
 from tradelab_api.core.config import Settings
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def test_confirm_submit_schema_uses_camel_aliases() -> None:
@@ -24,7 +21,6 @@ def test_confirm_submit_schema_uses_camel_aliases() -> None:
         {
             "confirmTestnetOrder": True,
             "idempotencyKey": "submit-key-1",
-            "actor": "admin",
         }
     )
     assert request.confirm_testnet_order is True
@@ -62,13 +58,13 @@ def test_testnet_order_routes_include_submit_cancel_reconcile_but_not_live() -> 
     assert all("/api/v3/order/test" not in path for path in routes)
 
 
-def test_confirm_submit_route_blocks_missing_preview() -> None:
+def test_confirm_submit_route_blocks_missing_preview(monkeypatch) -> None:
+    monkeypatch.setattr("tradelab_api.services.testnet_order_state_repository.TestnetOrderStateRepository.get_preview_with_intent", lambda *args, **kwargs: (None, None))
     response = client.post(
         f"/api/tradelab/testnet/orders/{uuid4()}/confirm-submit",
         json={
             "confirmTestnetOrder": True,
             "idempotencyKey": "submit-key-1",
-            "actor": "admin",
         },
     )
     payload = response.json()
@@ -84,7 +80,6 @@ def test_confirm_submit_route_blocks_without_confirmation() -> None:
         json={
             "confirmTestnetOrder": False,
             "idempotencyKey": "submit-key-1",
-            "actor": "admin",
         },
     )
     payload = response.json()
@@ -93,6 +88,7 @@ def test_confirm_submit_route_blocks_without_confirmation() -> None:
     assert payload["Data"]["reasonCode"] == "testnet_order_submit_confirmation_required"
 
 def test_confirm_submit_route_uses_real_submit_safety_status(monkeypatch) -> None:
+    monkeypatch.setattr("tradelab_api.services.testnet_order_state_repository.TestnetOrderStateRepository.get_preview_with_intent", lambda *args, **kwargs: (None, None))
     monkeypatch.setattr(
         orders_api,
         "get_settings",
@@ -110,7 +106,6 @@ def test_confirm_submit_route_uses_real_submit_safety_status(monkeypatch) -> Non
         json={
             "confirmTestnetOrder": True,
             "idempotencyKey": "real-submit-api-1",
-            "actor": "admin",
         },
     )
     payload = response.json()

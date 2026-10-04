@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Base, Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -27,6 +27,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -37,15 +38,17 @@ def db_session() -> Iterator[Session]:
 def _strategy_context(session: Session) -> tuple[Strategy, StrategyVersion]:
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
     group = StrategyGroup(
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
         name="Phase 19.1 Group",
         slug=f"phase-19-1-group-{suffix}",
         description=None,
         metadata_={},
-        created_by="admin",
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(group)
     session.flush()
     strategy = Strategy(
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
         strategy_group_id=group.id,
         name="Phase 19.1 Strategy",
         slug=f"phase-19-1-strategy-{suffix}",
@@ -54,18 +57,19 @@ def _strategy_context(session: Session) -> tuple[Strategy, StrategyVersion]:
         runtime_config={},
         risk_config={},
         metadata_={},
-        created_by="admin",
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(strategy)
     session.flush()
     version = StrategyVersion(
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
         strategy_id=strategy.id,
         version_number=1,
         source_code="def on_bar(ctx): return []",
         source_hash="hash-phase-19-1",
         validation_status="valid",
         validation_message=None,
-        created_by="admin",
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(version)
     session.flush()
@@ -74,7 +78,7 @@ def _strategy_context(session: Session) -> tuple[Strategy, StrategyVersion]:
     return strategy, version
 
 def _credential_id(session: Session):
-    credential = CredentialRepository(session).create_credential_ref(
+    credential = CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_testnet",
         label="Phase 19.1 credential",
@@ -129,7 +133,7 @@ def _intent_payload(session: Session) -> dict[str, object]:
 def test_repository_persists_intent_preview_event_and_reconciliation_with_redaction(
     db_session: Session,
 ) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
     preview = repository.create_preview(
         intent_id=intent.id,
@@ -194,7 +198,7 @@ def test_repository_persists_intent_preview_event_and_reconciliation_with_redact
     assert repository.get_intent_by_client_order_id(intent.client_order_id) == intent
 
 def test_repository_updates_status_and_blocks_soft_deleted_reads(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
 
     repository.update_intent_status(
@@ -224,7 +228,7 @@ def test_order_state_tables_do_not_contain_plain_secret_columns() -> None:
         assert forbidden.isdisjoint(set(Base.metadata.tables[table_name].columns.keys()))
 
 def test_repository_records_unknown_state_and_reconciliation_event(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
 
     repository.update_intent_status(
@@ -257,7 +261,7 @@ def test_repository_records_unknown_state_and_reconciliation_event(db_session: S
     assert event.metadata_["signedUrl"] == "[REDACTED]"
 
 def test_repository_supports_confirm_submit_events_and_exchange_updates(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
     preview = repository.create_preview(
         intent_id=intent.id,
@@ -328,7 +332,7 @@ def test_repository_supports_confirm_submit_events_and_exchange_updates(db_sessi
 
 
 def test_repository_supports_cancel_events_and_idempotency_replay(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
 
     requested = repository.add_event(
@@ -372,7 +376,7 @@ def test_repository_supports_cancel_events_and_idempotency_replay(db_session: Se
 
 
 def test_repository_returns_next_reconciliation_attempt_no(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
 
     assert repository.get_next_reconciliation_attempt_no(intent.id) == 0

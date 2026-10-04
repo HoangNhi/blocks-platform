@@ -72,9 +72,12 @@ class BaselineSeedResult:
     tagged_test_group_count: int
 
 
-def seed_baseline_fixture(session: Session, *, created_by: str = "trade-lab-seed") -> BaselineSeedResult:
-    strategy_repository = StrategyRepository(session)
-    bot_repository = BotRepository(session)
+def seed_baseline_fixture(
+    session: Session, *, workspace_id: UUID, owner_user_id: UUID
+) -> BaselineSeedResult:
+    created_by = str(owner_user_id)
+    strategy_repository = StrategyRepository(session, workspace_id, owner_user_id)
+    bot_repository = BotRepository(session, workspace_id, owner_user_id)
 
     tagged_count = _tag_known_test_groups(strategy_repository, created_by=created_by)
     group = _upsert_group(strategy_repository, created_by=created_by)
@@ -174,6 +177,8 @@ def _upsert_bot(bot_repository: BotRepository, *, strategy_id: UUID, version_id:
         bot_repository.session.query(Bot)
         .filter(
             Bot.strategy_id == strategy_id,
+            Bot.workspace_id == bot_repository.workspace_id,
+            Bot.created_by == str(bot_repository.owner_user_id),
             Bot.name == BASELINE_BOT_NAME,
             Bot.mode == "backtest",
             Bot.is_deleted.is_(False),

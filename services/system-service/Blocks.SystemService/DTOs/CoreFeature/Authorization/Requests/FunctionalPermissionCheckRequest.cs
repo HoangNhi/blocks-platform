@@ -7,6 +7,7 @@ public sealed class FunctionalPermissionCheckRequest
 {
     public string PermissionKey { get; set; } = string.Empty;
     public FunctionalPermissionAction Action { get; set; }
+    public Guid? WorkspaceId { get; set; }
 }
 
 public sealed class FunctionalPermissionCheckRequestValidator : AbstractValidator<FunctionalPermissionCheckRequest>
@@ -18,5 +19,8 @@ public sealed class FunctionalPermissionCheckRequestValidator : AbstractValidato
             .IsInEnum()
             .Must(action => action != FunctionalPermissionAction.NONE)
             .WithMessage("Hành động không được hỗ trợ");
+        RuleFor(request => request.WorkspaceId)
+            .Must(id => !id.HasValue || id.Value != Guid.Empty)
+            .WithMessage("WorkspaceId không được là Guid rỗng");
     }
 }

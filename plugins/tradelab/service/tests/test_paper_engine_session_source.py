@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import os
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -8,11 +9,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
-
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
 
 from tradelab_api.db.models import (  # noqa: E402
     Base,
@@ -58,13 +54,15 @@ def db_session() -> Iterator[Session]:
         connection.close()
 
 def _create_strategy_tree(session: Session) -> dict[str, UUID]:
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     suffix = uuid4().hex[:10]
     group = StrategyGroup(
         name=f"Paper Source Group {suffix}",
         slug=f"paper-source-group-{suffix}",
         description="Paper session source test group",
         metadata_={"visibility": "test", "purpose": "paper_engine_session_source"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(group)
     session.flush()
@@ -77,7 +75,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         runtime_config={"feeBps": "0", "slippageBps": "0"},
         risk_config={},
         metadata_={"visibility": "test", "purpose": "paper_engine_session_source"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(strategy)
     session.flush()
@@ -88,7 +87,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         source_hash=f"hash-{suffix}",
         validation_status="valid",
         validation_message=None,
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(version)
     session.flush()
@@ -104,7 +104,8 @@ def _create_strategy_tree(session: Session) -> dict[str, UUID]:
         runtime_config={},
         risk_config={},
         metadata_={"visibility": "test", "purpose": "paper_engine_session_source"},
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(bot)
     session.flush()
@@ -137,7 +138,8 @@ def _paper_session(
         dataset_context={"datasetKey": f"binance:{symbol}:1h"},
         gate_context={"requestFingerprint": f"source-{uuid4().hex}"},
         reason_code="paper_session_queued" if status == "queued" else "paper_session_running",
-        created_by="pytest",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     row.created_at = _dt(created_hour)
     session.add(row)

@@ -11,8 +11,17 @@ from tradelab_api.services.credential_redaction import sanitize_credential_paylo
 
 
 class LiveCredentialRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        workspace_id: UUID,
+        owner_user_id: UUID,
+    ) -> None:
+        if not isinstance(workspace_id, UUID) or not isinstance(owner_user_id, UUID):
+            raise ValueError("Verified workspace_id and owner_user_id are required.")
         self.session = session
+        self.workspace_id = workspace_id
+        self.owner_user_id = owner_user_id
 
     def create_credential_ref(
         self,
@@ -29,6 +38,8 @@ class LiveCredentialRepository:
         actor: str,
     ) -> LiveCredentialRef:
         row = LiveCredentialRef(
+            workspace_id=self.workspace_id,
+            owner_user_id=self.owner_user_id,
             exchange=exchange,
             environment=environment,
             label=label,
@@ -57,6 +68,7 @@ class LiveCredentialRepository:
         metadata: dict[str, Any] | None = None,
     ) -> LiveCredentialAuditEvent:
         row = LiveCredentialAuditEvent(
+            workspace_id=self.workspace_id,
             credential_ref_id=credential_ref_id,
             action=action,
             actor=actor,
@@ -81,6 +93,7 @@ class LiveCredentialRepository:
         actor: str,
     ) -> LiveCredentialSecret:
         row = LiveCredentialSecret(
+            workspace_id=self.workspace_id,
             credential_ref_id=credential_ref_id,
             vault_secret_ref=vault_secret_ref,
             vault_provider="local_dev_encrypted",
@@ -93,26 +106,46 @@ class LiveCredentialRepository:
         return row
 
     def get_active_secret_by_ref(self, vault_secret_ref: str) -> LiveCredentialSecret | None:
-        statement = select(LiveCredentialSecret).where(
+        statement = select(LiveCredentialSecret).join(
+            LiveCredentialRef,
+            LiveCredentialRef.id == LiveCredentialSecret.credential_ref_id,
+        ).where(
+            LiveCredentialRef.workspace_id == self.workspace_id,
+            LiveCredentialRef.owner_user_id == self.owner_user_id,
+            LiveCredentialRef.is_deleted.is_(False),
             LiveCredentialSecret.vault_secret_ref == vault_secret_ref,
             LiveCredentialSecret.is_active.is_(True),
             LiveCredentialSecret.is_deleted.is_(False),
         )
+        statement = statement.where(LiveCredentialSecret.workspace_id == self.workspace_id)
         return self.session.scalars(statement).first()
 
     def deactivate_secret_rows(self, *, credential_ref_id: UUID, actor: str) -> None:
-        statement = select(LiveCredentialSecret).where(
+        statement = select(LiveCredentialSecret).join(
+            LiveCredentialRef,
+            LiveCredentialRef.id == LiveCredentialSecret.credential_ref_id,
+        ).where(
+            LiveCredentialRef.workspace_id == self.workspace_id,
+            LiveCredentialRef.owner_user_id == self.owner_user_id,
+            LiveCredentialRef.is_deleted.is_(False),
             LiveCredentialSecret.credential_ref_id == credential_ref_id,
             LiveCredentialSecret.is_active.is_(True),
             LiveCredentialSecret.is_deleted.is_(False),
         )
+        statement = statement.where(LiveCredentialSecret.workspace_id == self.workspace_id)
         for row in self.session.scalars(statement).all():
             row.is_active = False
             row.updated_by = actor
 
     def get_credential_ref(self, credential_ref_id: UUID) -> LiveCredentialRef | None:
-        return self.session.get(LiveCredentialRef, credential_ref_id)
+        stmt = select(LiveCredentialRef).where(LiveCredentialRef.id == credential_ref_id)
+        stmt = stmt.where(LiveCredentialRef.workspace_id == self.workspace_id)
+        stmt = stmt.where(LiveCredentialRef.owner_user_id == self.owner_user_id)
+        return self.session.scalars(stmt).first()
 
     def list_credential_refs(self) -> list[LiveCredentialRef]:
-        statement = select(LiveCredentialRef).where(LiveCredentialRef.is_deleted.is_(False)).order_by(LiveCredentialRef.created_at.desc())
+        statement = select(LiveCredentialRef).where(LiveCredentialRef.is_deleted.is_(False))
+        statement = statement.where(LiveCredentialRef.workspace_id == self.workspace_id)
+        statement = statement.where(LiveCredentialRef.owner_user_id == self.owner_user_id)
+        statement = statement.order_by(LiveCredentialRef.created_at.desc())
         return list(self.session.scalars(statement).all())

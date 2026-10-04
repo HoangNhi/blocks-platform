@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from decimal import Decimal
-import os
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -24,6 +24,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -34,20 +35,20 @@ def db_session() -> Iterator[Session]:
 
 def _strategy(session: Session):
     suffix = uuid4().hex
-    group = StrategyGroup(name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Live Group", slug=f"live-group-{suffix}", metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     return strategy, version
 
 
 def _credential(session: Session, *, status: str = "validated_live_read_only", can_withdraw: bool = False):
-    return CredentialRepository(session).create_credential_ref(
+    return CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_live",
         label="Preview credential",
@@ -89,7 +90,7 @@ def _request(session: Session, **overrides) -> LiveOrderPreviewRequestData:
 
 
 def test_allowed_preview_persists_intent_preview_and_event(db_session: Session) -> None:
-    result = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session), live_order_submit_kill_switch_enabled=False)
+    result = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session), live_order_submit_kill_switch_enabled=False)
 
     assert result.allowed is True
     assert result.status == "previewed"
@@ -103,27 +104,27 @@ def test_allowed_preview_persists_intent_preview_and_event(db_session: Session) 
 
 
 def test_preview_blocks_without_confirmation(db_session: Session) -> None:
-    result = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, confirm_preview_only=False), live_order_submit_kill_switch_enabled=False)
+    result = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, confirm_preview_only=False), live_order_submit_kill_switch_enabled=False)
     assert result.allowed is False
     assert result.reason_code == "live_order_preview_confirmation_required"
 
 
 def test_preview_blocks_live_environment_mismatch(db_session: Session) -> None:
-    result = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, environment="binance_testnet"), live_order_submit_kill_switch_enabled=False)
+    result = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, environment="binance_testnet"), live_order_submit_kill_switch_enabled=False)
     assert result.allowed is False
     assert result.reason_code == "live_order_preview_live_route_blocked"
 
 
 def test_preview_blocks_invalid_quantity(db_session: Session) -> None:
-    result = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, quantity=Decimal("1"), quote_quantity=Decimal("25")), live_order_submit_kill_switch_enabled=False)
+    result = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, quantity=Decimal("1"), quote_quantity=Decimal("25")), live_order_submit_kill_switch_enabled=False)
     assert result.allowed is False
     assert result.reason_code == "live_order_preview_quantity_invalid"
 
 
 def test_preview_replays_same_idempotency_key(db_session: Session) -> None:
     request = _request(db_session)
-    first = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), request, live_order_submit_kill_switch_enabled=False)
-    second = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), request, live_order_submit_kill_switch_enabled=False)
+    first = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request, live_order_submit_kill_switch_enabled=False)
+    second = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request, live_order_submit_kill_switch_enabled=False)
     assert second.allowed is True
     assert second.preview_id == first.preview_id
     assert second.reason_code == "live_order_preview_idempotency_replayed"
@@ -133,6 +134,6 @@ def test_preview_blocks_unsafe_credential(db_session: Session) -> None:
     strategy, version = _strategy(db_session)
     credential = _credential(db_session, status="unsafe_permissions", can_withdraw=True)
     request = _request(db_session, strategy_id=strategy.id, strategy_version_id=version.id, credential_ref_id=credential.id)
-    result = preview_live_order(OrderStateRepository(db_session), CredentialRepository(db_session), request, live_order_submit_kill_switch_enabled=False)
+    result = preview_live_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request, live_order_submit_kill_switch_enabled=False)
     assert result.allowed is False
     assert result.reason_code == "live_order_preview_credential_not_ready"

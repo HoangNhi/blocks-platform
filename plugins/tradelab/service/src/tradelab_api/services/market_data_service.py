@@ -79,6 +79,7 @@ def import_candles(
     timeframe: str,
     start_at: datetime,
     end_at: datetime,
+    created_by: str,
 ) -> MarketDataImportResult:
     dataset_key = build_dataset_key(exchange, symbol, timeframe)
     job = repository.create_import_job(
@@ -97,7 +98,7 @@ def import_candles(
         rows_imported=0,
         error_message=None,
         metadata_={},
-        created_by="trade-lab",
+        created_by=created_by,
     )
     try:
         remote_candles = _fetch_remote_candles(
@@ -163,7 +164,7 @@ def import_candles(
                     ),
                     timeframe=timeframe,
                 ).health_status,
-                metadata={"createdBy": "trade-lab"},
+                metadata={"createdBy": created_by},
             )
         repository.update(
             job,

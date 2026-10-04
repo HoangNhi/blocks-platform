@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from tradelab_api.api.responses import error_response, success_response
 from tradelab_api.api.serializers import serialize_model, serialize_value
 from tradelab_api.core.config import get_settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
+from tradelab_api.schemas.ownership_validation import OwnershipMutationModel
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.market_data import (
     DatasetFillCancelRequest,
@@ -66,7 +68,7 @@ from tradelab_api.services.dataset_local_fill_audit import (
     list_dataset_local_fill_audit,
 )
 from tradelab_api.services.exchanges.binance_spot import BinanceSpotClient
-from tradelab_api.services.exchange_repository import ExchangeRepository
+from tradelab_api.services.exchange_repository import ExchangeConnectionRepository, ExchangeRepository
 from tradelab_api.services.local_fill_smoke_fixture import (
     LocalFillSmokeFixtureValidationError,
     reset_local_fill_smoke_fixture,
@@ -141,7 +143,7 @@ def serialize_dataset_coverage(coverage: object, segments: list[object]) -> dict
     }
 
 
-class ExchangeConnectionCreateRequest(BaseModel):
+class ExchangeConnectionCreateRequest(OwnershipMutationModel):
     model_config = ConfigDict(extra="ignore")
 
     exchange: str = "binance"
@@ -151,7 +153,6 @@ class ExchangeConnectionCreateRequest(BaseModel):
     api_secret_ref: str | None = None
     permissions: dict[str, object] = Field(default_factory=dict)
     metadata: dict[str, object] = Field(default_factory=dict)
-    created_by: str | None = None
 
 
 class ImportJobCreateRequest(BaseModel):
@@ -173,8 +174,8 @@ class ImportJobListQuery(BaseModel):
 
 
 @router.get("/exchange-connections")
-def list_exchange_connections(session: Session = Depends(get_db_session)) -> JSONResponse:
-    repository = ExchangeRepository(session)
+def list_exchange_connections(session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    repository = ExchangeConnectionRepository(session, actor.workspace_id, actor.user_id)
     return success_response({"items": [serialize_model(item) for item in repository.list_exchange_connections()]})
 
 
@@ -182,8 +183,9 @@ def list_exchange_connections(session: Session = Depends(get_db_session)) -> JSO
 def create_exchange_connection(
     request: ExchangeConnectionCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    repository = ExchangeRepository(session)
+    repository = ExchangeConnectionRepository(session, actor.workspace_id, actor.user_id)
     connection = repository.create_exchange_connection(
         exchange=request.exchange,
         name=request.name,
@@ -192,7 +194,7 @@ def create_exchange_connection(
         api_secret_ref=request.api_secret_ref,
         permissions=request.permissions,
         metadata_=request.metadata,
-        created_by=request.created_by,
+        created_by=str(actor.user_id),
         status="active",
     )
     session.commit()
@@ -447,8 +449,9 @@ def get_dataset_fill_scheduler_status(request: Request) -> JSONResponse:
 def reset_local_fill_fixture(
     request: LocalFillSmokeFixtureResetRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    strategy_repository = StrategyRepository(session)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     settings = get_settings()
     try:
@@ -468,9 +471,10 @@ def reset_local_fill_fixture(
 def reset_paper_runtime_fixture(
     request: PaperRuntimeSmokeFixtureResetRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
-    strategy_repository = StrategyRepository(session)
-    bot_repository = BotRepository(session)
+    strategy_repository = StrategyRepository(session, actor.workspace_id, actor.user_id)
+    bot_repository = BotRepository(session, actor.workspace_id, actor.user_id)
     market_repository = MarketDataRepository(session)
     settings = get_settings()
     try:
@@ -492,6 +496,7 @@ def reset_paper_runtime_fixture(
 def create_market_data_import_job(
     request: ImportJobCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     repository = MarketDataRepository(session)
     client = BinanceSpotClient()
@@ -503,6 +508,7 @@ def create_market_data_import_job(
         timeframe=request.timeframe,
         start_at=request.start_at,
         end_at=request.end_at,
+        created_by=str(actor.user_id),
     )
     session.commit()
     payload = {"job": serialize_model(result.job) if result.job is not None else None, "rows_imported": result.rows_imported}

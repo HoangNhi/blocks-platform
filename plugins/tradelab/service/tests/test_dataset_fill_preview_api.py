@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from tradelab_api.main import app
 from tradelab_api.services.market_data_repository import MarketDataRepository, build_dataset_key
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def _dt(hour: int) -> datetime:
@@ -66,6 +66,7 @@ def test_fill_preview_route_returns_preview_envelope_without_mutation(monkeypatc
     )
     segment = SimpleNamespace(coverage_id=coverage_id, segment_index=0, start_at=_dt(0), end_at=_dt(2), row_count=3)
 
+    monkeypatch.setattr(MarketDataRepository, "list_market_candle_source_summary", lambda self, **kwargs: [])
     monkeypatch.setattr(MarketDataRepository, "get_coverage", lambda self, *, dataset_key: coverage)
     monkeypatch.setattr(MarketDataRepository, "list_coverage_segments", lambda self, *, coverage_id: [segment])
     monkeypatch.setattr(MarketDataRepository, "list_market_candles", lambda self, **kwargs: [_candle(0), _candle(1), _candle(2)])

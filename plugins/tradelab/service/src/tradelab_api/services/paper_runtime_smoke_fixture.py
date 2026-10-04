@@ -105,7 +105,7 @@ def reset_paper_runtime_smoke_fixture(
     session = strategy_repository.session
     group, strategy, version = _ensure_strategy(strategy_repository)
     bot = _ensure_bot(bot_repository, strategy_id=strategy.id, strategy_version_id=version.id)
-    deleted_fixture_sessions = _delete_fixture_paper_sessions(session)
+    deleted_fixture_sessions = _delete_fixture_paper_sessions(session, bot_repository.workspace_id, bot_repository.owner_user_id)
     deleted_fixture_candles = _delete_fixture_candles(session)
     candles = market_repository.create_market_candles([_seed_candle(hour) for hour in range(6)])
     market_repository.refresh_coverage_from_candles(
@@ -125,6 +125,7 @@ def reset_paper_runtime_smoke_fixture(
         },
     )
     paper_session = PaperSession(
+        workspace_id=bot_repository.workspace_id,
         bot_id=bot.id,
         strategy_id=strategy.id,
         strategy_version_id=version.id,
@@ -157,7 +158,7 @@ def reset_paper_runtime_smoke_fixture(
             "expectedSnapshotsMin": PAPER_RUNTIME_SMOKE_EXPECTED_SNAPSHOTS_MIN,
         },
         reason_code="paper_session_queued",
-        created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+        created_by=str(bot_repository.owner_user_id),
     )
     session.add(paper_session)
     session.flush()
@@ -244,13 +245,14 @@ def _runtime_config() -> dict[str, object]:
 
 
 def _ensure_strategy(strategy_repository: StrategyRepository):
+    owner_id = str(strategy_repository.owner_user_id)
     group = strategy_repository.get_any_strategy_group_by_slug(PAPER_RUNTIME_SMOKE_GROUP_SLUG)
     group_fields = {
         "name": PAPER_RUNTIME_SMOKE_GROUP_NAME,
         "slug": PAPER_RUNTIME_SMOKE_GROUP_SLUG,
         "description": "Local/dev smoke fixtures for deterministic TradeLab paper runtime verification.",
         "metadata_": _fixture_metadata(),
-        "created_by": PAPER_RUNTIME_SMOKE_ACTOR,
+        "created_by": owner_id,
     }
     if group is None:
         group = strategy_repository.create_strategy_group(**group_fields)
@@ -262,7 +264,7 @@ def _ensure_strategy(strategy_repository: StrategyRepository):
             metadata_={**dict(group.metadata_ or {}), **_fixture_metadata()},
             is_active=True,
             is_deleted=False,
-            updated_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            updated_by=owner_id,
         )
 
     strategy = strategy_repository.get_any_strategy_by_slug(PAPER_RUNTIME_SMOKE_STRATEGY_SLUG)
@@ -275,7 +277,7 @@ def _ensure_strategy(strategy_repository: StrategyRepository):
         "runtime_config": _runtime_config(),
         "risk_config": {},
         "metadata_": _fixture_metadata(),
-        "created_by": PAPER_RUNTIME_SMOKE_ACTOR,
+        "created_by": owner_id,
     }
     if strategy is None:
         strategy = strategy_repository.create_strategy(**strategy_fields)
@@ -291,7 +293,7 @@ def _ensure_strategy(strategy_repository: StrategyRepository):
             metadata_={**dict(strategy.metadata_ or {}), **_fixture_metadata()},
             is_active=True,
             is_deleted=False,
-            updated_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            updated_by=owner_id,
         )
 
     validation = validate_strategy_source(PAPER_RUNTIME_SMOKE_SOURCE_CODE)
@@ -319,16 +321,19 @@ def _ensure_strategy(strategy_repository: StrategyRepository):
             source_hash=source_hash,
             validation_status=validation.validation_status,
             validation_message=validation.message,
-            created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            created_by=owner_id,
         )
-    strategy_repository.update_strategy(strategy, current_version_id=version.id, updated_by=PAPER_RUNTIME_SMOKE_ACTOR)
+    strategy_repository.update_strategy(strategy, current_version_id=version.id, updated_by=owner_id)
     return group, strategy, version
 
 
 def _ensure_bot(bot_repository: BotRepository, *, strategy_id: UUID, strategy_version_id: UUID) -> Bot:
+    owner_id = str(bot_repository.owner_user_id)
     bot = (
         bot_repository.session.query(Bot)
         .filter(
+            Bot.workspace_id == bot_repository.workspace_id,
+            Bot.created_by == owner_id,
             Bot.name == PAPER_RUNTIME_SMOKE_BOT_NAME,
             Bot.mode == "paper",
             Bot.is_active.is_(True),
@@ -349,11 +354,11 @@ def _ensure_bot(bot_repository: BotRepository, *, strategy_id: UUID, strategy_ve
         "metadata_": _fixture_metadata(),
     }
     if bot is None:
-        return bot_repository.create_bot(**fields, created_by=PAPER_RUNTIME_SMOKE_ACTOR)
+        return bot_repository.create_bot(**fields, created_by=owner_id)
     return bot_repository.update_bot(
         bot,
         **fields,
-        updated_by=PAPER_RUNTIME_SMOKE_ACTOR,
+        updated_by=owner_id,
         is_active=True,
         is_deleted=False,
     )
@@ -373,6 +378,7 @@ def _make_cancelled_resumable_fixture_session(
     last_candle = candles[2]
     next_candle = candles[3]
     snapshot = PaperPortfolioSnapshot(
+        workspace_id=paper_session.workspace_id,
         paper_session_id=paper_session.id,
         source_candle_id=last_candle.id,
         snapshot_at=last_candle.open_time,
@@ -385,7 +391,7 @@ def _make_cancelled_resumable_fixture_session(
         exposure_notional=Decimal("0"),
         artifact_key=f"paper:{paper_session.id}:fixture:snapshot:resume-checkpoint",
         metadata_={"source": PAPER_RUNTIME_SMOKE_ACTOR, "fixtureState": "cancelled_resumable"},
-        created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+        created_by=paper_session.created_by,
     )
     session.add(snapshot)
     session.flush()
@@ -413,7 +419,8 @@ def _make_cancelled_resumable_fixture_session(
             checkpoint_source="persisted",
             reason_code="paper_engine_checkpoint_persisted",
             metadata_={"source": PAPER_RUNTIME_SMOKE_ACTOR, "fixtureState": "cancelled_resumable"},
-            created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            workspace_id=paper_session.workspace_id,
+            created_by=paper_session.created_by,
         )
     )
     session.add(
@@ -429,7 +436,8 @@ def _make_cancelled_resumable_fixture_session(
             reason_code="paper_session_cancel_requested",
             artifact_key=f"paper:{paper_session.id}:fixture:audit:cancel-requested",
             metadata_={"source": PAPER_RUNTIME_SMOKE_ACTOR, "fixtureState": "cancelled_resumable"},
-            created_by=PAPER_RUNTIME_SMOKE_ACTOR,
+            workspace_id=paper_session.workspace_id,
+            created_by=paper_session.created_by,
         )
     )
     paper_session.status = "cancelled"
@@ -445,11 +453,13 @@ def _make_cancelled_resumable_fixture_session(
     session.flush()
 
 
-def _fixture_session_ids(session) -> list[UUID]:
+def _fixture_session_ids(session, workspace_id: UUID, owner_user_id: UUID) -> list[UUID]:
     rows = (
         session.query(PaperSession.id)
         .filter(
-            PaperSession.created_by == PAPER_RUNTIME_SMOKE_ACTOR,
+            PaperSession.workspace_id == workspace_id,
+            PaperSession.created_by == str(owner_user_id),
+            PaperSession.gate_context["source"].astext == PAPER_RUNTIME_SMOKE_ACTOR,
             PaperSession.dataset_key == PAPER_RUNTIME_SMOKE_DATASET_KEY,
             PaperSession.start_at == PAPER_RUNTIME_SMOKE_START_AT,
             PaperSession.end_at == PAPER_RUNTIME_SMOKE_END_AT,
@@ -459,8 +469,8 @@ def _fixture_session_ids(session) -> list[UUID]:
     return [row[0] for row in rows]
 
 
-def _delete_fixture_paper_sessions(session) -> int:
-    session_ids = _fixture_session_ids(session)
+def _delete_fixture_paper_sessions(session, workspace_id: UUID, owner_user_id: UUID) -> int:
+    session_ids = _fixture_session_ids(session, workspace_id, owner_user_id)
     if not session_ids:
         return 0
     session.query(PaperResumeCheckpoint).filter(PaperResumeCheckpoint.paper_session_id.in_(session_ids)).delete(

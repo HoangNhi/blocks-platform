@@ -10,28 +10,14 @@ from tradelab_api.api.router import router as api_router
 from tradelab_api.core.authorization import SystemFunctionalAuthorizationClient, authorize_request
 from tradelab_api.core.config import get_settings
 from tradelab_api.db.session import (
-    SessionLocal,
     apply_schema_compatibility,
-    get_engine,
     verify_database_connection,
 )
-from tradelab_api.services.baseline_seed import seed_baseline_fixture
 from tradelab_api.services.dataset_fill_scheduler import BackgroundFillScheduler
 from tradelab_api.services.job_dispatcher import JobDispatcher
 from tradelab_api.services.paper_session_scheduler import PaperSessionScheduler
-
-
-def seed_startup_baseline_if_enabled() -> None:
-    settings = get_settings()
-    if not settings.seed_baseline_on_startup:
-        return
-    with SessionLocal(bind=get_engine()) as session:
-        try:
-            seed_baseline_fixture(session, created_by=settings.seed_baseline_created_by)
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
+from tradelab_api.tools.ownership_provenance_migration import verify_ownership_provenance_schema
+from tradelab_api.db.session import get_engine
 
 
 @asynccontextmanager
@@ -44,11 +30,11 @@ async def lifespan(app: FastAPI):
     app.state.paper_session_scheduler = paper_session_scheduler
     verify_database_connection()
     apply_schema_compatibility()
-    seed_startup_baseline_if_enabled()
-    dispatcher.start()
+    verify_ownership_provenance_schema(get_engine())
     try:
+        if get_settings().tradelab_job_dispatcher_enabled:
+            dispatcher.start()
         background_fill_scheduler.start()
-        paper_session_scheduler.start()
         yield
     finally:
         paper_session_scheduler.stop()

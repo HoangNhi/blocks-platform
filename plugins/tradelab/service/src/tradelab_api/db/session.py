@@ -3,12 +3,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 import os
 
+from fastapi import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from tradelab_api.core.config import get_settings
+from tradelab_api.db.ownership_provenance import bind_execution_context
 from tradelab_api.db.testnet_order_event_types import (
     testnet_order_event_type_check_constraint_sql,
 )
@@ -66,9 +68,12 @@ def get_engine() -> Engine:
     return getattr(get_engine, "_engine")
 
 
-def get_db_session() -> Iterator[Session]:
+def get_db_session(request: Request) -> Iterator[Session]:
     session = SessionLocal(bind=get_engine())
     try:
+        context = getattr(request.state, "execution_context", None)
+        if context is not None:
+            bind_execution_context(session, context)
         yield session
     finally:
         session.close()

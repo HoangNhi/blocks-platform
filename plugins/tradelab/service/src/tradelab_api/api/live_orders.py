@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import success_response
 from tradelab_api.core.config import get_settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.live_orders import (
     LiveOrderCancelRequest,
@@ -75,17 +76,18 @@ def _live_runtime_gate_from_settings(settings) -> LiveProofWindowRuntimeGate:
 def preview_live_order_route(
     request: LiveOrderPreviewRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = preview_live_order(
-        LiveOrderStateRepository(session),
-        LiveCredentialRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         LiveOrderPreviewRequestData(
             confirm_preview_only=request.confirm_preview_only,
             idempotency_key=request.idempotency_key,
             client_action_id=request.client_action_id,
             source=request.source,
-            actor=request.actor,
+            actor=str(actor.user_id),
             strategy_id=request.strategy_id,
             strategy_version_id=request.strategy_version_id,
             source_run_id=request.source_run_id,
@@ -118,16 +120,17 @@ def confirm_submit_live_order_route(
     preview_id: UUID,
     request: LiveOrderConfirmSubmitRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = confirm_submit_live_order(
-        LiveOrderStateRepository(session),
-        LiveCredentialRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         LiveOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_live_order=request.confirm_live_order,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             live_order_submit_kill_switch_enabled=settings.tradelab_live_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_live_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_live_order_submit_network_enabled,
@@ -146,10 +149,10 @@ def confirm_submit_live_order_route(
 
 
 @router.get("/live/proof-window/status")
-def get_live_proof_window_status_route(session: Session = Depends(get_db_session)) -> JSONResponse:
+def get_live_proof_window_status_route(session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
     settings = get_settings()
     result = get_live_proof_window_status(
-        LiveOrderStateRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
         runtime_gate=_live_runtime_gate_from_settings(settings),
     )
     if result.should_commit:
@@ -162,13 +165,14 @@ def get_live_proof_window_status_route(session: Session = Depends(get_db_session
 def open_live_proof_window_route(
     request: LiveProofWindowOpenRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = open_live_proof_window(
-        LiveOrderStateRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
         LiveProofWindowOpenRequestData(
             confirm_open=request.confirm_open,
-            actor=request.actor,
+            actor=str(actor.user_id),
             reason=request.reason,
             ttl_seconds=request.ttl_seconds,
             intent_budget=request.intent_budget,
@@ -185,13 +189,14 @@ def open_live_proof_window_route(
 def close_live_proof_window_route(
     request: LiveProofWindowCloseRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = close_live_proof_window(
-        LiveOrderStateRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
         LiveProofWindowCloseRequestData(
             confirm_close=request.confirm_close,
-            actor=request.actor,
+            actor=str(actor.user_id),
             reason=request.reason,
         ),
         runtime_gate=_live_runtime_gate_from_settings(settings),
@@ -207,17 +212,18 @@ def cancel_live_order_route(
     order_id: UUID,
     request: LiveOrderCancelRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = cancel_live_order(
-        LiveOrderStateRepository(session),
-        LiveCredentialRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         LiveOrderCancelRequestData(
             order_id=order_id,
             confirm_live_cancel=request.confirm_live_cancel,
             idempotency_key=request.idempotency_key,
             reason=request.reason,
-            actor=request.actor,
+            actor=str(actor.user_id),
             live_order_submit_kill_switch_enabled=settings.tradelab_live_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_live_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_live_order_submit_network_enabled,
@@ -240,16 +246,17 @@ def reconcile_live_order_route(
     order_id: UUID,
     request: LiveOrderReconcileRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = reconcile_live_order(
-        LiveOrderStateRepository(session),
-        LiveCredentialRepository(session),
+        LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        LiveCredentialRepository(session, actor.workspace_id, actor.user_id),
         LiveOrderReconcileRequestData(
             order_id=order_id,
             confirm_live_reconcile=request.confirm_live_reconcile,
             trigger=request.trigger,
-            actor=request.actor,
+            actor=str(actor.user_id),
             live_order_submit_kill_switch_enabled=settings.tradelab_live_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_live_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_live_order_submit_network_enabled,
@@ -272,16 +279,17 @@ def project_live_order_to_journal_route(
     order_id: UUID,
     request: LiveOrderJournalProjectionRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = project_live_order_to_journal(
-        order_repository=LiveOrderStateRepository(session),
-        journal_repository=ExecutionJournalRepository(session),
-        run_repository=SqlAlchemyRunRepository(session),
+        order_repository=LiveOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        journal_repository=ExecutionJournalRepository(session, actor.workspace_id, actor.user_id),
+        run_repository=SqlAlchemyRunRepository(session, actor.workspace_id, actor.user_id),
         request=LiveOrderJournalProjectionRequestData(
             order_id=order_id,
             confirm_live_journal_projection=request.confirm_live_journal_projection,
             source=request.source,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
     )
     if result.should_commit:
@@ -291,8 +299,8 @@ def project_live_order_to_journal_route(
 
 
 @router.get("/live/orders/{order_id}")
-def get_live_order_detail_route(order_id: UUID, session: Session = Depends(get_db_session)) -> JSONResponse:
-    detail = get_live_order_detail(LiveOrderStateRepository(session), order_id)
+def get_live_order_detail_route(order_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    detail = get_live_order_detail(LiveOrderStateRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id), order_id)
     if detail is None:
         return success_response({"status": "not_found", "reasonCode": "live_order_not_found"}, status_code=404)
     payload = LiveOrderDetailResponse.model_validate(detail).model_dump(mode="json", by_alias=True)
@@ -309,9 +317,10 @@ def list_live_orders_route(
     symbol: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = list_live_orders(
-        LiveOrderStateRepository(session),
+        LiveOrderStateRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id),
         strategy_id=strategy_id,
         strategy_version_id=strategy_version_id,
         source_run_id=source_run_id,
@@ -325,8 +334,8 @@ def list_live_orders_route(
 
 
 @router.get("/live/safety/status")
-def get_live_safety_status_route(session: Session = Depends(get_db_session)) -> JSONResponse:
-    pilot = LiveOrderStateRepository(session).get_or_create_pilot_control()
+def get_live_safety_status_route(session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    pilot = LiveOrderStateRepository(session, actor.workspace_id, actor.user_id).get_or_create_pilot_control()
     payload = {
         "status": getattr(pilot, "status", None),
         "reasonCode": getattr(pilot, "hard_stop_reason_code", None),
@@ -342,10 +351,10 @@ def get_live_safety_status_route(session: Session = Depends(get_db_session)) -> 
 def reopen_live_safety_route(
     request: dict,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     confirm_reopen = bool(request.get("confirmReopen", False))
-    actor = str(request.get("actor", "local-user"))
-    pilot = LiveOrderStateRepository(session).reopen_after_hard_stop(actor=actor, confirm_reopen=confirm_reopen)
+    pilot = LiveOrderStateRepository(session, actor.workspace_id, actor.user_id).reopen_after_hard_stop(actor=actor, confirm_reopen=confirm_reopen)
     session.commit()
     payload = {
         "status": getattr(pilot, "status", None),

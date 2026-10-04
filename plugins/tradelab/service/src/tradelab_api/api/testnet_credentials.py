@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import success_response
 from tradelab_api.core.config import settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.testnet_credentials import (
     TestnetCredentialCreateRequest,
@@ -74,15 +75,16 @@ def _mutation_payload(result) -> dict:
 def create_testnet_credential_route(
     request: TestnetCredentialCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = create_testnet_credential(
-        TestnetCredentialRepository(session),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_testnet_credential_provider(),
         request=TestnetCredentialCreateRequestData(
             label=request.label,
             confirm_create=request.confirm_create,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             metadata=request.metadata,
             secret=_secret_request(request.api_key, request.api_secret),
         ),
@@ -93,8 +95,8 @@ def create_testnet_credential_route(
 
 
 @router.get("/testnet/credentials")
-def list_testnet_credentials_route(session: Session = Depends(get_db_session)) -> JSONResponse:
-    repository = TestnetCredentialRepository(session)
+def list_testnet_credentials_route(session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    repository = TestnetCredentialRepository(session, actor.workspace_id, actor.user_id)
     payload = [
         TestnetCredentialMetadataResponse.model_validate(serialize_credential_ref(row)).model_dump(mode="json", by_alias=True)
         for row in repository.list_credential_refs()
@@ -103,8 +105,8 @@ def list_testnet_credentials_route(session: Session = Depends(get_db_session)) -
 
 
 @router.get("/testnet/credentials/{credential_ref_id}")
-def get_testnet_credential_route(credential_ref_id: UUID, session: Session = Depends(get_db_session)) -> JSONResponse:
-    row = TestnetCredentialRepository(session).get_credential_ref(credential_ref_id)
+def get_testnet_credential_route(credential_ref_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    row = TestnetCredentialRepository(session, actor.workspace_id, actor.user_id).get_credential_ref(credential_ref_id)
     if row is None:
         return success_response({"status": "not_found", "reasonCode": "testnet_credential_not_found"}, status_code=404)
     payload = TestnetCredentialMetadataResponse.model_validate(serialize_credential_ref(row)).model_dump(mode="json", by_alias=True)
@@ -116,14 +118,15 @@ def validate_testnet_credential_route(
     credential_ref_id: UUID,
     request: TestnetCredentialValidateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = validate_testnet_credential(
-        TestnetCredentialRepository(session),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         credential_ref_id,
         request=TestnetCredentialValidateRequestData(
             confirm_validate=request.confirm_validate,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             fake_can_withdraw=request.fake_can_withdraw,
             fake_margin_or_futures_enabled=request.fake_margin_or_futures_enabled,
         ),
@@ -142,15 +145,16 @@ def rotate_testnet_credential_route(
     credential_ref_id: UUID,
     request: TestnetCredentialRotateRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = rotate_testnet_credential(
-        TestnetCredentialRepository(session),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_testnet_credential_provider(),
         credential_ref_id,
         request=TestnetCredentialRotateRequestData(
             confirm_rotate=request.confirm_rotate,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             secret=_secret_request(request.api_key, request.api_secret),
         ),
     )
@@ -164,15 +168,16 @@ def revoke_testnet_credential_route(
     credential_ref_id: UUID,
     request: TestnetCredentialRevokeRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = revoke_testnet_credential(
-        TestnetCredentialRepository(session),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         build_testnet_credential_provider(),
         credential_ref_id,
         request=TestnetCredentialRevokeRequestData(
             confirm_revoke=request.confirm_revoke,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
     )
     if result.should_commit:

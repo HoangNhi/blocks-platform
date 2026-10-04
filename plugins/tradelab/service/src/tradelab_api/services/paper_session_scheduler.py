@@ -229,7 +229,7 @@ class PaperSessionScheduler:
             return PAPER_SCHEDULER_REASON_ENVIRONMENT_BLOCKED
         if build_paper_kill_switch_status(settings).enabled:
             return PAPER_SCHEDULER_REASON_KILL_SWITCH_ENABLED
-        return None
+        return "workspace_authority_recheck_unavailable"
 
     @staticmethod
     def _select_next_queued_session_id(session: object) -> UUID | None:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
-import os
 
 import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
 from tradelab_api.services.testnet_credential_repository import TestnetCredentialRepository as CredentialRepository  # noqa: E402
@@ -34,6 +34,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -54,7 +55,7 @@ def _submitted_context(
     preview_id, intent_id = _preview(session, credential_id=credential.id if credential is not None else None)
     submit = _submit(session, preview_id, submit_kill_switch_enabled=False)
     assert submit.status == "submitted"
-    repository = OrderStateRepository(session)
+    repository = OrderStateRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.get_intent(intent_id)
     assert intent is not None
     if status != intent.status or reconciliation_required:
@@ -66,7 +67,7 @@ def _submitted_context(
             actor="admin",
         )
         session.flush()
-    return repository, CredentialRepository(session), intent, session, provider
+    return repository, CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), intent, session, provider
 
 
 def _request(order_id, **overrides) -> TestnetOrderCancelRequestData:

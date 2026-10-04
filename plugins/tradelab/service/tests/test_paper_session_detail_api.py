@@ -21,7 +21,7 @@ from tradelab_api.services.paper_session_detail import (
     PaperSessionDetailValidationError,
 )
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def _dt(hour: int, minute: int = 0) -> datetime:

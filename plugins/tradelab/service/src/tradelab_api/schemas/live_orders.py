@@ -8,14 +8,14 @@ from uuid import UUID
 from pydantic import Field
 
 from .common import CamelModel
+from .ownership_validation import OwnershipMutationModel
 
 
-class LiveOrderPreviewRequest(CamelModel):
+class LiveOrderPreviewRequest(OwnershipMutationModel):
     confirm_preview_only: bool = False
     idempotency_key: str
     client_action_id: str
     source: str = "strategy_lab"
-    actor: str = "local-user"
     strategy_id: UUID
     strategy_version_id: UUID
     source_run_id: UUID | None = None
@@ -156,10 +156,9 @@ class LiveOrderListResponse(CamelModel):
     items: list[LiveOrderListItemResponse] = Field(default_factory=list)
 
 
-class LiveOrderConfirmSubmitRequest(CamelModel):
+class LiveOrderConfirmSubmitRequest(OwnershipMutationModel):
     confirm_live_order: bool = False
     idempotency_key: str
-    actor: str = "local-user"
 
 
 class LiveOrderConfirmSubmitResponse(CamelModel):
@@ -178,11 +177,10 @@ class LiveOrderConfirmSubmitResponse(CamelModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class LiveOrderCancelRequest(CamelModel):
+class LiveOrderCancelRequest(OwnershipMutationModel):
     confirm_live_cancel: bool = False
     idempotency_key: str
     reason: str = "user_requested"
-    actor: str = "local-user"
 
 
 class LiveOrderCancelResponse(CamelModel):
@@ -200,10 +198,9 @@ class LiveOrderCancelResponse(CamelModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class LiveOrderReconcileRequest(CamelModel):
+class LiveOrderReconcileRequest(OwnershipMutationModel):
     confirm_live_reconcile: bool = False
     trigger: str = "manual"
-    actor: str = "local-user"
 
 
 class LiveOrderReconcileResponse(CamelModel):
@@ -222,10 +219,9 @@ class LiveOrderReconcileResponse(CamelModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class LiveOrderJournalProjectionRequest(CamelModel):
+class LiveOrderJournalProjectionRequest(OwnershipMutationModel):
     confirm_live_journal_projection: bool = False
     source: str = "strategy_lab"
-    actor: str = "local-user"
 
 
 class LiveOrderJournalProjectionResponse(CamelModel):
@@ -261,15 +257,13 @@ class LiveProofWindowStatusResponse(CamelModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class LiveProofWindowOpenRequest(CamelModel):
+class LiveProofWindowOpenRequest(OwnershipMutationModel):
     confirm_open: bool = False
-    actor: str = "local-user"
     reason: str
     ttl_seconds: int
     intent_budget: int = 1
 
 
-class LiveProofWindowCloseRequest(CamelModel):
+class LiveProofWindowCloseRequest(OwnershipMutationModel):
     confirm_close: bool = False
-    actor: str = "local-user"
     reason: str

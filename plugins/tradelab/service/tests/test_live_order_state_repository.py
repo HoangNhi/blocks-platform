@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import os
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Base, LivePilotControl, Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -25,6 +25,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -35,13 +36,13 @@ def db_session() -> Iterator[Session]:
 
 def _strategy_context(session: Session) -> tuple[Strategy, StrategyVersion]:
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    group = StrategyGroup(name="Live Group", slug=f"live-group-{suffix}", description=None, metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Live Group", slug=f"live-group-{suffix}", description=None, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", description=None, status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Live Strategy", slug=f"live-strategy-{suffix}", description=None, status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash="hash-live", validation_status="valid", validation_message=None, created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash="hash-live", validation_status="valid", validation_message=None, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     strategy.current_version_id = version.id
@@ -50,7 +51,7 @@ def _strategy_context(session: Session) -> tuple[Strategy, StrategyVersion]:
 
 
 def _credential_id(session: Session):
-    credential = CredentialRepository(session).create_credential_ref(
+    credential = CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(
         exchange="binance_spot",
         environment="binance_live",
         label="Live credential",
@@ -105,7 +106,7 @@ def _intent_payload(session: Session) -> dict[str, object]:
 
 
 def test_repository_persists_intent_preview_event_and_reconciliation_with_redaction(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
     preview = repository.create_preview(
         intent_id=intent.id,
@@ -190,7 +191,7 @@ def test_repository_tracks_proof_window_default_open_consume_and_close(db_sessio
     ).delete(synchronize_session=False)
     db_session.flush()
 
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
 
     pilot = repository.get_or_create_pilot_control()
     assert pilot.proof_window_status == "closed"
@@ -226,7 +227,7 @@ def test_repository_tracks_proof_window_default_open_consume_and_close(db_sessio
 
 
 def test_repository_detects_unknown_and_reconciliation_debt_for_proof_window(db_session: Session) -> None:
-    repository = OrderStateRepository(db_session)
+    repository = OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     intent = repository.create_intent(**_intent_payload(db_session))
     repository.update_intent_status(
         intent,

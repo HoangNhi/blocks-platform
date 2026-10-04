@@ -7,6 +7,17 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text(encoding='utf-8')
 
 
+def test_python_ci_pins_runner_before_tradelab_tests() -> None:
+    job = WORKFLOW.split("\n  test-python-services:", 1)[1].split("\n  test-frontend:", 1)[0]
+    build = "docker build -t tradelab-ci-runner plugins/tradelab/runner"
+    pin = "runner_image=$(docker image inspect --format '{{.Id}}' tradelab-ci-runner)"
+    export = 'echo "TRADELAB_RUNNER_IMAGE=$runner_image" >> "$GITHUB_ENV"'
+    assert build in job
+    assert pin in job
+    assert export in job
+    assert job.index(build) < job.index(pin) < job.index(export) < job.index("- name: Test TradeLab service")
+
+
 def deploy_job() -> str:
     assert WORKFLOW.count('\n  deploy-heroku:') == 1
     return WORKFLOW.split('\n  deploy-heroku:', 1)[1]

@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/api-error"
 import { createApiClient } from "@/lib/api/client"
 
 import { createTradeLabApi } from "./tradelab-api"
+import { createWorkspaceClient } from "./workspace-context"
 import {
   normalizeBacktestExecution,
   normalizeBenchmarkCheck,
@@ -129,12 +130,6 @@ import type {
 } from "../types"
 
 const tokenStore = createBrowserTokenStore()
-const tradeLabApi = createTradeLabApi(
-  createApiClient({
-    baseUrl: import.meta.env.VITE_API_BASE_URL ?? "/",
-    getAccessToken: tokenStore.getAccessToken,
-  }),
-)
 
 function createEmptyRuntimeConfig(): TradeLabRuntimeConfig {
   return {
@@ -573,6 +568,13 @@ function evaluatePaperSessionPreviewSetup(
 }
 
 export function useTradeLabWorkspace() {
+  const tradeLabApi = useRef(createTradeLabApi(createWorkspaceClient(
+    createApiClient({
+      baseUrl: import.meta.env.VITE_API_BASE_URL ?? "/",
+      getAccessToken: tokenStore.getAccessToken,
+    }),
+    () => tokenStore.getSession()?.user.id ?? null,
+  )))
   const [groups, setGroups] = useState<TradeLabStrategyGroupSummary[]>([])
   const [strategies, setStrategies] = useState<TradeLabStrategySummary[]>([])
   const [bots, setBots] = useState<TradeLabBotSummary[]>([])
@@ -1011,7 +1013,7 @@ export function useTradeLabWorkspace() {
       setLocalFillAuditError(null)
       try {
         const payload = normalizeDatasetLocalFillAudit(
-          await tradeLabApi.getDatasetLocalFillAudit({
+          await tradeLabApi.current.getDatasetLocalFillAudit({
             exchange,
             symbol,
             timeframe,
@@ -1046,7 +1048,7 @@ export function useTradeLabWorkspace() {
       setFillJobVisibilityError(null)
       try {
         const payload = normalizeDatasetFillJobVisibility(
-          await tradeLabApi.getDatasetFillJobVisibility(
+          await tradeLabApi.current.getDatasetFillJobVisibility(
             datasetKey
               ? { datasetKey, limit: 5 }
               : { exchange, symbol, timeframe, limit: 5 },
@@ -1069,7 +1071,7 @@ export function useTradeLabWorkspace() {
     setIsFillSchedulerStatusLoading(true)
     setFillSchedulerStatusError(null)
     try {
-      const payload = normalizeFillSchedulerStatus(await tradeLabApi.getFillSchedulerStatus())
+      const payload = normalizeFillSchedulerStatus(await tradeLabApi.current.getFillSchedulerStatus())
       setFillSchedulerStatus(payload)
       return payload
     } catch (loadError) {
@@ -1085,7 +1087,7 @@ export function useTradeLabWorkspace() {
     setIsPaperSchedulerStatusLoading(true)
     setPaperSchedulerStatusError(null)
     try {
-      const payload = normalizePaperSchedulerStatus(await tradeLabApi.getPaperSchedulerStatus())
+      const payload = normalizePaperSchedulerStatus(await tradeLabApi.current.getPaperSchedulerStatus())
       setPaperSchedulerStatus(payload)
       return payload
     } catch (loadError) {
@@ -1101,7 +1103,7 @@ export function useTradeLabWorkspace() {
     setIsPaperKillSwitchStatusLoading(true)
     setPaperKillSwitchStatusError(null)
     try {
-      const payload = normalizePaperKillSwitchStatus(await tradeLabApi.getPaperKillSwitchStatus())
+      const payload = normalizePaperKillSwitchStatus(await tradeLabApi.current.getPaperKillSwitchStatus())
       setPaperKillSwitchStatus(payload)
       return payload
     } catch (loadError) {
@@ -1117,7 +1119,7 @@ export function useTradeLabWorkspace() {
     setIsDatasetCoverageLoading(true)
     setDatasetCoverageError(null)
     try {
-      const payload = await tradeLabApi.listDatasetCoverage()
+      const payload = await tradeLabApi.current.listDatasetCoverage()
       const items = (payload.items ?? []).map(normalizeDatasetCoverageItem)
       setDatasetCoverage(items)
       return items
@@ -1136,7 +1138,7 @@ export function useTradeLabWorkspace() {
       setRunHistory([])
       return
     }
-    const payload = await tradeLabApi.listBotRuns({ strategyId, limit: 25 })
+    const payload = await tradeLabApi.current.listBotRuns({ strategyId, limit: 25 })
     setRunHistory((payload.items ?? []).map(normalizeRunHistoryEntry))
   }, [])
 
@@ -1149,7 +1151,7 @@ export function useTradeLabWorkspace() {
     setIsJobVisibilityLoading(true)
     setJobVisibilityError(null)
     try {
-      const payload = normalizeStrategyJobVisibility(await tradeLabApi.getStrategyJobVisibility(strategyId, { limit: 5 }))
+      const payload = normalizeStrategyJobVisibility(await tradeLabApi.current.getStrategyJobVisibility(strategyId, { limit: 5 }))
       setJobVisibility(payload)
       return payload
     } catch (loadError) {
@@ -1179,7 +1181,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeDatasetFillPreview(
-        await tradeLabApi.previewDatasetFill({
+        await tradeLabApi.current.previewDatasetFill({
           strategy_id: selectedStrategy.id,
           exchange: draftRuntimeConfig.exchange,
           symbol: draftRuntimeConfig.symbol,
@@ -1221,7 +1223,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizePaperSessionPreview(
-        await tradeLabApi.previewPaperSession({
+        await tradeLabApi.current.previewPaperSession({
           bot_id: paperDraftBot.id,
           exchange: draftRuntimeConfig.exchange,
           symbol: draftRuntimeConfig.symbol,
@@ -1261,7 +1263,7 @@ export function useTradeLabWorkspace() {
     setTestnetOrderListError(null)
     try {
       const payload = normalizeTestnetOrderList(
-        await tradeLabApi.listTestnetOrders({
+        await tradeLabApi.current.listTestnetOrders({
           strategyId: selectedStrategy?.id,
           strategyVersionId: runVersion?.id,
           symbol: draftRuntimeConfig.symbol || undefined,
@@ -1291,7 +1293,7 @@ export function useTradeLabWorkspace() {
     setIsTestnetOrderDetailLoading(true)
     setTestnetOrderDetailError(null)
     try {
-      const detail = normalizeTestnetOrderDetail(await tradeLabApi.getTestnetOrderDetail(trimmedOrderId))
+      const detail = normalizeTestnetOrderDetail(await tradeLabApi.current.getTestnetOrderDetail(trimmedOrderId))
       setTestnetOrderDetail(detail)
       return detail
     } catch (loadError) {
@@ -1313,7 +1315,7 @@ export function useTradeLabWorkspace() {
     setLiveOrderListError(null)
     try {
       const payload = normalizeLiveOrderList(
-        await tradeLabApi.listLiveOrders({
+        await tradeLabApi.current.listLiveOrders({
           strategyId: selectedStrategy.id,
           strategyVersionId: runVersion.id,
           sourceRunId: activePipeline?.run.id ?? execution?.runId ?? undefined,
@@ -1343,7 +1345,7 @@ export function useTradeLabWorkspace() {
     setIsLiveOrderDetailLoading(true)
     setLiveOrderDetailError(null)
     try {
-      const detail = normalizeLiveOrderDetail(await tradeLabApi.getLiveOrderDetail(trimmedOrderId))
+      const detail = normalizeLiveOrderDetail(await tradeLabApi.current.getLiveOrderDetail(trimmedOrderId))
       setLiveOrderDetail(detail)
       return detail
     } catch (loadError) {
@@ -1477,12 +1479,11 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeTestnetOrderPreviewResult(
-        await tradeLabApi.previewTestnetOrder({
+        await tradeLabApi.current.previewTestnetOrder({
           confirmPreviewOnly: true,
           idempotencyKey,
           clientActionId: idempotencyKey,
           source: "strategy_lab",
-          actor: "local-user",
           strategyId: selectedStrategy.id,
           strategyVersionId: runVersion.id,
           sourceRunId,
@@ -1573,12 +1574,11 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeLiveOrderPreviewResult(
-        await tradeLabApi.previewLiveOrder({
+        await tradeLabApi.current.previewLiveOrder({
           confirmPreviewOnly: true,
           idempotencyKey,
           clientActionId: idempotencyKey,
           source: "strategy_lab",
-          actor: "local-user",
           strategyId: selectedStrategy.id,
           strategyVersionId: runVersion.id,
           sourceRunId,
@@ -1638,10 +1638,9 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeLiveOrderConfirmSubmitResult(
-        await tradeLabApi.confirmSubmitLiveOrder(liveOrderPreview.previewId, {
+        await tradeLabApi.current.confirmSubmitLiveOrder(liveOrderPreview.previewId, {
           confirmLiveOrder: true,
           idempotencyKey,
-          actor: "local-user",
         }),
       )
       setLiveOrderSubmitResult(payload)
@@ -1676,11 +1675,10 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeLiveOrderCancelResult(
-        await tradeLabApi.cancelLiveOrder(selectedLiveIntent.intentId, {
+        await tradeLabApi.current.cancelLiveOrder(selectedLiveIntent.intentId, {
           confirmLiveCancel: true,
           idempotencyKey,
           reason: "user_requested",
-          actor: "local-user",
         }),
       )
       setLiveOrderCancelResult(payload)
@@ -1713,10 +1711,9 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeLiveOrderReconcileResult(
-        await tradeLabApi.reconcileLiveOrder(selectedLiveIntent.intentId, {
+        await tradeLabApi.current.reconcileLiveOrder(selectedLiveIntent.intentId, {
           confirmLiveReconcile: true,
           trigger: "manual",
-          actor: "local-user",
         }),
       )
       setLiveOrderReconcileResult(payload)
@@ -1749,10 +1746,9 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeLiveOrderJournalProjectionResult(
-        await tradeLabApi.projectLiveOrderToJournal(selectedLiveIntent.intentId, {
+        await tradeLabApi.current.projectLiveOrderToJournal(selectedLiveIntent.intentId, {
           confirmLiveJournalProjection: true,
           source: "strategy_lab",
-          actor: "local-user",
         }),
       )
       setLiveOrderJournalProjectionResult(payload)
@@ -1787,10 +1783,9 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeTestnetOrderConfirmSubmitResult(
-        await tradeLabApi.confirmSubmitTestnetOrder(testnetOrderPreview.previewId, {
+        await tradeLabApi.current.confirmSubmitTestnetOrder(testnetOrderPreview.previewId, {
           confirmTestnetOrder: true,
           idempotencyKey,
-          actor: "local-user",
         }),
       )
       setTestnetOrderSubmitResult(payload)
@@ -1825,11 +1820,10 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeTestnetOrderCancelResult(
-        await tradeLabApi.cancelTestnetOrder(selectedTestnetIntent.intentId, {
+        await tradeLabApi.current.cancelTestnetOrder(selectedTestnetIntent.intentId, {
           confirmTestnetCancel: true,
           idempotencyKey,
           reason: "user_requested",
-          actor: "local-user",
         }),
       )
       setTestnetOrderCancelResult(payload)
@@ -1862,11 +1856,10 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeTestnetOrderReconcileResult(
-        await tradeLabApi.reconcileTestnetOrder({
+        await tradeLabApi.current.reconcileTestnetOrder({
           orderId: selectedTestnetIntent.intentId,
           confirmTestnetReconcile: true,
           trigger: "manual",
-          actor: "local-user",
         }),
       )
       setTestnetOrderReconcileResult(payload)
@@ -1917,7 +1910,7 @@ export function useTradeLabWorkspace() {
     setPaperSessionResumeReadinessError(null)
     try {
       const readiness = normalizePaperSessionResumeReadiness(
-        await tradeLabApi.getPaperSessionResumeReadiness(trimmedSessionId),
+        await tradeLabApi.current.getPaperSessionResumeReadiness(trimmedSessionId),
       )
       setPaperSessionResumeReadiness(readiness)
       return readiness
@@ -1944,7 +1937,7 @@ export function useTradeLabWorkspace() {
     setIsPaperSessionDetailLoading(true)
     setPaperSessionDetailError(null)
     try {
-      const detail = normalizePaperSessionDetail(await tradeLabApi.getPaperSessionDetail(sessionId))
+      const detail = normalizePaperSessionDetail(await tradeLabApi.current.getPaperSessionDetail(sessionId))
       setPaperSessionDetail(detail)
       setLoadedPaperSessionDetailInput(sessionId)
       setLoadedPaperSessionContextKey(currentPaperSessionContextKey)
@@ -1971,7 +1964,7 @@ export function useTradeLabWorkspace() {
     setIsPaperSessionDetailLoading(true)
     setPaperSessionDetailError(null)
     try {
-      const detail = normalizePaperSessionDetail(await tradeLabApi.getPaperSessionDetail(sessionId))
+      const detail = normalizePaperSessionDetail(await tradeLabApi.current.getPaperSessionDetail(sessionId))
       setPaperSessionDetail(detail)
       setLoadedPaperSessionDetailInput(sessionId)
       setLoadedPaperSessionContextKey(currentPaperSessionContextKey)
@@ -2006,7 +1999,7 @@ export function useTradeLabWorkspace() {
           ? `${draftRuntimeConfig.exchange}:${draftRuntimeConfig.symbol}:${draftRuntimeConfig.timeframe}`
           : undefined
       const payload = normalizePaperSessionObservability(
-        await tradeLabApi.listPaperSessions({
+        await tradeLabApi.current.listPaperSessions({
           strategyId: selectedStrategy.id,
           strategyVersionId: runVersion?.id,
           datasetKey,
@@ -2071,7 +2064,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizePaperSessionRunLocal(
-        await tradeLabApi.runPaperSessionLocal(sessionId, {
+        await tradeLabApi.current.runPaperSessionLocal(sessionId, {
           confirm_local_paper_run: true,
           max_candles_per_tick: 10000,
           worker_id: "strategy-lab-local-paper-run",
@@ -2116,7 +2109,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizePaperSessionCancelLocal(
-        await tradeLabApi.cancelPaperSessionLocal(sessionId, {
+        await tradeLabApi.current.cancelPaperSessionLocal(sessionId, {
           confirm_local_paper_cancel: true,
           reason: "user_requested",
           actor: "strategy-lab-local-paper-cancel",
@@ -2159,7 +2152,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizePaperSessionRetryLocal(
-        await tradeLabApi.retryPaperSessionLocal(sourceSessionId, {
+        await tradeLabApi.current.retryPaperSessionLocal(sourceSessionId, {
           confirm_local_paper_retry: true,
           idempotency_key: idempotencyKey,
           reason: "user_requested",
@@ -2205,7 +2198,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizePaperSessionResumeLocal(
-        await tradeLabApi.resumePaperSessionLocal(sourceSessionId, {
+        await tradeLabApi.current.resumePaperSessionLocal(sourceSessionId, {
           confirm_local_paper_resume: true,
           idempotency_key: idempotencyKey,
           reason: "user_requested",
@@ -2261,7 +2254,7 @@ export function useTradeLabWorkspace() {
         paperSessionStartCounterRef.current,
       ].join(":")
       const result = normalizePaperSessionStart(
-        await tradeLabApi.startPaperSession({
+        await tradeLabApi.current.startPaperSession({
           bot_id: paperDraftBot.id,
           exchange: draftRuntimeConfig.exchange,
           symbol: draftRuntimeConfig.symbol,
@@ -2314,7 +2307,7 @@ export function useTradeLabWorkspace() {
   ])
 
   const loadTradeExecutionDetail = useCallback(async (runId: string, tradeId: string) => {
-    const detail = normalizeSelectedTradeExecutionDetail(await tradeLabApi.getBotRunTradeDetail(runId, tradeId))
+    const detail = normalizeSelectedTradeExecutionDetail(await tradeLabApi.current.getBotRunTradeDetail(runId, tradeId))
     setSelectedTradeExecutionDetail(detail)
     return detail
   }, [])
@@ -2350,9 +2343,9 @@ export function useTradeLabWorkspace() {
 
     try {
       const [groupPayload, strategyPayload, botPayload] = await Promise.all([
-        tradeLabApi.listStrategyGroups(),
-        tradeLabApi.listStrategies(),
-        tradeLabApi.listBots(),
+        tradeLabApi.current.listStrategyGroups(),
+        tradeLabApi.current.listStrategies(),
+        tradeLabApi.current.listBots(),
       ])
       const strategyRows = (strategyPayload.items ?? []).map(normalizeStrategySummary)
       const nextGroups = sortStrategyGroupsForWorkbench(
@@ -2428,7 +2421,7 @@ export function useTradeLabWorkspace() {
 
   const loadStrategiesForGroup = useCallback(async (groupId: string) => {
     setError(null)
-    const payload = await tradeLabApi.listStrategies(groupId)
+    const payload = await tradeLabApi.current.listStrategies(groupId)
     const nextStrategies = sortStrategies((payload.items ?? []).map(normalizeStrategySummary))
 
     setStrategies(nextStrategies)
@@ -2443,7 +2436,7 @@ export function useTradeLabWorkspace() {
   const loadStrategyDetail = useCallback(
     async (strategyId: string) => {
       setError(null)
-      const detail = normalizeStrategyDetail(await tradeLabApi.getStrategy(strategyId))
+      const detail = normalizeStrategyDetail(await tradeLabApi.current.getStrategy(strategyId))
       setSelectedStrategy(detail)
       setExecution(null)
       setActivePipeline(null)
@@ -2544,14 +2537,14 @@ export function useTradeLabWorkspace() {
 
   const loadRunState = useCallback(async (runId: string) => {
     const [runDetailPayload, pipelinePayload, chartPayload, logsPayload, ordersPayload, resultPayload, analysisPayload, benchmarkPayload] = await Promise.all([
-      tradeLabApi.getBotRun(runId),
-      tradeLabApi.getBotRunPipeline(runId),
-      tradeLabApi.getBotRunChart(runId, selectedTrade?.marker.tradeOrderId ?? null),
-      tradeLabApi.getBotRunLogs(runId),
-      tradeLabApi.getBotRunOrders(runId),
-      tradeLabApi.getBotRunResult(runId),
-      tradeLabApi.getBotRunAnalysis(runId),
-      tradeLabApi.getBenchmarkChecks(runId),
+      tradeLabApi.current.getBotRun(runId),
+      tradeLabApi.current.getBotRunPipeline(runId),
+      tradeLabApi.current.getBotRunChart(runId, selectedTrade?.marker.tradeOrderId ?? null),
+      tradeLabApi.current.getBotRunLogs(runId),
+      tradeLabApi.current.getBotRunOrders(runId),
+      tradeLabApi.current.getBotRunResult(runId),
+      tradeLabApi.current.getBotRunAnalysis(runId),
+      tradeLabApi.current.getBenchmarkChecks(runId),
     ])
 
     const normalizedRun = normalizeRunDetail(runDetailPayload)
@@ -2604,7 +2597,7 @@ export function useTradeLabWorkspace() {
     let detailForRun = selectedStrategy
     if (selectedStrategyId !== normalizedRun.strategyId) {
       setSelectedStrategyId(normalizedRun.strategyId)
-      const detail = normalizeStrategyDetail(await tradeLabApi.getStrategy(normalizedRun.strategyId))
+      const detail = normalizeStrategyDetail(await tradeLabApi.current.getStrategy(normalizedRun.strategyId))
       setSelectedStrategy(detail)
       detailForRun = detail
     }
@@ -2636,7 +2629,7 @@ export function useTradeLabWorkspace() {
     setIsStartingBenchmarkRepeat(true)
     setError(null)
     try {
-      const check = normalizeBenchmarkCheck(await tradeLabApi.startBenchmarkRepeat(baseRunId))
+      const check = normalizeBenchmarkCheck(await tradeLabApi.current.startBenchmarkRepeat(baseRunId))
       setBenchmarkCheck(check)
       setActionMessage("Benchmark repeat queued.")
       await refreshRunHistory(selectedStrategyId ?? undefined)
@@ -2656,7 +2649,7 @@ export function useTradeLabWorkspace() {
     setIsCreatingManualSignalPackage(true)
     setManualSignalPackageError(null)
     try {
-      const payload = await tradeLabApi.createManualSignalPackage(runAnalysis.run.id)
+      const payload = await tradeLabApi.current.createManualSignalPackage(runAnalysis.run.id)
       setManualSignalPackage(normalizeManualSignalPackage(payload))
     } catch (error) {
       setManualSignalPackageError(error instanceof Error ? error.message : "Unable to generate manual signal package.")
@@ -2673,7 +2666,7 @@ export function useTradeLabWorkspace() {
     setIsCreatingResearchRobustnessGate(true)
     setResearchRobustnessGateError(null)
     try {
-      const payload = await tradeLabApi.createResearchRobustnessGate(runAnalysis.run.id)
+      const payload = await tradeLabApi.current.createResearchRobustnessGate(runAnalysis.run.id)
       setResearchRobustnessGate(normalizeResearchRobustnessGate(payload))
     } catch (error) {
       setResearchRobustnessGateError(error instanceof Error ? error.message : "Unable to generate robustness evidence.")
@@ -2686,7 +2679,7 @@ export function useTradeLabWorkspace() {
     setIsExecutionJournalLoading(true)
     setExecutionJournalError(null)
     try {
-      const list = normalizeExecutionJournalList(await tradeLabApi.listExecutionJournalEntries(runId))
+      const list = normalizeExecutionJournalList(await tradeLabApi.current.listExecutionJournalEntries(runId))
       setExecutionJournal(list)
       return list
     } catch (error) {
@@ -2706,7 +2699,7 @@ export function useTradeLabWorkspace() {
     setIsSavingExecutionJournalEntry(true)
     setExecutionJournalError(null)
     try {
-      const entry = normalizeExecutionJournalEntry(await tradeLabApi.createExecutionJournalEntry(runId, request))
+      const entry = normalizeExecutionJournalEntry(await tradeLabApi.current.createExecutionJournalEntry(runId, request))
       await loadExecutionJournalEntries(runId)
       return entry
     } catch (error) {
@@ -2725,7 +2718,7 @@ export function useTradeLabWorkspace() {
     setIsSavingExecutionJournalEntry(true)
     setExecutionJournalError(null)
     try {
-      const entry = normalizeExecutionJournalEntry(await tradeLabApi.updateExecutionJournalEntry(entryId, request))
+      const entry = normalizeExecutionJournalEntry(await tradeLabApi.current.updateExecutionJournalEntry(entryId, request))
       await loadExecutionJournalEntries(entry.sourceRunId)
       return entry
     } catch (error) {
@@ -2741,7 +2734,7 @@ export function useTradeLabWorkspace() {
     setIsSavingExecutionJournalEntry(true)
     setExecutionJournalError(null)
     try {
-      await tradeLabApi.deleteExecutionJournalEntry(entry.entryId)
+      await tradeLabApi.current.deleteExecutionJournalEntry(entry.entryId)
       await loadExecutionJournalEntries(entry.sourceRunId)
       return true
     } catch (error) {
@@ -2765,10 +2758,9 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const payload = normalizeTestnetOrderJournalProjectionResult(
-        await tradeLabApi.projectTestnetOrderToJournal(selectedTestnetIntent.intentId, {
+        await tradeLabApi.current.projectTestnetOrderToJournal(selectedTestnetIntent.intentId, {
           confirmTestnetJournalProjection: true,
           source: "strategy_lab",
-          actor: "local-user",
         }),
       )
       setTestnetOrderJournalProjectionResult(payload)
@@ -2809,7 +2801,7 @@ export function useTradeLabWorkspace() {
     setIsCheckingSyntax(true)
     setActionMessage(null)
     try {
-      const check = normalizeStrategyValidationCheck(await tradeLabApi.validateStrategySource(draftSource))
+      const check = normalizeStrategyValidationCheck(await tradeLabApi.current.validateStrategySource(draftSource))
       setValidationCheck(check)
       setValidationCheckSource(draftSource)
     } catch (checkError) {
@@ -2831,11 +2823,11 @@ export function useTradeLabWorkspace() {
       setIsSavingSettings(true)
       setActionMessage(null)
       try {
-        await tradeLabApi.updateStrategy(selectedStrategy.id, {
+        await tradeLabApi.current.updateStrategy(selectedStrategy.id, {
           runtime_config: runtimeConfig,
           risk_config: riskConfig,
         })
-        const refreshed = normalizeStrategyDetail(await tradeLabApi.getStrategy(selectedStrategy.id))
+        const refreshed = normalizeStrategyDetail(await tradeLabApi.current.getStrategy(selectedStrategy.id))
         setSelectedStrategy(refreshed)
         setDraftRuntimeConfig(refreshed.runtimeConfig)
         setDraftRiskConfig(refreshed.riskConfig)
@@ -2862,8 +2854,8 @@ export function useTradeLabWorkspace() {
     setIsSavingVersion(true)
     setActionMessage(null)
     try {
-      await tradeLabApi.createStrategyVersion(selectedStrategy.id, draftSource)
-      const refreshed = normalizeStrategyDetail(await tradeLabApi.getStrategy(selectedStrategy.id))
+      await tradeLabApi.current.createStrategyVersion(selectedStrategy.id, draftSource)
+      const refreshed = normalizeStrategyDetail(await tradeLabApi.current.getStrategy(selectedStrategy.id))
       setSelectedStrategy(refreshed)
       setDraftRuntimeConfig(refreshed.runtimeConfig)
       setDraftRiskConfig(refreshed.riskConfig)
@@ -2892,7 +2884,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const createdBot = normalizeBotSummary(
-        await tradeLabApi.createBot({
+        await tradeLabApi.current.createBot({
           strategy_id: selectedStrategy.id,
           strategy_version_id: runVersion.id,
           name: `${selectedStrategy.name} paper draft`,
@@ -2953,7 +2945,7 @@ export function useTradeLabWorkspace() {
     }
 
     const createdBot = normalizeBotSummary(
-      await tradeLabApi.createBot({
+      await tradeLabApi.current.createBot({
         strategy_id: selectedStrategy.id,
         strategy_version_id: activeStrategyVersion.id,
         name: `${selectedStrategy.name} backtest bot`,
@@ -3001,7 +2993,7 @@ export function useTradeLabWorkspace() {
       return null
     }
     const request = buildBacktestRequest()
-    const preflight = normalizePreflightResult(await tradeLabApi.preflightBotBacktest(bot.id, request))
+    const preflight = normalizePreflightResult(await tradeLabApi.current.preflightBotBacktest(bot.id, request))
     setPreflightResult(preflight)
     setPendingBacktestRequest(request)
     return preflight
@@ -3032,7 +3024,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizeDatasetLocalFillResult(
-        await tradeLabApi.fillDatasetLocal({
+        await tradeLabApi.current.fillDatasetLocal({
           strategy_id: selectedStrategy.id,
           exchange: datasetFillPreview.exchange,
           symbol: datasetFillPreview.symbol,
@@ -3114,7 +3106,7 @@ export function useTradeLabWorkspace() {
     setActionMessage(null)
     try {
       const result = normalizeDatasetFillEnqueueResult(
-        await tradeLabApi.enqueueDatasetFillLocal({
+        await tradeLabApi.current.enqueueDatasetFillLocal({
           strategy_id: selectedStrategy.id,
           exchange: datasetFillPreview.exchange,
           symbol: datasetFillPreview.symbol,
@@ -3176,7 +3168,7 @@ export function useTradeLabWorkspace() {
         return
       }
       const request = buildBacktestRequest()
-      const preflight = normalizePreflightResult(await tradeLabApi.preflightBotBacktest(bot.id, request))
+      const preflight = normalizePreflightResult(await tradeLabApi.current.preflightBotBacktest(bot.id, request))
       setPreflightResult(preflight)
       setPendingBacktestRequest(request)
       setIsPreflightOpen(true)
@@ -3204,7 +3196,7 @@ export function useTradeLabWorkspace() {
       if (!bot) {
         return
       }
-      const pipeline = normalizeRunPipeline(await tradeLabApi.startBotBacktest(bot.id, pendingBacktestRequest))
+      const pipeline = normalizeRunPipeline(await tradeLabApi.current.startBotBacktest(bot.id, pendingBacktestRequest))
       setActivePipeline(pipeline)
       activeRunIdRef.current = pipeline?.run.id ?? null
       setLatestCurrentRunId(pipeline?.run.id ?? null)
@@ -3424,7 +3416,7 @@ export function useTradeLabWorkspace() {
         return
       }
 
-      const payload = normalizeRunAnalysis(await tradeLabApi.getBotRunAnalysis(runId))
+      const payload = normalizeRunAnalysis(await tradeLabApi.current.getBotRunAnalysis(runId))
       if (!payload || payload.run.strategyId !== runAnalysis.run.strategyId) {
         setActionMessage("Compare mode only supports completed runs from the same strategy.")
         return
@@ -3441,7 +3433,7 @@ export function useTradeLabWorkspace() {
   const refreshPipeline = useCallback(async (runId: string) => {
     setIsPollingPipeline(true)
     try {
-      const pipeline = normalizeRunPipeline(await tradeLabApi.getBotRunPipeline(runId))
+      const pipeline = normalizeRunPipeline(await tradeLabApi.current.getBotRunPipeline(runId))
       setActivePipeline(pipeline)
       if (pipeline && hasTerminalStatus(pipeline.status)) {
         await loadRunState(runId)

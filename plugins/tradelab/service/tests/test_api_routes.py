@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
+from conftest import AllowAllAuthorizationClient, DEFAULT_TEST_HEADERS, DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -44,7 +39,7 @@ try:
 except RuntimeError as exc:
     pytest.skip(str(exc), allow_module_level=True)
 apply_schema_compatibility()
-client = TestClient(app)
+client = TestClient(app, headers=DEFAULT_TEST_HEADERS)
 
 
 def assert_success_envelope(response, semantic_status: int = 200) -> dict[str, object]:
@@ -95,7 +90,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
                 "slug": f"test-group-{suffix}",
                 "description": "Integration test group",
                 "metadata": {"visibility": "test", "purpose": "automated_test_fixture"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -113,7 +107,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -128,7 +121,6 @@ def test_strategy_creation_and_version_validation_use_envelopes() -> None:
 def on_candle(ctx):
     return None
 """.strip(),
-                "created_by": "codex",
             },
         ),
         201,
@@ -139,6 +131,7 @@ def on_candle(ctx):
 
 def test_validate_strategy_source_endpoint_returns_valid_without_creating_version() -> None:
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         before_count = session.query(StrategyVersion).count()
 
     payload = assert_success_envelope(
@@ -156,6 +149,7 @@ def test_validate_strategy_source_endpoint_returns_valid_without_creating_versio
     }
 
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         after_count = session.query(StrategyVersion).count()
     assert after_count == before_count
 
@@ -209,7 +203,6 @@ def test_paper_draft_bot_creation_is_allowed_without_creating_run() -> None:
                 "runtime_config": {"exchange": "binance"},
                 "risk_config": {"max_order_percent": 10},
                 "metadata": {"purpose": "paper-draft-boundary"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -219,6 +212,7 @@ def test_paper_draft_bot_creation_is_allowed_without_creating_run() -> None:
     assert data["status"] == "draft"
     assert data["name"] == f"Paper Draft Bot {suffix}"
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         bot = session.query(Bot).filter(Bot.id == UUID(data["id"])).one()
         assert bot.mode == "paper"
         assert bot.status == "draft"
@@ -256,7 +250,6 @@ def test_paper_draft_bot_creation_accepts_credential_boundary_metadata() -> None
                         "updatedAt": "2026-05-16T00:00:00Z",
                     }
                 },
-                "created_by": "codex",
             },
         ),
         201,
@@ -264,6 +257,7 @@ def test_paper_draft_bot_creation_accepts_credential_boundary_metadata() -> None
 
     assert data["metadata"]["credentialBoundary"]["status"] == "read_only_ready"
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         bot = session.query(Bot).filter(Bot.id == UUID(data["id"])).one()
         assert bot.metadata_["credentialBoundary"]["checks"]["readOnlyEnabled"] is True
         assert session.query(BotRun).filter(BotRun.bot_id == bot.id).count() == 0
@@ -293,7 +287,6 @@ def test_bot_creation_rejects_credential_boundary_secret_like_fields_without_ech
                         "nested": {"privateKey": "PRIVATE-WAS-HERE"},
                     }
                 },
-                "created_by": "codex",
             },
         ),
         400,
@@ -307,6 +300,7 @@ def test_bot_creation_rejects_credential_boundary_secret_like_fields_without_ech
     assert "SECRET-WAS-HERE" not in str(payload)
     assert "PRIVATE-WAS-HERE" not in str(payload)
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         created = session.query(Bot).filter(Bot.name == f"Paper Credential Secret {suffix}").one_or_none()
     assert created is None
 
@@ -329,7 +323,6 @@ def test_bot_creation_rejects_invalid_credential_boundary_status() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {"credentialBoundary": {"status": "paper_trading_enabled"}},
-                "created_by": "codex",
             },
         ),
         400,
@@ -367,7 +360,6 @@ def test_paper_non_draft_bot_creation_is_rejected_with_machine_readable_error() 
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         400,
@@ -375,6 +367,7 @@ def test_paper_non_draft_bot_creation_is_rejected_with_machine_readable_error() 
 
     assert_execution_mode_not_enabled_error(payload, "paper")
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         created = (
             session.query(Bot)
             .filter(Bot.name == f"Paper Active Bot {suffix}", Bot.mode == "paper")
@@ -401,7 +394,6 @@ def test_live_bot_creation_is_rejected_with_machine_readable_error() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         400,
@@ -409,6 +401,7 @@ def test_live_bot_creation_is_rejected_with_machine_readable_error() -> None:
 
     assert_execution_mode_not_enabled_error(payload, "live")
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         created = (
             session.query(Bot)
             .filter(Bot.name == f"Live Bot {suffix}", Bot.mode == "live")
@@ -453,6 +446,7 @@ def test_backtest_preflight_rejects_non_backtest_bot_without_creating_run(
 
     assert_execution_mode_not_runnable_error(payload, "paper")
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         run_count = session.query(BotRun).filter(BotRun.bot_id == bot_id).count()
     assert run_count == 0
 
@@ -492,6 +486,7 @@ def test_backtest_start_rejects_non_backtest_bot_without_creating_run(
 
     assert_execution_mode_not_runnable_error(payload, "paper")
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         run_count = session.query(BotRun).filter(BotRun.bot_id == bot_id).count()
     assert run_count == 0
 
@@ -526,7 +521,6 @@ def test_paper_draft_with_credential_boundary_is_still_not_runnable() -> None:
                         },
                     }
                 },
-                "created_by": "codex",
             },
         ),
         201,
@@ -551,6 +545,7 @@ def test_paper_draft_with_credential_boundary_is_still_not_runnable() -> None:
 
     assert_execution_mode_not_runnable_error(payload, "paper")
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         bot = session.query(Bot).filter(Bot.id == UUID(bot_data["id"])).one()
         assert session.query(BotRun).filter(BotRun.bot_id == bot.id).count() == 0
 
@@ -572,7 +567,6 @@ def test_backtest_preflight_and_pipeline_use_envelopes() -> None:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -652,8 +646,14 @@ def test_backtest_preflight_and_pipeline_use_envelopes() -> None:
     run_id = pipeline_payload["run"]["id"]
 
     run_payload = None
+    dispatcher = JobDispatcher(auth_client=AllowAllAuthorizationClient())
+    try:
+        dispatcher.poll_once()
+        for future in dispatcher._futures.values():
+            future.result(timeout=10)
+    finally:
+        dispatcher.stop()
     for _ in range(10):
-        JobDispatcher().poll_once()
         run_payload = assert_success_envelope(client.get(f"/api/tradelab/bot-runs/{run_id}"))
         if run_payload["status"] == "completed":
             break
@@ -912,6 +912,7 @@ def test_repeat_benchmark_route_creates_check_for_completed_run() -> None:
     suffix = uuid4().hex[:8]
     _, strategy_id, version_id = _create_strategy_with_version(suffix)
     run = BotRun(
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
         strategy_id=UUID(strategy_id),
         strategy_version_id=UUID(version_id),
         run_type="backtest",
@@ -930,9 +931,10 @@ def test_repeat_benchmark_route_creates_check_for_completed_run() -> None:
         },
         pipeline_context={"preflight": {"outcome": "ready"}},
         pipeline_status="completed",
-        created_by="codex",
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         session.add(run)
         session.commit()
         session.refresh(run)
@@ -966,6 +968,7 @@ def test_strategy_job_visibility_returns_active_recent_and_stale_state() -> None
 
     before_statuses = {}
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         before_statuses["run"] = session.get(BotRun, UUID(fixture["activeRunId"])).status
         before_statuses["pipeline"] = session.get(BotRun, UUID(fixture["activeRunId"])).pipeline_status
         before_statuses["job"] = session.get(MarketDataImportJob, UUID(fixture["dataJobId"])).status
@@ -988,6 +991,7 @@ def test_strategy_job_visibility_returns_active_recent_and_stale_state() -> None
     assert active_item["last_activity_at"]
 
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
         assert session.get(BotRun, UUID(fixture["activeRunId"])).status == before_statuses["run"]
         assert session.get(BotRun, UUID(fixture["activeRunId"])).pipeline_status == before_statuses["pipeline"]
         assert session.get(MarketDataImportJob, UUID(fixture["dataJobId"])).status == before_statuses["job"]
@@ -996,11 +1000,13 @@ def test_strategy_job_visibility_limits_recent_runs_and_handles_missing_strategy
     suffix = uuid4().hex[:8]
     _, strategy_id, version_id = _create_strategy_with_version(f"visibility-limit-{suffix}")
     session = SessionLocal(bind=get_engine())
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         base_time = datetime.now(timezone.utc) - timedelta(hours=1)
         runs = []
         for index in range(7):
             run = BotRun(
+                workspace_id=DEFAULT_TEST_WORKSPACE_ID,
                 id=uuid4(),
                 strategy_id=UUID(strategy_id),
                 strategy_version_id=UUID(version_id),
@@ -1022,7 +1028,7 @@ def test_strategy_job_visibility_limits_recent_runs_and_handles_missing_strategy
                 data_job_id=None,
                 error_message=None,
                 created_at=base_time + timedelta(minutes=index),
-                created_by="codex",
+                created_by=str(DEFAULT_TEST_USER_ID),
             )
             runs.append(run)
         session.add_all(runs)
@@ -1049,7 +1055,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
                 "slug": f"group-{suffix}",
                 "description": "Integration test group",
                 "metadata": {"visibility": "test", "purpose": "automated_test_fixture"},
-                "created_by": "codex",
             },
         ),
         201,
@@ -1067,7 +1072,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
                 "runtime_config": {},
                 "risk_config": {},
                 "metadata": {},
-                "created_by": "codex",
             },
         ),
         201,
@@ -1082,7 +1086,6 @@ def _create_strategy_with_version(suffix: str) -> tuple[str, str, str]:
 def on_candle(ctx):
     return None
 """.strip(),
-                "created_by": "codex",
             },
         ),
         201,
@@ -1093,6 +1096,7 @@ def on_candle(ctx):
 
 def _make_unpersisted_bot(*, bot_id: UUID, strategy_id: str, version_id: str, mode: str) -> Bot:
     return Bot(
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
         id=bot_id,
         strategy_id=UUID(strategy_id),
         strategy_version_id=UUID(version_id),
@@ -1104,12 +1108,13 @@ def _make_unpersisted_bot(*, bot_id: UUID, strategy_id: str, version_id: str, mo
         runtime_config={},
         risk_config={},
         metadata_={"createdFor": "execution-mode-guard-test"},
-        created_by="codex",
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
 
 
 def _insert_candles(rows: list[dict[str, object]]) -> None:
     session = SessionLocal(bind=get_engine())
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         for row in rows:
             existing = (
@@ -1165,11 +1170,13 @@ def _insert_candles(rows: list[dict[str, object]]) -> None:
 
 def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, str]:
     session = SessionLocal(bind=get_engine())
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         completed_run_id = uuid4()
         open_run_id = uuid4()
 
         completed_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=completed_run_id,
             strategy_id=UUID(strategy_id),
             strategy_version_id=UUID(version_id),
@@ -1223,9 +1230,10 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             pipeline_context={"preflight": {"outcome": "ready"}},
             pipeline_status="completed",
             created_at=datetime(2026, 1, 1, 3, 0, tzinfo=timezone.utc),
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         open_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=open_run_id,
             strategy_id=UUID(strategy_id),
             strategy_version_id=UUID(version_id),
@@ -1271,10 +1279,11 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             pipeline_context={"preflight": {"outcome": "ready"}},
             pipeline_status="running",
             created_at=datetime(2026, 1, 1, 3, 0, tzinfo=timezone.utc),
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
 
         entry_signal = StrategySignal(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             candle_open_time=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
@@ -1284,6 +1293,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
         )
         exit_signal = StrategySignal(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             candle_open_time=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
@@ -1293,6 +1303,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
         )
         open_signal = StrategySignal(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=open_run_id,
             candle_open_time=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
@@ -1303,6 +1314,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
         )
 
         entry_intent = OrderIntent(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             strategy_signal_id=entry_signal.id,
@@ -1316,6 +1328,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
         )
         exit_intent = OrderIntent(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             strategy_signal_id=exit_signal.id,
@@ -1329,6 +1342,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
         )
         open_intent = OrderIntent(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=open_run_id,
             strategy_signal_id=open_signal.id,
@@ -1343,6 +1357,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
         )
 
         entry_order = TradeOrder(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             order_intent_id=entry_intent.id,
@@ -1360,6 +1375,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
         )
         exit_order = TradeOrder(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             order_intent_id=exit_intent.id,
@@ -1377,6 +1393,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
             created_at=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
         )
         open_order = TradeOrder(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=open_run_id,
             order_intent_id=open_intent.id,
@@ -1395,6 +1412,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
         )
 
         completed_result = BacktestResult(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             bot_run_id=completed_run_id,
             initial_equity=Decimal("1000"),
@@ -1433,6 +1451,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
                 exit_order,
                 open_order,
                 StrategyLog(
+                    workspace_id=DEFAULT_TEST_WORKSPACE_ID,
                     id=uuid4(),
                     bot_run_id=completed_run_id,
                     level="info",
@@ -1442,6 +1461,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
                     created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
                 ),
                 StrategyLog(
+                    workspace_id=DEFAULT_TEST_WORKSPACE_ID,
                     id=uuid4(),
                     bot_run_id=completed_run_id,
                     level="info",
@@ -1451,6 +1471,7 @@ def _insert_analysis_runs(*, strategy_id: str, version_id: str) -> tuple[str, st
                     created_at=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
                 ),
                 StrategyLog(
+                    workspace_id=DEFAULT_TEST_WORKSPACE_ID,
                     id=uuid4(),
                     bot_run_id=open_run_id,
                     level="info",
@@ -1474,6 +1495,7 @@ def _insert_job_visibility_fixture(
     other_version_id: str,
 ) -> dict[str, str]:
     session = SessionLocal(bind=get_engine())
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         now = datetime.now(timezone.utc)
         stale_started_at = now - timedelta(minutes=15)
@@ -1507,9 +1529,10 @@ def _insert_job_visibility_fixture(
             error_message=None,
             metadata_={"source": "job-visibility-test"},
             created_at=stale_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         active_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=active_run_id,
             strategy_id=UUID(strategy_id),
             strategy_version_id=UUID(version_id),
@@ -1531,9 +1554,10 @@ def _insert_job_visibility_fixture(
             data_job_id=data_job_id,
             error_message=None,
             created_at=stale_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         completed_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=recent_completed_run_id,
             strategy_id=UUID(strategy_id),
             strategy_version_id=UUID(version_id),
@@ -1555,9 +1579,10 @@ def _insert_job_visibility_fixture(
             data_job_id=None,
             error_message=None,
             created_at=fresh_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         failed_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=recent_failed_run_id,
             strategy_id=UUID(strategy_id),
             strategy_version_id=UUID(version_id),
@@ -1579,9 +1604,10 @@ def _insert_job_visibility_fixture(
             data_job_id=None,
             error_message="Synthetic failure.",
             created_at=fresh_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         other_strategy_run = BotRun(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=other_strategy_run_id,
             strategy_id=UUID(other_strategy_id),
             strategy_version_id=UUID(other_version_id),
@@ -1603,16 +1629,17 @@ def _insert_job_visibility_fixture(
             data_job_id=None,
             error_message=None,
             created_at=fresh_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         link = MarketDataJobRunLink(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             id=uuid4(),
             import_job_id=data_job_id,
             bot_run_id=active_run_id,
             link_status="waiting",
             metadata_={"source": "job-visibility-test"},
             created_at=stale_started_at,
-            created_by="codex",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         session.add_all([data_job, active_run, completed_run, failed_run, other_strategy_run, link])
         session.commit()
@@ -1631,9 +1658,11 @@ def test_preflight_blocks_api_bypass() -> None:
     suffix = uuid4().hex[:8]
     _, strategy_id, version_id = _create_strategy_with_version(suffix)
     session = SessionLocal(bind=get_engine())
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         # Create a bot that references the strategy
         bot = Bot(
+            workspace_id=DEFAULT_TEST_WORKSPACE_ID,
             strategy_id=strategy_id,
             strategy_version_id=version_id,
             name=f"Bypass Bot {suffix}",
@@ -1643,7 +1672,7 @@ def test_preflight_blocks_api_bypass() -> None:
             timeframe="1h",
             runtime_config={},
             risk_config={},
-            created_by="pytest",
+            created_by=str(DEFAULT_TEST_USER_ID),
         )
         # Create 3 candles with fixture source
         c1 = MarketCandle(
@@ -1685,13 +1714,31 @@ def test_preflight_blocks_api_bypass() -> None:
             volume=Decimal("10"),
             source="tradelab-local-fill-smoke-fixture",
         )
-        session.add_all([bot, c1, c2, c3])
+        session.add(bot)
+        for c in [c1, c2, c3]:
+            existing_c = session.query(MarketCandle).filter(
+                MarketCandle.exchange == c.exchange,
+                MarketCandle.symbol == c.symbol,
+                MarketCandle.timeframe == c.timeframe,
+                MarketCandle.open_time == c.open_time,
+            ).first()
+            if existing_c is not None:
+                existing_c.source = c.source
+            else:
+                session.add(c)
         session.commit()
         bot_id = bot.id
     finally:
         session.close()
 
     try:
+        with SessionLocal(bind=get_engine()) as session:
+            bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
+            initial_repair_job_count = session.query(MarketDataImportJob).filter(
+                MarketDataImportJob.dataset_key == "binance:BTCUSDT:1h",
+                MarketDataImportJob.job_type == "repair"
+            ).count()
+
         response = client.post(
             f"/api/tradelab/bots/{bot_id}/backtests",
             json={
@@ -1710,14 +1757,16 @@ def test_preflight_blocks_api_bypass() -> None:
 
         # Check no BotRun or MarketDataImportJob was created
         with SessionLocal(bind=get_engine()) as session:
+            bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
             run_count = session.query(BotRun).filter(BotRun.bot_id == bot_id).count()
             assert run_count == 0
             job_count = session.query(MarketDataImportJob).filter(
                 MarketDataImportJob.dataset_key == "binance:BTCUSDT:1h",
                 MarketDataImportJob.job_type == "repair"
             ).count()
-            assert job_count == 0
+            assert job_count == initial_repair_job_count
     finally:
         with SessionLocal(bind=get_engine()) as session:
+            bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
             session.query(MarketCandle).filter(MarketCandle.source == "tradelab-local-fill-smoke-fixture").delete()
             session.commit()

@@ -25,3 +25,11 @@ Use existing API response and authentication patterns. Structure refactors do no
 - New members must not receive domain-resource grants before resource authorization is enforced. TradeLab datasets are the explicit instance-scoped exception, protected by functional authorization and immutable version lifecycle.
 
 These are product/security contracts, not a claim that all domain-resource migrations or runtime gates have passed. Operational task state lives only in Knowledge.
+
+## TradeLab workload authorization
+
+- POST /api/Authorization/workload-check authenticates a trusted service with X-Service-Authorization; a user JWT cannot replace that credential. Existing POST /api/Authorization/check retains its user-authenticated contract.
+- The workload request accepts only nonzero userId/workspaceId, permissionKey=tradelab.backtests and action=analyze. Current scoped membership/functional permission is checked; private resource ownership remains TradeLab's responsibility.
+- A valid success envelope identifies the exact checked user/workspace and carries a boolean hasPermission, including an authoritative false. Invalid service authentication, missing configuration or authority failure is not a user revocation proof.
+- The TradeLab client accepts HTTPS, or HTTP only on loopback, with no redirects, a two-second timeout and a 16 KiB response cap. It distinguishes valid denial from unavailable authority and rejects malformed, conflicting or mismatched subject/scope fields.
+- Service keys remain outside committed settings, task documents, browser requests and strategy containers. The endpoint does not authorize cTrader, live trading or legacy-owner adoption.

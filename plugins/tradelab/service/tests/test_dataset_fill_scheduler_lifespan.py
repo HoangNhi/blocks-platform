@@ -28,7 +28,6 @@ async def test_lifespan_starts_and_stops_background_fill_scheduler(monkeypatch) 
     monkeypatch.setattr(main_module, "BackgroundFillScheduler", FakeScheduler)
     monkeypatch.setattr(main_module, "verify_database_connection", lambda: events.append("verify-db"))
     monkeypatch.setattr(main_module, "apply_schema_compatibility", lambda: events.append("schema"))
-    monkeypatch.setattr(main_module, "seed_startup_baseline_if_enabled", lambda: events.append("seed"))
 
     class FakeApp:
         class State:
@@ -37,13 +36,11 @@ async def test_lifespan_starts_and_stops_background_fill_scheduler(monkeypatch) 
         state = State()
 
     async with main_module.lifespan(FakeApp()):
-        assert events == ["verify-db", "schema", "seed", "dispatcher-start", "scheduler-start"]
+        assert events == ["verify-db", "schema", "scheduler-start"]
 
     assert events == [
         "verify-db",
         "schema",
-        "seed",
-        "dispatcher-start",
         "scheduler-start",
         "scheduler-stop",
         "dispatcher-stop",
@@ -75,7 +72,6 @@ async def test_lifespan_stops_dispatcher_when_scheduler_start_fails(monkeypatch)
     monkeypatch.setattr(main_module, "BackgroundFillScheduler", FailingScheduler)
     monkeypatch.setattr(main_module, "verify_database_connection", lambda: events.append("verify-db"))
     monkeypatch.setattr(main_module, "apply_schema_compatibility", lambda: events.append("schema"))
-    monkeypatch.setattr(main_module, "seed_startup_baseline_if_enabled", lambda: events.append("seed"))
 
     class FakeApp:
         class State:
@@ -90,8 +86,6 @@ async def test_lifespan_stops_dispatcher_when_scheduler_start_fails(monkeypatch)
     assert events == [
         "verify-db",
         "schema",
-        "seed",
-        "dispatcher-start",
         "scheduler-start",
         "scheduler-stop",
         "dispatcher-stop",

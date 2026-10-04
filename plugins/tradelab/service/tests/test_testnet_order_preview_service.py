@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 from collections.abc import Iterator
 from decimal import Decimal
-import os
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.models import Strategy, StrategyGroup, StrategyVersion  # noqa: E402
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
@@ -23,6 +23,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     try:
         yield session
     finally:
@@ -32,19 +33,19 @@ def db_session() -> Iterator[Session]:
 
 def _strategy(session: Session):
     suffix = uuid4().hex
-    group = StrategyGroup(name="Phase 19.2 Group", slug=f"phase-19-2-group-{suffix}", metadata_={}, created_by="admin")
+    group = StrategyGroup(workspace_id=DEFAULT_TEST_WORKSPACE_ID, name="Phase 19.2 Group", slug=f"phase-19-2-group-{suffix}", metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(group)
     session.flush()
-    strategy = Strategy(strategy_group_id=group.id, name="Phase 19.2 Strategy", slug=f"phase-19-2-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by="admin")
+    strategy = Strategy(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_group_id=group.id, name="Phase 19.2 Strategy", slug=f"phase-19-2-strategy-{suffix}", status="active", runtime_config={}, risk_config={}, metadata_={}, created_by=str(DEFAULT_TEST_USER_ID))
     session.add(strategy)
     session.flush()
-    version = StrategyVersion(strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by="admin")
+    version = StrategyVersion(workspace_id=DEFAULT_TEST_WORKSPACE_ID, strategy_id=strategy.id, version_number=1, source_code="def on_bar(ctx): return []", source_hash=f"hash-{suffix}", validation_status="valid", created_by=str(DEFAULT_TEST_USER_ID))
     session.add(version)
     session.flush()
     return strategy, version
 
 def _credential(session: Session, *, status: str = "stored_testnet_only", can_withdraw: bool = False):
-    return CredentialRepository(session).create_credential_ref(exchange="binance_spot", environment="binance_testnet", label="Preview credential", status=status, vault_provider="local_dev_encrypted", vault_secret_ref=f"local-dev://phase19/{uuid4()}", api_key_fingerprint="fingerprint", permission_evidence={"canTrade": True, "canWithdraw": can_withdraw}, metadata={"apiSecret": "SECRET"}, actor="admin")
+    return CredentialRepository(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID).create_credential_ref(exchange="binance_spot", environment="binance_testnet", label="Preview credential", status=status, vault_provider="local_dev_encrypted", vault_secret_ref=f"local-dev://phase19/{uuid4()}", api_key_fingerprint="fingerprint", permission_evidence={"canTrade": True, "canWithdraw": can_withdraw}, metadata={"apiSecret": "SECRET"}, actor="admin")
 
 def _request(session: Session, **overrides) -> PreviewRequestData:
     strategy, version = _strategy(session)
@@ -54,7 +55,7 @@ def _request(session: Session, **overrides) -> PreviewRequestData:
     return PreviewRequestData(**values)
 
 def test_allowed_preview_persists_intent_preview_and_event(db_session: Session) -> None:
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session))
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session))
 
     assert result.allowed is True
     assert result.status == "previewed"
@@ -66,24 +67,24 @@ def test_allowed_preview_persists_intent_preview_and_event(db_session: Session) 
     assert result.should_commit is True
 
 def test_preview_blocks_without_confirmation(db_session: Session) -> None:
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, confirm_preview_only=False))
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, confirm_preview_only=False))
     assert result.allowed is False
     assert result.reason_code == "testnet_order_preview_confirmation_required"
 
 def test_preview_blocks_live_environment(db_session: Session) -> None:
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, environment="binance_live"))
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, environment="binance_live"))
     assert result.allowed is False
     assert result.reason_code == "testnet_order_preview_live_route_blocked"
 
 def test_preview_blocks_invalid_quantity(db_session: Session) -> None:
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), _request(db_session, quantity=Decimal("1"), quote_quantity=Decimal("25")))
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), _request(db_session, quantity=Decimal("1"), quote_quantity=Decimal("25")))
     assert result.allowed is False
     assert result.reason_code == "testnet_order_preview_quantity_invalid"
 
 def test_preview_replays_same_idempotency_key(db_session: Session) -> None:
     request = _request(db_session)
-    first = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), request)
-    second = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), request)
+    first = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request)
+    second = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request)
     assert second.allowed is True
     assert second.preview_id == first.preview_id
     assert second.reason_code == "testnet_order_preview_idempotency_replayed"
@@ -94,7 +95,7 @@ def test_preview_allows_validated_spot_testnet_credential_with_withdraw_flag(db_
     credential.permission_evidence = {"canTrade": True, "canWithdraw": True, "marginOrFuturesEnabled": False}
     db_session.flush()
     request = _request(db_session, strategy_id=strategy.id, strategy_version_id=version.id, credential_ref_id=credential.id)
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), request)
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request)
     assert result.allowed is True
     assert result.reason_code == "testnet_order_preview_allowed"
 
@@ -104,6 +105,6 @@ def test_preview_blocks_margin_enabled_credential(db_session: Session) -> None:
     credential.permission_evidence = {"canTrade": True, "canWithdraw": True, "marginOrFuturesEnabled": True}
     db_session.flush()
     request = _request(db_session, strategy_id=strategy.id, strategy_version_id=version.id, credential_ref_id=credential.id)
-    result = preview_testnet_order(OrderStateRepository(db_session), CredentialRepository(db_session), request)
+    result = preview_testnet_order(OrderStateRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), CredentialRepository(db_session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID), request)
     assert result.allowed is False
     assert result.reason_code == "testnet_order_preview_unsafe_permissions"

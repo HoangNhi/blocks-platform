@@ -14,6 +14,7 @@ import { PlatformOverview } from "@/features/dashboard/platform-overview";
 import { useNavigationData } from "@/features/navigation/navigation-hooks";
 import { RouteStubPage } from "@/features/platform/route-stub-page";
 import { ApiError } from "@/lib/api/api-error";
+import { TradeLabWorkspaceBoundary } from "@/plugins/tradelab/components/tradelab-workspace-boundary";
 import { SystemOverviewPage } from "@/features/admin/pages/system-overview-page";
 
 const AuditLogPage = lazy(() =>
@@ -213,7 +214,7 @@ function App() {
               />
               <Route
                 path="/plugins/tradelab"
-                element={renderLazyRoute(<StrategyLabPage />)}
+                element={<TradeLabWorkspaceBoundary>{renderLazyRoute(<StrategyLabPage />)}</TradeLabWorkspaceBoundary>}
               />
               <Route
                 path="/plugins/tradelab/datasets"

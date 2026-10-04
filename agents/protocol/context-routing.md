@@ -87,6 +87,34 @@ Read the smallest authoritative context set before broad search. Repository docs
 - Store all durable task evidence only in `evidence/<run-id>/` below the exact Knowledge task. Its `execution.md` owns state. Published product results may remain in docs or CI; never mirror task records there.
 - An inaccessible approved evidence destination is `BLOCKED`; do not create another durable record, broaden vault access, or copy sensitive evidence into public docs.
 
+## Initiative and Workstream Context Routing
+
+### Context Packet Structure
+When working on an initiative or workstream task, the context packet provided must be strictly bounded:
+- **Exact approved paths:** Only the approved Knowledge paths specifically granted by the owner.
+- **Requirement IDs:** The precise, stable IDs assigned to this task/workstream.
+- **Relevant ADRs & Invariants:** Specific decisions and invariants applicable to this task, along with their approved revision.
+- **Baseline Revisions:** Surveyed commit hash and approved contract/artifact revision.
+- **Repository Docs & Dependencies:** Applicable repo architecture docs and declared prerequisite tasks.
+- **Bounded read rule:** Do not require or attempt reading the entire initiative hierarchy or unrelated workstream documents.
+
+### Access Boundaries & Links (Walkthrough W3)
+- **Repo authority:** Repository docs retain source of truth for public contracts, security, and protocol. Private task artifacts never override them.
+- **Links do not grant permission:** An internal link from an approved task to a parent initiative, sibling task, or external document does NOT grant read or write permission to that target.
+- **Missing access is BLOCKED (W3):** If an agent encounters a link to a parent or dependency outside its approved path, it must stop the dependent work and report `BLOCKED` on that specific path. Never scan sibling folders or attempt vault-wide traversal.
+
+## State Ownership and Baseline Drift
+
+### State Ownership & Single Source of Truth
+- **Master Spec (`master-spec.md`):** Holds the authoritative requirement definitions and system-level acceptance criteria.
+- **Workstream Decomposition (`workstream-decomposition.md`):** Holds the mapping between requirements and workstreams, ensuring exactly one `primary owner` per requirement ID. It does not track independent execution state.
+- **Task Execution (`execution.md`):** Each task's `execution.md` is the sole source of truth for its own execution state.
+- **Initiative Coordination:** The initiative-level execution record holds only coordination status and references/links; progress summaries are derived projections with explicit source and revision references, never a secondary state store.
+
+### Contract Drift & Baseline Changes (Walkthrough W4)
+- **Baseline drift stops work:** When a baseline contract, schema, or code interface changes, or when an ADR is updated, consumers relying on the previous revision cannot silently continue.
+- **Escalation gate (W4):** Identify and document affected requirement IDs and consumer tasks. Immediately stop work on affected paths until an impact review is conducted and fresh owner approval is granted. Never silently patch an outdated plan.
+
 ## Search Rules
 
 - Prefer indexes, owner docs, active specs, and bounded `rg` searches.

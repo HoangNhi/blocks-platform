@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from tradelab_api.main import app
 from tradelab_api.services.market_data_repository import MarketDataRepository
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def _dt(hour: int) -> datetime:

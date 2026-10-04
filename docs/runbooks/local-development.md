@@ -52,6 +52,20 @@ uv run --locked --python 3.12 ruff check .
 uv run --locked --python 3.12 pytest -q
 ```
 
+### TradeLab ownership provenance
+
+Provenance migration is explicit and additive. Review the target and obtain separate approval before applying it to an existing database. The application does not run it at startup and does not adopt existing private rows.
+
+From `plugins/tradelab/service`, preview SQL without connecting to a database:
+
+```powershell
+uv run --locked --python 3.12 python -m tradelab_api.tools.ownership_provenance_migration
+```
+
+After approval, resolve `TRADELAB_PROVENANCE_MIGRATION_DATABASE_URL` from the local secret store/environment for that exact target, then run the same command with `--apply`. There is no application-database fallback. Do not put credentials in command arguments, task evidence or committed files.
+
+The migration adds nullable `ownership_verified_at` columns to private roots with no default or backfill. Old rows remain unverified even when their owner is a canonical UUID. Startup rejects missing, defaulted, non-nullable or incompatible proof columns. Rollback keeps the dispatcher disabled; it does not drop data or restore permissive ownership.
+
 ## Agent Workflow
 
 ```powershell
@@ -115,3 +129,19 @@ For research, replace the invocation with `codex -C $repoRoot -s read-only -a on
 ## Runtime smoke
 
 Run `bash platform/apphost/validate-browser-smoke.sh` in an environment containing setsid, uv, dotnet and node, with locally configured BLOCKS_SMOKE_POSTGRES_* values. Use BLOCKS_SMOKE_ENVIRONMENT=Production for a production-mode smoke check. An unavailable runtime is not a PASS result; capture task evidence only in the exact Knowledge task.
+
+## TradeLab ownership test safety
+
+TradeLab tests block SQLAlchemy connections unless the actual PostgreSQL database is named `tradelab_test` and `TRADELAB_TEST_DATABASE_RESET=true` is explicitly set. Enabling this flag permits destructive test resets; use only a separately approved disposable target, never application or production data. Database-dependent skips are not migration or tenant-isolation evidence.
+
+Ownership migrations are maintenance operations, not application startup work. Obtain an approved target, backup/window and rollback procedure before invoking them. Private startup seeding is disabled. The operator-only baseline CLI requires `--workspace-id <UUID> --actor-id <UUID>`; it never infers either identity and must run only against an approved target.
+
+## TradeLab isolated backtest worker
+
+- Keep TRADELAB_JOB_DISPATCHER_ENABLED=false until the approved task's database, authority, startup and isolation gates pass. Enabling the flag is not a deployment or multi-user readiness proof.
+- Build the runner-only image with `docker build -t tradelab-runner plugins/tradelab/runner`. Resolve its immutable image ID locally and configure TRADELAB_RUNNER_IMAGE to that sha256 value, not a mutable tag. The API image is not a strategy sandbox.
+- Configure SYSTEM_SERVICE_BASE_URL to the workload authority's HTTPS origin, or an HTTP loopback origin for isolated local development. Resolve SYSTEM_SERVICE_AUTHORIZATION_KEY from the configured local secret store/environment. Never log its value or mount backend configuration into the runner.
+- The executor must expose Linux memory, swap-total, CPU and pid enforcement and support the checked-in seccomp profile. Missing executor/profile/image or unsupported limits fail closed; do not fall back to host subprocesses.
+- Runner integration tests may use the local pinned image without database access. Database and API isolation tests still need separately approved disposable tradelab_test and explicit reset permission; do not enable the reset flag merely to remove skips.
+- On dispatcher crash or unconfirmed sandbox termination, leave running rows reserved. Inspect the run's pipeline_context workerInstanceId/sandboxName and matching container labels/ID. Confirm termination before any separately approved fail/requeue operation and fresh authority check. Never reset all running rows or restart an orphan automatically.
+- Increasing dispatcher replicas requires a separately approved fencing/recovery design. Keep the single-dispatcher advisory-lock gate and existing live/paper safety controls intact.

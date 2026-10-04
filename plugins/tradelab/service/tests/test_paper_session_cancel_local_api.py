@@ -6,7 +6,7 @@ from tradelab_api.api import paper as paper_api
 from tradelab_api.main import app
 from tradelab_api.services.paper_session_cancel_local import PaperSessionCancelLocalResult
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def assert_success_envelope(response, semantic_status: int) -> dict[str, object]:
@@ -65,7 +65,7 @@ def test_cancel_local_route_returns_cancelled_envelope_and_commits(monkeypatch) 
                 json={
                     "confirmLocalPaperCancel": True,
                     "reason": "user_requested",
-                    "actor": "admin",
+                    "actor": "spoofed-client-actor",
                 },
             ),
             200,
@@ -78,7 +78,7 @@ def test_cancel_local_route_returns_cancelled_envelope_and_commits(monkeypatch) 
             "session_id": "00000000-0000-0000-0000-000000000001",
             "confirm": True,
             "reason": "user_requested",
-            "actor": "admin",
+            "actor": "00000000-0000-0000-0000-000000000001",
         }
     ]
     assert fake_session.commits == 1

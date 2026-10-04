@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from conftest import bind_test_context
+
 import os
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -31,6 +33,9 @@ from tradelab_api.services.strategy_repository import StrategyRepository  # noqa
 
 Base.metadata.create_all(bind=get_engine())
 
+TEST_WORKSPACE_ID = UUID("00000000-0000-0000-0000-000000000001")
+TEST_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
+
 
 def _dt(hour: int) -> datetime:
     return datetime(2026, 1, 1, hour, tzinfo=timezone.utc)
@@ -49,6 +54,7 @@ def db_session() -> Iterator[Session]:
     connection = get_engine().connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+    bind_test_context(session, TEST_WORKSPACE_ID, TEST_OWNER_ID)
     try:
         yield session
     finally:
@@ -78,6 +84,7 @@ def _candle(hour: int, *, symbol: str = "BTCUSDT") -> dict[str, object]:
 
 class FakeStrategyRepository:
     def __init__(self) -> None:
+        self.owner_user_id = TEST_OWNER_ID
         self.groups_by_slug: dict[str, SimpleNamespace] = {}
         self.strategies_by_slug: dict[str, SimpleNamespace] = {}
         self.versions: list[SimpleNamespace] = []
@@ -311,8 +318,9 @@ def test_reset_reactivates_soft_deleted_fixture_rows(db_session: Session) -> Non
             name="Deleted smoke fixtures",
             slug=LOCAL_FILL_SMOKE_GROUP_SLUG,
             description="Deleted fixture row.",
+            workspace_id=TEST_WORKSPACE_ID,
             metadata_={"visibility": "test"},
-            created_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+            created_by=str(TEST_OWNER_ID),
         )
         db_session.add(group)
         db_session.flush()
@@ -330,11 +338,12 @@ def test_reset_reactivates_soft_deleted_fixture_rows(db_session: Session) -> Non
             name="Deleted local fill smoke",
             slug=LOCAL_FILL_SMOKE_STRATEGY_SLUG,
             description="Deleted fixture strategy.",
+            workspace_id=TEST_WORKSPACE_ID,
             status="active",
             runtime_config={},
             risk_config={},
             metadata_={"visibility": "test"},
-            created_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+            created_by=str(TEST_OWNER_ID),
         )
         db_session.add(strategy)
         db_session.flush()
@@ -344,7 +353,7 @@ def test_reset_reactivates_soft_deleted_fixture_rows(db_session: Session) -> Non
     db_session.flush()
 
     result = reset_local_fill_smoke_fixture(
-        StrategyRepository(db_session),
+        StrategyRepository(db_session, TEST_WORKSPACE_ID, TEST_OWNER_ID),
         MarketDataRepository(db_session),
         settings=_settings(),
         confirm_fixture_reset=True,

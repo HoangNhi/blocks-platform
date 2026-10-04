@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import os
 
 from fastapi.testclient import TestClient
-
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.main import app  # noqa: E402
 from tradelab_api.services.testnet_order_journal_projection import TestnetOrderJournalProjectionResult  # noqa: E402
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def test_project_journal_route_returns_success_envelope_and_commits(monkeypatch) -> None:
@@ -31,7 +28,7 @@ def test_project_journal_route_returns_success_envelope_and_commits(monkeypatch)
     monkeypatch.setattr("tradelab_api.api.testnet_orders.project_testnet_order_to_journal", fake_project)
     response = client.post(
         "/api/tradelab/testnet/orders/00000000-0000-0000-0000-000000000001/project-journal",
-        json={"confirmTestnetJournalProjection": True, "source": "strategy_lab", "actor": "admin"},
+        json={"confirmTestnetJournalProjection": True, "source": "strategy_lab"},
     )
 
     payload = response.json()["Data"]

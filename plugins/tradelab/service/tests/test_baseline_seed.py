@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
+from conftest import bind_test_context
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
 
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+import pytest
 
 from tradelab_api.core.config import Settings
 from tradelab_api.db.models import Bot, StrategyGroup
@@ -23,6 +21,9 @@ from tradelab_api.services.baseline_seed import (
 from tradelab_api.services.bot_repository import BotRepository
 from tradelab_api.services.strategy_repository import StrategyRepository
 
+WORKSPACE_ID = UUID("00000000-0000-0000-0000-000000000001")
+OWNER_USER_ID = UUID("00000000-0000-0000-0000-000000000002")
+
 
 def test_baseline_order_size_does_not_exceed_max_order_percent() -> None:
     assert "ctx.buy_market(percent=25)" in BASELINE_SOURCE_CODE
@@ -31,11 +32,12 @@ def test_baseline_order_size_does_not_exceed_max_order_percent() -> None:
 
 def test_seed_baseline_fixture_creates_valid_functional_entities() -> None:
     with SessionLocal(bind=get_engine()) as session:
-        result = seed_baseline_fixture(session, created_by="pytest")
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
+        result = seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
-        repository = StrategyRepository(session)
-        bot_repository = BotRepository(session)
+        repository = StrategyRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
+        bot_repository = BotRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
         group = repository.get_strategy_group_by_slug(BASELINE_GROUP_SLUG)
         strategy = repository.get_strategy_by_slug(BASELINE_STRATEGY_SLUG)
         versions = repository.list_strategy_versions(strategy.id)
@@ -67,10 +69,11 @@ def test_seed_baseline_fixture_creates_valid_functional_entities() -> None:
 
 def test_seed_baseline_fixture_is_idempotent_and_repairs_config() -> None:
     with SessionLocal(bind=get_engine()) as session:
-        first = seed_baseline_fixture(session, created_by="pytest")
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
+        first = seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
-        repository = StrategyRepository(session)
+        repository = StrategyRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
         strategy = repository.get_strategy_by_slug(BASELINE_STRATEGY_SLUG)
         assert strategy is not None
         repository.update_strategy(
@@ -82,7 +85,7 @@ def test_seed_baseline_fixture_is_idempotent_and_repairs_config() -> None:
         session.commit()
         version_count_before_second_seed = len(repository.list_strategy_versions(strategy.id))
 
-        second = seed_baseline_fixture(session, created_by="pytest")
+        second = seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
         group_rows = [group for group in repository.list_strategy_groups() if group.slug == BASELINE_GROUP_SLUG]
@@ -103,21 +106,23 @@ def test_seed_baseline_fixture_is_idempotent_and_repairs_config() -> None:
 def test_seed_baseline_fixture_marks_known_integration_test_groups_without_deleting() -> None:
     suffix = uuid4().hex[:8]
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
         session.add(
             StrategyGroup(
                 name=f"Group {suffix}",
                 slug=f"group-{suffix}",
                 description="Integration test group",
+                workspace_id=WORKSPACE_ID,
                 metadata_={},
-                created_by="pytest",
+                created_by=str(OWNER_USER_ID),
             )
         )
         session.commit()
 
-        seed_baseline_fixture(session, created_by="pytest")
+        seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
-        repository = StrategyRepository(session)
+        repository = StrategyRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
         tagged = repository.get_strategy_group_by_slug(f"group-{suffix}")
         assert tagged is not None
         assert tagged.is_deleted is False
@@ -159,49 +164,18 @@ def test_paper_scheduler_settings_default_to_disabled(monkeypatch) -> None:
     assert settings.tradelab_paper_scheduler_worker_id == "tradelab-local-paper-scheduler"
     assert settings.tradelab_paper_scheduler_error_backoff_seconds == 60.0
 
-def test_startup_seed_rolls_back_and_reraises(monkeypatch) -> None:
-    import tradelab_api.main as main_module
+def test_seed_cli_requires_explicit_workspace_and_actor(monkeypatch) -> None:
+    from tradelab_api.tools.seed_baseline import main
 
-    class FakeSession:
-        rolled_back = False
-        committed = False
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-        def rollback(self):
-            self.rolled_back = True
-
-        def commit(self):
-            self.committed = True
-
-    fake_session = FakeSession()
-
-    monkeypatch.setenv("SEED_BASELINE_ON_STARTUP", "true")
-    monkeypatch.setattr(main_module, "SessionLocal", lambda bind=None: fake_session)
-    monkeypatch.setattr(main_module, "get_engine", lambda: object())
-
-    def fail_seed(session, created_by):
-        raise RuntimeError(f"seed failed for {created_by}")
-
-    monkeypatch.setattr(main_module, "seed_baseline_fixture", fail_seed)
-
-    try:
-        main_module.seed_startup_baseline_if_enabled()
-    except RuntimeError as exc:
-        assert "seed failed for trade-lab-startup" in str(exc)
-    else:
-        raise AssertionError("Expected seed failure.")
-
-    assert fake_session.rolled_back is True
-    assert fake_session.committed is False
+    monkeypatch.setattr("sys.argv", ["seed_baseline"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
 
 def test_seed_baseline_fixture_repairs_duplicate_active_baseline_bots() -> None:
     with SessionLocal(bind=get_engine()) as session:
-        first = seed_baseline_fixture(session, created_by="pytest")
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
+        first = seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
         duplicate = Bot(
@@ -215,13 +189,14 @@ def test_seed_baseline_fixture_repairs_duplicate_active_baseline_bots() -> None:
             runtime_config={},
             risk_config={},
             metadata_={"visibility": "workbench", "purpose": "duplicate_fixture"},
-            created_by="pytest",
+            workspace_id=WORKSPACE_ID,
+            created_by=str(OWNER_USER_ID),
         )
         session.add(duplicate)
         session.commit()
         duplicate_id = duplicate.id
 
-        second = seed_baseline_fixture(session, created_by="pytest")
+        second = seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
         active_bots = (
@@ -250,21 +225,23 @@ def test_seed_baseline_fixture_repairs_duplicate_active_baseline_bots() -> None:
 def test_seed_baseline_fixture_marks_slugged_test_groups_without_deleting() -> None:
     suffix = uuid4().hex[:8]
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
         session.add(
             StrategyGroup(
                 name=f"Slug Test Group {suffix}",
                 slug=f"test-group-{suffix}",
                 description="Generated by automated test",
+                workspace_id=WORKSPACE_ID,
                 metadata_={},
-                created_by="pytest",
+                created_by=str(OWNER_USER_ID),
             )
         )
         session.commit()
 
-        seed_baseline_fixture(session, created_by="pytest")
+        seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
-        repository = StrategyRepository(session)
+        repository = StrategyRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
         tagged = repository.get_strategy_group_by_slug(f"test-group-{suffix}")
         assert tagged is not None
         assert tagged.is_deleted is False
@@ -275,21 +252,23 @@ def test_seed_baseline_fixture_marks_slugged_test_groups_without_deleting() -> N
 def test_seed_baseline_fixture_does_not_tag_user_groups_without_test_markers() -> None:
     suffix = uuid4().hex[:8]
     with SessionLocal(bind=get_engine()) as session:
+        bind_test_context(session, WORKSPACE_ID, OWNER_USER_ID)
         session.add(
             StrategyGroup(
                 name=f"User Group {suffix}",
                 slug=f"user-group-{suffix}",
                 description="User research group",
+                workspace_id=WORKSPACE_ID,
                 metadata_={},
-                created_by="pytest",
+                created_by=str(OWNER_USER_ID),
             )
         )
         session.commit()
 
-        seed_baseline_fixture(session, created_by="pytest")
+        seed_baseline_fixture(session, workspace_id=UUID("00000000-0000-0000-0000-000000000001"), owner_user_id=OWNER_USER_ID)
         session.commit()
 
-        repository = StrategyRepository(session)
+        repository = StrategyRepository(session, UUID("00000000-0000-0000-0000-000000000001"), OWNER_USER_ID)
         group = repository.get_strategy_group_by_slug(f"user-group-{suffix}")
         assert group is not None
         assert group.is_deleted is False

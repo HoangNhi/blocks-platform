@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,9 +18,12 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:5432/tradelab"
     )
     system_service_base_url: str = Field(default="http://systemservice")
+    system_service_authorization_key: SecretStr | None = None
+    tradelab_job_dispatcher_enabled: bool = Field(default=False)
     binance_base_url: str = Field(default="https://api.binance.com")
     runner_python_path: str = Field(default=sys.executable)
     tradelab_runner_root: str | None = Field(default=None)
+    tradelab_runner_image: str | None = Field(default=None)
     strategy_timeout_seconds: int = Field(default=180, ge=1)
     max_backtest_candles: int = Field(default=10_000, ge=1)
     job_poll_interval_seconds: float = Field(default=1.0, ge=0)

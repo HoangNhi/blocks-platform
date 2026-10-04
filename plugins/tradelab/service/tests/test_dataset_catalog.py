@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import os
+from conftest import DEFAULT_TEST_HEADERS
+
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab",
-)
 
 from tradelab_api.db.models import (  # noqa: E402
     MarketDataCoverage,
@@ -31,7 +28,7 @@ try:
 except RuntimeError as exc:
     pytest.skip(str(exc), allow_module_level=True)
 apply_schema_compatibility()
-client = TestClient(app)
+client = TestClient(app, headers=DEFAULT_TEST_HEADERS)
 
 CATALOG_TEST_ACTOR = "pytest-dataset-catalog"
 

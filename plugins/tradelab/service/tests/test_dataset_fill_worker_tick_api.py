@@ -8,7 +8,7 @@ from tradelab_api.services.dataset_fill_worker_tick import (
     DatasetFillWorkerTickValidationError,
 )
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 def _result(*, processed: bool = True, status: str = "completed") -> DatasetFillWorkerTickResult:

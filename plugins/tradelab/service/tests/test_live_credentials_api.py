@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-import os
 
 from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.orm import Session
-
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:postgres123secure@localhost:5432/tradelab")
 
 from tradelab_api.db.session import SessionLocal, apply_schema_compatibility, get_engine  # noqa: E402
 from tradelab_api.main import app  # noqa: E402
 
 apply_schema_compatibility()
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
 @pytest.fixture()

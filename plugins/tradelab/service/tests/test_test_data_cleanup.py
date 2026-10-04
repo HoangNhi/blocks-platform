@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from conftest import DEFAULT_TEST_USER_ID, DEFAULT_TEST_WORKSPACE_ID, bind_test_context
+
 import os
 from uuid import UUID, uuid4
 
@@ -269,12 +271,14 @@ def _create_group(
     metadata: dict[str, object],
     description: str,
 ) -> StrategyGroup:
+    bind_test_context(session, DEFAULT_TEST_WORKSPACE_ID, DEFAULT_TEST_USER_ID)
     group = StrategyGroup(
         name=f"Cleanup {slug}",
         slug=slug,
         description=description,
         metadata_=metadata,
-        created_by="pytest-cleanup",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(group)
     session.flush()
@@ -285,7 +289,7 @@ def _create_group(
 def _soft_delete_pytest_cleanup_rows() -> None:
     with SessionLocal(bind=get_engine()) as session:
         for model in (Bot, StrategyVersion, Strategy, StrategyGroup):
-            rows = session.query(model).filter(model.created_by == "pytest-cleanup").all()
+            rows = session.query(model).filter(model.created_by == str(DEFAULT_TEST_USER_ID)).all()
             for row in rows:
                 row.is_active = False
                 row.is_deleted = True
@@ -310,7 +314,8 @@ def _create_strategy_tree(
         runtime_config={},
         risk_config={},
         metadata_=dict(metadata),
-        created_by="pytest-cleanup",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(strategy)
     session.flush()
@@ -321,7 +326,8 @@ def _create_strategy_tree(
         source_hash=f"hash-{slug}",
         validation_status="valid",
         validation_message=None,
-        created_by="pytest-cleanup",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(version)
     session.flush()
@@ -337,7 +343,8 @@ def _create_strategy_tree(
         runtime_config={},
         risk_config={},
         metadata_=dict(metadata),
-        created_by="pytest-cleanup",
+        workspace_id=DEFAULT_TEST_WORKSPACE_ID,
+        created_by=str(DEFAULT_TEST_USER_ID),
     )
     session.add(bot)
     session.flush()

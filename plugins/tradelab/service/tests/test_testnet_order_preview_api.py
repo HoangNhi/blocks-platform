@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from tradelab_api.main import app
 from tradelab_api.schemas.testnet_orders import TestnetOrderPreviewRequest, TestnetOrderPreviewResultResponse
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 def test_preview_schema_uses_camel_aliases() -> None:
     request = TestnetOrderPreviewRequest.model_validate({"confirmPreviewOnly": True, "idempotencyKey": "key", "clientActionId": "action", "strategyId": str(uuid4()), "strategyVersionId": str(uuid4()), "credentialRefId": str(uuid4()), "symbol": "BTCUSDT", "side": "buy", "quoteQuantity": "25"})

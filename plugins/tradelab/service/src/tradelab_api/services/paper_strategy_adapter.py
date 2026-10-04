@@ -63,7 +63,7 @@ class PaperStrategySourceResolver:
                 "Paper strategy version id is missing from session metadata.",
             )
         row = self.session.get(StrategyVersion, version_id)
-        if row is None:
+        if row is None or row.ownership_verified_at is None:
             raise PaperStrategyRuntimeError("paper_strategy_source_not_found", "Paper strategy source was not found.")
         if row.is_deleted or not row.is_active:
             raise PaperStrategyRuntimeError("paper_strategy_source_inactive", "Paper strategy source is inactive.")

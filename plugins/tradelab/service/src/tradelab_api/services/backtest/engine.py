@@ -17,7 +17,11 @@ from tradelab_api.db.models import (
     StrategySignal,
     TradeOrder,
 )
-from tradelab_api.services.strategy_runner import StrategyRunnerResult, run_strategy_subprocess
+from tradelab_api.core.invocation import ResourcePolicyV1, StrategyInvocation
+from tradelab_api.core.context import ExecutionContext
+from collections.abc import Callable
+from time import monotonic
+from tradelab_api.services.strategy_runner import StrategyRunnerResult, run_strategy_subprocess, _supervisor_reason
 
 from .futures import FuturesPortfolioState
 from .portfolio import PortfolioState, ZERO
@@ -52,6 +56,9 @@ class BacktestRequest:
     source_snapshot: dict[str, Any] = field(default_factory=dict)
     dataset_context: dict[str, Any] = field(default_factory=dict)
     pipeline_context: dict[str, Any] = field(default_factory=dict)
+    execution_context: ExecutionContext | None = None
+    supervisor: Callable[[], str | None] | None = None
+    sandbox_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -74,15 +81,51 @@ class BacktestExecution:
 class BacktestEngine:
     def run(self, request: BacktestRequest) -> BacktestExecution:
         candles = sorted(request.candles, key=lambda candle: candle["open_time"])
-        runner_result = run_strategy_subprocess(
-            strategy_source=request.strategy_source,
-            candles=_serialize_candles(candles),
-            symbol=request.symbol,
-            timeframe=request.timeframe,
-            config=request.runtime_config,
-            state=request.state,
-            timeout_seconds=None,
-        )
+        serialized_candles = _serialize_candles(candles)
+
+        try:
+            as_of_time = datetime.now(timezone.utc)
+            if candles:
+                last_c = candles[-1]
+                last_time = last_c.get("close_time") or last_c.get("open_time")
+                if last_time:
+                    parsed_as_of = _parse_time(last_time)
+                    if parsed_as_of.tzinfo is None:
+                        parsed_as_of = parsed_as_of.replace(tzinfo=timezone.utc)
+                    as_of_time = parsed_as_of
+            invocation = StrategyInvocation.create(
+                strategy_source=request.strategy_source,
+                bars=serialized_candles,
+                symbol=request.symbol,
+                timeframe=request.timeframe,
+                config=request.runtime_config,
+                initial_state=request.state,
+                seed=0,
+                as_of_time=as_of_time,
+                resource_policy=ResourcePolicyV1(),
+            )
+        except (ValueError, TypeError) as exc:
+            failed_res = StrategyRunnerResult(
+                success=False,
+                returncode=-1,
+                stdout="",
+                stderr="",
+                error_message=f"StrategyInvocation validation failed: {exc}",
+                timed_out=False,
+            )
+            return self._failed_execution(request, failed_res)
+
+        if request.execution_context is not None:
+            context = request.execution_context
+            run = request.bot_run
+            if run is None or (run.workspace_id, run.created_by, run.id) != (context.workspace_id, str(context.actor_user_id), context.run_id):
+                raise PermissionError("Backtest execution context does not match its owned run.")
+        runner_kwargs = {"invocation": invocation}
+        if request.supervisor is not None:
+            runner_kwargs["supervisor"] = request.supervisor
+        if request.sandbox_name is not None:
+            runner_kwargs["sandbox_name"] = request.sandbox_name
+        runner_result = run_strategy_subprocess(**runner_kwargs)
         if not runner_result.success or not runner_result.payload:
             return self._failed_execution(request, runner_result)
 
@@ -159,7 +202,13 @@ class BacktestEngine:
         stop_reason: str | None = None
         closed_trade_pnls: list[Decimal] = []
 
+        next_authority_check = monotonic() + 4
         for index, candle in enumerate(candles):
+            if request.supervisor is not None and monotonic() >= next_authority_check:
+                next_authority_check = monotonic() + 4
+                reason = _supervisor_reason(request.supervisor)
+                if reason is not None:
+                    return self._failed_execution(request, StrategyRunnerResult(False, -1, "", "", error_message=reason))
             candle_time = _parse_time(candle["open_time"])
             close_price = decimalize(candle["close"]) or ZERO
             if index in pending_fills:
@@ -379,7 +428,13 @@ class BacktestEngine:
         trade_orders: list[TradeOrder] = []
         equity_curve: list[dict[str, Any]] = []
 
+        next_authority_check = monotonic() + 4
         for index, candle in enumerate(candles):
+            if request.supervisor is not None and monotonic() >= next_authority_check:
+                next_authority_check = monotonic() + 4
+                reason = _supervisor_reason(request.supervisor)
+                if reason is not None:
+                    return self._failed_execution(request, StrategyRunnerResult(False, -1, "", "", error_message=reason))
             candle_time = _parse_time(candle["open_time"])
             close_price = decimalize(candle["close"]) or ZERO
             portfolio.update_mark_price(close_price)
@@ -583,6 +638,21 @@ class BacktestEngine:
 
 
 def persist_backtest_execution(session: Session, execution: BacktestExecution) -> None:
+    ws_id = getattr(execution.bot_run, "workspace_id", None)
+    if ws_id is not None:
+        if execution.result is not None:
+            execution.result.workspace_id = ws_id
+        for signal in execution.signals:
+            signal.workspace_id = ws_id
+        for intent in execution.order_intents:
+            intent.workspace_id = ws_id
+        for order in execution.trade_orders:
+            order.workspace_id = ws_id
+        for log in execution.logs:
+            log.workspace_id = ws_id
+        for pos in execution.positions:
+            pos.workspace_id = ws_id
+
     session.add(execution.bot_run)
     if execution.result is not None:
         session.add(execution.result)

@@ -712,11 +712,13 @@ class MarketDataRepository(CRUDRepository[MarketDataImportJob]):
         *,
         import_job_id: UUID,
         bot_run_id: UUID,
+        workspace_id: UUID | None = None,
         link_status: str = "waiting",
         metadata: dict[str, object] | None = None,
         created_by: str | None = None,
     ) -> MarketDataJobRunLink:
         link = MarketDataJobRunLink(
+            workspace_id=workspace_id,
             import_job_id=import_job_id,
             bot_run_id=bot_run_id,
             link_status=link_status,

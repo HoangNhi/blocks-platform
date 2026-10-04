@@ -10,6 +10,10 @@ const sourceDir = dirname(fileURLToPath(import.meta.url))
 const appSource = readFileSync(resolve(sourceDir, "App.tsx"), "utf8")
 
 describe("App route bundle boundaries", () => {
+  it("keeps verified TradeLab workspace outside the lazy page boundary", () => {
+    expect(appSource).toContain("<TradeLabWorkspaceBoundary>{renderLazyRoute(<StrategyLabPage />)}</TradeLabWorkspaceBoundary>")
+  })
+
   it("renders public auth pages through top-level routes", () => {
     expect(appSource).toContain('import { LoginPage } from "@/features/auth/login-page"')
     expect(appSource).toContain('import { RegistrationPage } from "@/features/auth/registration-page"')

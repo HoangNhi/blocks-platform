@@ -143,6 +143,7 @@ def _validate_fixture_guards(*, settings: object, confirm_fixture_reset: bool) -
 
 
 def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
+    owner_id = str(strategy_repository.owner_user_id)
     group = strategy_repository.get_any_strategy_group_by_slug(LOCAL_FILL_SMOKE_GROUP_SLUG)
     group_fields = {
         "name": LOCAL_FILL_SMOKE_GROUP_NAME,
@@ -153,7 +154,7 @@ def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
             "purpose": "local_fill_smoke_fixture",
             "isSmokeFixture": True,
         },
-        "created_by": LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+        "created_by": owner_id,
     }
     if group is None:
         group = strategy_repository.create_strategy_group(**group_fields)
@@ -165,7 +166,7 @@ def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
             metadata_={**dict(group.metadata_ or {}), **group_fields["metadata_"]},
             is_active=True,
             is_deleted=False,
-            updated_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+            updated_by=owner_id,
         )
 
     strategy = strategy_repository.get_any_strategy_by_slug(LOCAL_FILL_SMOKE_STRATEGY_SLUG)
@@ -192,7 +193,7 @@ def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
             "purpose": "local_fill_smoke_fixture",
             "isSmokeFixture": True,
         },
-        "created_by": LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+        "created_by": owner_id,
     }
     if strategy is None:
         strategy = strategy_repository.create_strategy(**strategy_fields)
@@ -208,7 +209,7 @@ def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
             metadata_={**dict(strategy.metadata_ or {}), **strategy_fields["metadata_"]},
             is_active=True,
             is_deleted=False,
-            updated_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+            updated_by=owner_id,
         )
 
     if getattr(strategy, "current_version_id", None) is None:
@@ -221,9 +222,9 @@ def _ensure_smoke_strategy(strategy_repository: StrategyRepository):
             source_hash=source_hash,
             validation_status=validation.validation_status,
             validation_message=validation.message,
-            created_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR,
+            created_by=owner_id,
         )
-        strategy_repository.update_strategy(strategy, current_version_id=version.id, updated_by=LOCAL_FILL_SMOKE_FIXTURE_ACTOR)
+        strategy_repository.update_strategy(strategy, current_version_id=version.id, updated_by=owner_id)
 
     return group, strategy
 

@@ -7,13 +7,14 @@ from uuid import uuid4
 from tradelab_api.main import app
 from tradelab_api.services.live_order_confirm_submit import LiveOrderConfirmSubmitResult  # noqa: E402
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer unit-test", "X-Workspace-Id": "00000000-0000-0000-0000-000000000001"})
 
 
-def test_confirm_submit_route_returns_not_found_for_missing_preview() -> None:
+def test_confirm_submit_route_returns_not_found_for_missing_preview(monkeypatch) -> None:
+    monkeypatch.setattr("tradelab_api.services.live_order_state_repository.LiveOrderStateRepository.get_preview_with_intent", lambda *args, **kwargs: (None, None))
     response = client.post(
         f"/api/tradelab/live/orders/{uuid4()}/confirm-submit",
-        json={"confirmLiveOrder": True, "idempotencyKey": "submit-key-1", "actor": "admin"},
+        json={"confirmLiveOrder": True, "idempotencyKey": "submit-key-1"},
     )
     payload = response.json()
     assert payload["Success"] is True
@@ -60,7 +61,7 @@ def test_confirm_submit_route_returns_block_when_real_mode_proof_window_is_close
 
     response = client.post(
         f"/api/tradelab/live/orders/{uuid4()}/confirm-submit",
-        json={"confirmLiveOrder": True, "idempotencyKey": "submit-key-1", "actor": "admin"},
+        json={"confirmLiveOrder": True, "idempotencyKey": "submit-key-1"},
     )
     payload = response.json()
 

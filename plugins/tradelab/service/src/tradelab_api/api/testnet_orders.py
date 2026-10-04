@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tradelab_api.api.responses import success_response
 from tradelab_api.core.config import get_settings
+from tradelab_api.core.security import SecurityActor, get_current_actor
 from tradelab_api.db.session import get_db_session
 from tradelab_api.schemas.testnet_orders import (
     TestnetOrderCancelRequest,
@@ -54,16 +55,17 @@ def _build_testnet_vault_provider(settings):
 def preview_testnet_order_route(
     request: TestnetOrderPreviewRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = preview_testnet_order(
-        TestnetOrderStateRepository(session),
-        TestnetCredentialRepository(session),
+        TestnetOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         TestnetOrderPreviewRequestData(
             confirm_preview_only=request.confirm_preview_only,
             idempotency_key=request.idempotency_key,
             client_action_id=request.client_action_id,
             source=request.source,
-            actor=request.actor,
+            actor=str(actor.user_id),
             strategy_id=request.strategy_id,
             strategy_version_id=request.strategy_version_id,
             source_run_id=request.source_run_id,
@@ -89,16 +91,17 @@ def confirm_submit_testnet_order_route(
     preview_id: UUID,
     request: TestnetOrderConfirmSubmitRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = confirm_submit_testnet_order(
-        TestnetOrderStateRepository(session),
-        TestnetCredentialRepository(session),
+        TestnetOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         TestnetOrderConfirmSubmitRequestData(
             preview_id=preview_id,
             confirm_testnet_order=request.confirm_testnet_order,
             idempotency_key=request.idempotency_key,
-            actor=request.actor,
+            actor=str(actor.user_id),
             submit_kill_switch_enabled=settings.tradelab_testnet_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_testnet_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_testnet_order_submit_network_enabled,
@@ -120,17 +123,18 @@ def cancel_testnet_order_route(
     order_id: UUID,
     request: TestnetOrderCancelRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = cancel_testnet_order(
-        TestnetOrderStateRepository(session),
-        TestnetCredentialRepository(session),
+        TestnetOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         TestnetOrderCancelRequestData(
             order_id=order_id,
             confirm_testnet_cancel=request.confirm_testnet_cancel,
             idempotency_key=request.idempotency_key,
             reason=request.reason,
-            actor=request.actor,
+            actor=str(actor.user_id),
             submit_kill_switch_enabled=settings.tradelab_testnet_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_testnet_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_testnet_order_submit_network_enabled,
@@ -151,16 +155,17 @@ def cancel_testnet_order_route(
 def reconcile_testnet_order_route(
     request: TestnetOrderReconcileRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     settings = get_settings()
     result = reconcile_testnet_order(
-        TestnetOrderStateRepository(session),
-        TestnetCredentialRepository(session),
+        TestnetOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        TestnetCredentialRepository(session, actor.workspace_id, actor.user_id),
         TestnetOrderReconcileRequestData(
             order_id=request.order_id,
             confirm_testnet_reconcile=request.confirm_testnet_reconcile,
             trigger=request.trigger,
-            actor=request.actor,
+            actor=str(actor.user_id),
             submit_kill_switch_enabled=settings.tradelab_testnet_order_submit_kill_switch_enabled,
             connector_mode=settings.tradelab_testnet_order_submit_connector_mode,
             real_network_enabled=settings.tradelab_testnet_order_submit_network_enabled,
@@ -182,16 +187,17 @@ def project_testnet_order_to_journal_route(
     order_id: UUID,
     request: TestnetOrderJournalProjectionRequest,
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = project_testnet_order_to_journal(
-        order_repository=TestnetOrderStateRepository(session),
-        journal_repository=ExecutionJournalRepository(session),
-        run_repository=SqlAlchemyRunRepository(session),
+        order_repository=TestnetOrderStateRepository(session, actor.workspace_id, actor.user_id),
+        journal_repository=ExecutionJournalRepository(session, actor.workspace_id, actor.user_id),
+        run_repository=SqlAlchemyRunRepository(session, actor.workspace_id, actor.user_id),
         request=TestnetOrderJournalProjectionRequestData(
             order_id=order_id,
             confirm_testnet_journal_projection=request.confirm_testnet_journal_projection,
             source=request.source,
-            actor=request.actor,
+            actor=str(actor.user_id),
         ),
     )
     if result.should_commit:
@@ -200,8 +206,8 @@ def project_testnet_order_to_journal_route(
     return success_response(payload, status_code=result.semantic_status_code)
 
 @router.get("/testnet/orders/{order_id}")
-def get_testnet_order_detail_route(order_id: UUID, session: Session = Depends(get_db_session)) -> JSONResponse:
-    detail = get_testnet_order_detail(TestnetOrderStateRepository(session), order_id)
+def get_testnet_order_detail_route(order_id: UUID, session: Session = Depends(get_db_session), actor: SecurityActor = Depends(get_current_actor)) -> JSONResponse:
+    detail = get_testnet_order_detail(TestnetOrderStateRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id), order_id)
     if detail is None:
         return success_response({"status": "not_found", "reasonCode": "testnet_order_not_found"}, status_code=404)
     payload = TestnetOrderDetailResponse.model_validate(detail).model_dump(mode="json", by_alias=True)
@@ -217,9 +223,10 @@ def list_testnet_orders_route(
     symbol: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     session: Session = Depends(get_db_session),
+    actor: SecurityActor = Depends(get_current_actor),
 ) -> JSONResponse:
     result = list_testnet_orders(
-        TestnetOrderStateRepository(session),
+        TestnetOrderStateRepository(session, workspace_id=actor.workspace_id, owner_user_id=actor.user_id),
         strategy_id=strategy_id,
         strategy_version_id=strategy_version_id,
         source_run_id=source_run_id,
