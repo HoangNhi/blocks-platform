@@ -268,7 +268,6 @@ export type TradeLabTestnetOrderPreviewRequest = {
   idempotencyKey: string
   clientActionId: string
   source: "strategy_lab"
-  actor: string
   strategyId: string
   strategyVersionId: string
   sourceRunId?: string | null
@@ -332,27 +331,23 @@ export type TradeLabTestnetOrderOperationResult = {
 export type TradeLabTestnetOrderConfirmSubmitRequest = {
   confirmTestnetOrder: true
   idempotencyKey: string
-  actor: string
 }
 
 export type TradeLabTestnetOrderCancelRequest = {
   confirmTestnetCancel: true
   idempotencyKey: string
   reason: "user_requested" | "risk_reducing" | "operator_review"
-  actor: string
 }
 
 export type TradeLabTestnetOrderReconcileRequest = {
   orderId: string
   confirmTestnetReconcile: true
   trigger: "manual" | "submit_timeout" | "cancel_race" | "operator_review"
-  actor: string
 }
 
 export type TradeLabTestnetOrderJournalProjectionRequest = {
   confirmTestnetJournalProjection: true
   source: "strategy_lab"
-  actor: string
 }
 
 export type TradeLabTestnetOrderJournalProjectionResult = {
@@ -457,7 +452,6 @@ export type TradeLabLiveOrderPreviewRequest = {
   idempotencyKey: string
   clientActionId: string
   source: "strategy_lab"
-  actor: string
   strategyId: string
   strategyVersionId: string
   sourceRunId?: string | null
@@ -480,26 +474,22 @@ export type TradeLabLiveOrderOperationResult = TradeLabTestnetOrderOperationResu
 export type TradeLabLiveOrderConfirmSubmitRequest = {
   confirmLiveOrder: true
   idempotencyKey: string
-  actor: string
 }
 
 export type TradeLabLiveOrderCancelRequest = {
   confirmLiveCancel: true
   idempotencyKey: string
   reason: "user_requested" | "risk_reducing" | "operator_review"
-  actor: string
 }
 
 export type TradeLabLiveOrderReconcileRequest = {
   confirmLiveReconcile: true
   trigger: "manual" | "cancel_race" | "unknown_recovery" | "operator_review"
-  actor: string
 }
 
 export type TradeLabLiveOrderJournalProjectionRequest = {
   confirmLiveJournalProjection: true
   source: "strategy_lab"
-  actor: string
 }
 
 export type TradeLabLiveOrderJournalProjectionResult = TradeLabTestnetOrderJournalProjectionResult

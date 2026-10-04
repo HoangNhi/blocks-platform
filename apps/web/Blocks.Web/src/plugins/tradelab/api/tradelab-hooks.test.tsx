@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -44,6 +44,13 @@ const mocks = vi.hoisted(() => ({
     projectTestnetOrderToJournal: vi.fn(),
     getTestnetOrderDetail: vi.fn(),
     listTestnetOrders: vi.fn(),
+    previewLiveOrder: vi.fn(),
+    confirmSubmitLiveOrder: vi.fn(),
+    cancelLiveOrder: vi.fn(),
+    reconcileLiveOrder: vi.fn(),
+    projectLiveOrderToJournal: vi.fn(),
+    getLiveOrderDetail: vi.fn(),
+    listLiveOrders: vi.fn(),
     fillDatasetLocal: vi.fn(),
     getBotRunChart: vi.fn(),
     getBotRunLogs: vi.fn(),
@@ -62,6 +69,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/features/auth/token-store", () => ({
   createBrowserTokenStore: () => ({
     getAccessToken: () => null,
+    getSession: () => ({ user: { id: "owner-1" } }),
   }),
 }))
 
@@ -1449,6 +1457,47 @@ describe("useTradeLabWorkspace", () => {
         },
       ],
     })
+  })
+
+  it.each(["testnet", "live"] as const)("omits trusted identity from all five %s mutation payloads", async (environment) => {
+    const orderApi = environment === "live"
+      ? [mocks.api.previewLiveOrder, mocks.api.confirmSubmitLiveOrder, mocks.api.cancelLiveOrder, mocks.api.reconcileLiveOrder, mocks.api.projectLiveOrderToJournal]
+      : [mocks.api.previewTestnetOrder, mocks.api.confirmSubmitTestnetOrder, mocks.api.cancelTestnetOrder, mocks.api.reconcileTestnetOrder, mocks.api.projectTestnetOrderToJournal]
+    const detailApi = environment === "live" ? mocks.api.getLiveOrderDetail : mocks.api.getTestnetOrderDetail
+    const listApi = environment === "live" ? mocks.api.listLiveOrders : mocks.api.listTestnetOrders
+    orderApi[0].mockResolvedValue({ allowed: true, status: "allowed", preview_id: "preview-1", intent_id: "intent-1", order: {} })
+    for (const mutation of orderApi.slice(1)) {
+      mutation.mockResolvedValue({ status: "accepted", intent_id: "intent-1" })
+    }
+    const detail = { intent: { intent_id: "intent-1", status: "submitted", symbol: "BTCUSDT", strategy_id: "strategy-1", strategy_version_id: "version-1", source_run_id: "run-1", credential_ref_id: "credential-ref-1" }, events: [], previews: [], reconciliation_attempts: [] }
+    detailApi.mockResolvedValue(detail)
+    listApi.mockResolvedValue({ items: [] })
+    const { result } = renderHook(() => useTradeLabWorkspace())
+    await waitFor(() => expect(result.current.selectedStrategyId).toBe("strategy-1"))
+    await act(async () => { await result.current.reopenRun("run-1") })
+    act(() => {
+      if (environment === "live") {
+        result.current.setLiveOrderCredentialRefId("credential-ref-1")
+        result.current.setLiveOrderAmount("25")
+      } else {
+        result.current.setTestnetCredentialRefId("credential-ref-1")
+        result.current.setTestnetOrderAmount("25")
+      }
+    })
+    await act(async () => { await (environment === "live" ? result.current.previewLiveOrder() : result.current.previewTestnetOrder()) })
+    await act(async () => { await (environment === "live" ? result.current.confirmSubmitLiveOrder() : result.current.confirmSubmitTestnetOrder()) })
+    await act(async () => { await (environment === "live" ? result.current.cancelLiveOrder() : result.current.cancelTestnetOrder()) })
+    await act(async () => { await (environment === "live" ? result.current.reconcileLiveOrder() : result.current.reconcileTestnetOrder()) })
+    detailApi.mockResolvedValue({ ...detail, intent: { ...detail.intent, status: "filled" } })
+    await act(async () => { await (environment === "live" ? result.current.loadLiveOrderDetail("intent-1") : result.current.loadTestnetOrderDetail("intent-1")) })
+    await act(async () => { await (environment === "live" ? result.current.projectLiveOrderToJournal() : result.current.projectTestnetOrderToJournal()) })
+    for (const mutation of orderApi) {
+      expect(mutation).toHaveBeenCalledTimes(1)
+      const payload = mutation.mock.calls[0].at(-1)
+      for (const field of ["actor", "created_by", "createdBy", "updated_by", "updatedBy", "owner_user_id", "ownerUserId", "workspace_id", "workspaceId", "ownership_verified_at", "ownershipVerifiedAt"]) {
+        expect(payload).not.toHaveProperty(field)
+      }
+    }
   })
 
   it("selects the baseline or workbench group before metadata test groups", async () => {
@@ -3419,7 +3468,6 @@ describe("useTradeLabWorkspace", () => {
     await waitFor(() => expect(screen.getByTestId("testnet-submit-result").textContent).toBe("submitted"))
     expect(mocks.api.confirmSubmitTestnetOrder).toHaveBeenCalledWith("preview-1", expect.objectContaining({
       confirmTestnetOrder: true,
-      actor: "local-user",
     }))
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
@@ -3486,7 +3534,6 @@ describe("useTradeLabWorkspace", () => {
     expect(mocks.api.projectTestnetOrderToJournal).toHaveBeenCalledWith("intent-1", {
       confirmTestnetJournalProjection: true,
       source: "strategy_lab",
-      actor: "local-user",
     })
   })
 

@@ -266,41 +266,37 @@ describe("TradeLab API client", () => {
     await api.confirmSubmitTestnetOrder("preview-1", {
       confirmTestnetOrder: true,
       idempotencyKey: "submit-1",
-      actor: "local-user",
     })
     await api.cancelTestnetOrder("intent-1", {
       confirmTestnetCancel: true,
       idempotencyKey: "cancel-1",
       reason: "user_requested",
-      actor: "local-user",
     })
     await api.reconcileTestnetOrder({
       orderId: "intent-1",
       confirmTestnetReconcile: true,
       trigger: "manual",
-      actor: "local-user",
     })
     await api.projectTestnetOrderToJournal("intent-1", {
       confirmTestnetJournalProjection: true,
       source: "strategy_lab",
-      actor: "local-user",
     })
 
     expect(request).toHaveBeenNthCalledWith(1, "/api/tradelab/testnet/orders/preview-1/confirm-submit", {
       method: "POST",
-      body: { confirmTestnetOrder: true, idempotencyKey: "submit-1", actor: "local-user" },
+      body: { confirmTestnetOrder: true, idempotencyKey: "submit-1" },
     })
     expect(request).toHaveBeenNthCalledWith(2, "/api/tradelab/testnet/orders/intent-1/cancel", {
       method: "POST",
-      body: { confirmTestnetCancel: true, idempotencyKey: "cancel-1", reason: "user_requested", actor: "local-user" },
+      body: { confirmTestnetCancel: true, idempotencyKey: "cancel-1", reason: "user_requested" },
     })
     expect(request).toHaveBeenNthCalledWith(3, "/api/tradelab/testnet/reconcile", {
       method: "POST",
-      body: { orderId: "intent-1", confirmTestnetReconcile: true, trigger: "manual", actor: "local-user" },
+      body: { orderId: "intent-1", confirmTestnetReconcile: true, trigger: "manual" },
     })
     expect(request).toHaveBeenNthCalledWith(4, "/api/tradelab/testnet/orders/intent-1/project-journal", {
       method: "POST",
-      body: { confirmTestnetJournalProjection: true, source: "strategy_lab", actor: "local-user" },
+      body: { confirmTestnetJournalProjection: true, source: "strategy_lab" },
     })
   })
 
@@ -313,7 +309,6 @@ describe("TradeLab API client", () => {
       idempotencyKey: "preview-1",
       clientActionId: "preview-1",
       source: "strategy_lab",
-      actor: "local-user",
       strategyId: "strategy-1",
       strategyVersionId: "version-1",
       credentialRefId: "credential-1",
@@ -329,23 +324,19 @@ describe("TradeLab API client", () => {
     await api.confirmSubmitLiveOrder("preview-1", {
       confirmLiveOrder: true,
       idempotencyKey: "submit-1",
-      actor: "local-user",
     })
     await api.cancelLiveOrder("intent-1", {
       confirmLiveCancel: true,
       idempotencyKey: "cancel-1",
       reason: "user_requested",
-      actor: "local-user",
     })
     await api.reconcileLiveOrder("intent-1", {
       confirmLiveReconcile: true,
       trigger: "manual",
-      actor: "local-user",
     })
     await api.projectLiveOrderToJournal("intent-1", {
       confirmLiveJournalProjection: true,
       source: "strategy_lab",
-      actor: "local-user",
     })
 
     expect(request).toHaveBeenNthCalledWith(1, "/api/tradelab/live/orders/preview", {
@@ -359,19 +350,19 @@ describe("TradeLab API client", () => {
     })
     expect(request).toHaveBeenNthCalledWith(2, "/api/tradelab/live/orders/preview-1/confirm-submit", {
       method: "POST",
-      body: { confirmLiveOrder: true, idempotencyKey: "submit-1", actor: "local-user" },
+      body: { confirmLiveOrder: true, idempotencyKey: "submit-1" },
     })
     expect(request).toHaveBeenNthCalledWith(3, "/api/tradelab/live/orders/intent-1/cancel", {
       method: "POST",
-      body: { confirmLiveCancel: true, idempotencyKey: "cancel-1", reason: "user_requested", actor: "local-user" },
+      body: { confirmLiveCancel: true, idempotencyKey: "cancel-1", reason: "user_requested" },
     })
     expect(request).toHaveBeenNthCalledWith(4, "/api/tradelab/live/orders/intent-1/reconcile", {
       method: "POST",
-      body: { confirmLiveReconcile: true, trigger: "manual", actor: "local-user" },
+      body: { confirmLiveReconcile: true, trigger: "manual" },
     })
     expect(request).toHaveBeenNthCalledWith(5, "/api/tradelab/live/orders/intent-1/project-journal", {
       method: "POST",
-      body: { confirmLiveJournalProjection: true, source: "strategy_lab", actor: "local-user" },
+      body: { confirmLiveJournalProjection: true, source: "strategy_lab" },
     })
   })
 
