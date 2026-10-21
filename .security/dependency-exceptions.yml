@@ -1,5 +1,0 @@
-version: 1
-exceptions: []
-
-# Every exception must include advisory_id, reason, owner, approved_at,
-# and expires_at.

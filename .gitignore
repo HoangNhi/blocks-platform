@@ -205,7 +205,7 @@ PublishScripts/
 #!**/[Pp]ackages/repositories.config
 
 # File Service runtime uploads
-services/file-service/Blocks.FileService/wwwroot/
+/src/services/Blocks.FileService/wwwroot/
 # NuGet v3's project.json files produces more ignorable files
 *.nuget.props
 *.nuget.targets
@@ -368,7 +368,7 @@ FodyWeavers.xsd
 .gemini
 .worktrees/
 **/appsettings.Development.json
-/platform/apphost/Blocks.AppHost/aspire-manifest.json
+/src/platform/Blocks.AppHost/aspire-manifest.json
 /plugins/tradelab/service/.env.local
 
 # Generated agent skill and runtime outputs

@@ -1,2 +1,0 @@
-"""TradeLab API package."""
-

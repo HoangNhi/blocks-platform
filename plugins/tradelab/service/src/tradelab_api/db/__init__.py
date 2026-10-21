@@ -1,2 +1,0 @@
-"""TradeLab database layer."""
-

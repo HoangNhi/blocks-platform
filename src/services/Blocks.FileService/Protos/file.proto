@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+option csharp_namespace = "Blocks.FileService.Protos";
+
+package file;
+
+import "google/protobuf/wrappers.proto";
+
+service FileProto {
+  rpc UploadData (UploadDataRequest) returns (UploadDataResponse);
+  rpc DeleteData (DeleteDataRequest) returns (DeleteDataResponse);
+  rpc UploadAvatar (UploadAvatarRequest) returns (UploadAvatarResponse);
+  rpc PreviewFile (PreviewFileRequest) returns (PreviewFileResponse);
+}
+
+message UploadDataRequest {
+  string related_id = 1;
+  string service_path = 2;
+  string folder_name = 3;
+  string temp_folder = 4;
+}
+
+message UploadDataResponse {
+  repeated ModelAttachmentProto attachments = 1;
+}
+
+message ModelAttachmentProto {
+  string id = 1;
+  int32 reference_type = 2;
+  string related_id = 3;
+  string file_name = 4;
+  string file_extension = 5;
+  google.protobuf.DoubleValue file_size = 6;
+  string file_url = 7;
+  string full_file_name = 8;
+}
+
+message DeleteDataRequest {
+  repeated string file_paths = 1;
+}
+
+message DeleteDataResponse {
+  bool success = 1;
+}
+
+message UploadAvatarRequest{
+	string folderUploadId = 1;
+	string oldImage = 2;
+}
+
+message UploadAvatarResponse{
+	string newImage = 1;
+}
+
+message PreviewFileRequest {
+  string file_url = 1;
+  string mode = 2;
+  string watermark_text = 3;
+  int32 watermark_opacity = 4;
+  int32 watermark_position = 5;
+  string file_id = 6;
+}
+
+message PreviewFileResponse {
+  bytes file_content = 1;
+  string content_type = 2;
+  string file_name = 3;
+  bool has_watermark = 4;
+  string original_content_type = 5;
+  string converted_content_type = 6;
+}

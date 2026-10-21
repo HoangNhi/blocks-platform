@@ -1,2 +1,0 @@
-"""TradeLab service layer."""
-
