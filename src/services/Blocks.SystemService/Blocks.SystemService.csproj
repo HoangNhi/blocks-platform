@@ -31,7 +31,6 @@
   <ItemGroup>
     <Protobuf Include="Protos\system.proto" GrpcServices="Server" />
     <Protobuf Include="Protos\audit.proto" GrpcServices="Server" />
-    <Protobuf Include="..\Blocks.BusinessService\Protos\business.proto" GrpcServices="Client" Link="Protos\business.proto" />
   </ItemGroup>
 
   <ItemGroup>

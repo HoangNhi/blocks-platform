@@ -1,4 +1,3 @@
-using Blocks.BusinessService.Protos;
 using Blocks.Shared.Exceptions;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Dtos;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Requests;
@@ -23,23 +22,20 @@ namespace Blocks.SystemService.Services.CoreFeature.Auth
         private readonly IMapper _mapper;
         private readonly IHttpContextAccessor _contextAccessor;
         private readonly IConfiguration _config;
-        private readonly BusinessProto.BusinessProtoClient _businessClient;
 
         public AuthService(
             SystemContext context,
             IMapper mapper,
             IHttpContextAccessor contextAccessor,
-            IConfiguration config,
-            BusinessProto.BusinessProtoClient businessClient)
+            IConfiguration config)
         {
             _context = context;
             _mapper = mapper;
             _contextAccessor = contextAccessor;
             _config = config;
-            _businessClient = businessClient;
         }
 
-        public async Task<LoginResponse> LoginAsync(LoginRequest request, string ipAddress)
+        public Task<LoginResponse> LoginAsync(LoginRequest request, string ipAddress)
         {
             var user = _context.Users.Where(x => x.Username == request.Username && !x.IsDeleted).FirstOrDefault();
             if (user == null)
@@ -65,16 +61,7 @@ namespace Blocks.SystemService.Services.CoreFeature.Auth
 
             if (user.RoleId == ExtRoleId)
             {
-                var accessResponse = await _businessClient.CheckExternalReviewerAccessAsync(
-                    new CheckExternalReviewerAccessRequest
-                    {
-                        UserId = user.Id.ToString()
-                    });
-
-                if (!accessResponse.HasAccess)
-                {
-                    throw new BusinessException("Tài khoản hoặc mật khẩu không đúng");
-                }
+                throw new BusinessException("Tài khoản hoặc mật khẩu không đúng");
             }
 
             var data = _mapper.Map<LoginResponse>(user);
@@ -87,7 +74,7 @@ namespace Blocks.SystemService.Services.CoreFeature.Auth
             data.RefreshToken = refreshToken.Token.ToString();
             data.AccessToken = token;
 
-            return data;
+            return Task.FromResult(data);
         }
 
         public ModelToken RefreshToken(RefreshTokenRequest request, string ipAddress)
