@@ -80,6 +80,11 @@ namespace Blocks.SystemService.Services.CoreFeature.Auth
         public ModelToken RefreshToken(RefreshTokenRequest request, string ipAddress)
         {
             var user = getUserByRefreshToken(request.RefreshToken);
+            if (user == null || user.RoleId == ExtRoleId)
+            {
+                throw new BusinessException("Token không hợp lệ");
+            }
+
             var refreshToken = _mapper.Map<ModelRefreshToken>(user.RefreshTokens.Single(x => x.Token == request.RefreshToken));
 
             if (refreshToken.IsRevoked)
