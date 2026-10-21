@@ -1,8 +1,6 @@
 using Blocks.SystemService.Protos;
 using Blocks.SystemService.Services.CoreFeature.User;
 using Blocks.SystemService.Infrastructure.Data;
-using Blocks.SystemService.Helpers;
-using Blocks.SystemService.Infrastructure.Validation;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -15,13 +13,11 @@ namespace Blocks.SystemService.Services.SystemGrpc
     {
         private readonly SystemContext _context;
         private readonly IUserService _userService;
-        private readonly ISystemReferenceGuard _referenceGuard;
 
-        public SystemGrpcService(SystemContext context, IUserService userService, ISystemReferenceGuard referenceGuard)
+        public SystemGrpcService(SystemContext context, IUserService userService)
         {
             _context = context;
             _userService = userService;
-            _referenceGuard = referenceGuard;
         }
 
         public override async Task<CheckActionResponse> CheckPermission(CheckPermissionRequest request, ServerCallContext context)
@@ -168,70 +164,6 @@ namespace Blocks.SystemService.Services.SystemGrpc
             return new SetUsersActivedResponse { Success = true };
         }
 
-        public override async Task<CreateExternalUserResponse> CreateExternalUser(
-            CreateExternalUserRequest request, ServerCallContext context)
-        {
-            var exists = await _context.Users.AnyAsync(x =>
-                (x.Username == request.Username || x.Email == request.Email) && !x.IsDeleted);
-
-            if (exists)
-            {
-                return new CreateExternalUserResponse
-                {
-                    Success = false,
-                    Message = "Tên đăng nhập hoặc email đã tồn tại."
-                };
-            }
-
-            if (!Guid.TryParse(request.RoleId, out var roleId))
-            {
-                return new CreateExternalUserResponse
-                {
-                    Success = false,
-                    Message = "RoleId không hợp lệ."
-                };
-            }
-
-            try
-            {
-                await _referenceGuard.EnsureRoleExistsAsync(roleId);
-            }
-            catch (Blocks.Shared.Exceptions.BusinessException ex)
-            {
-                return new CreateExternalUserResponse
-                {
-                    Success = false,
-                    Message = ex.Message
-                };
-            }
-
-            var salt = Encrypt_DecryptHelper.GenerateSalt();
-            var user = new Entities.User
-            {
-                Id = Guid.NewGuid(),
-                Username = request.Username.Trim(),
-                Fullname = request.Fullname.Trim(),
-                Email = request.Email.Trim(),
-                Password = Encrypt_DecryptHelper.EncodePassword(request.Password, salt),
-                PasswordSalt = salt,
-                RoleId = roleId,
-                IsActived = true,
-                IsDeleted = false,
-                CreatedBy = "System",
-                CreatedAt = DateTime.UtcNow,
-                Avatar = string.Empty
-            };
-
-            await _context.Users.AddAsync(user);
-            await _context.SaveChangesAsync();
-
-            return new CreateExternalUserResponse
-            {
-                Id = user.Id.ToString(),
-                Success = true
-            };
-        }
-
         public override async Task<UpdateUserProfileResponse> UpdateUserProfile(
             UpdateUserProfileRequest request,
             ServerCallContext context)
@@ -277,51 +209,6 @@ namespace Blocks.SystemService.Services.SystemGrpc
                     Message = ex.Message
                 };
             }
-        }
-
-        public override async Task<DeleteExternalUserResponse> DeleteExternalUser(
-            DeleteExternalUserRequest request,
-            ServerCallContext context)
-        {
-            if (!Guid.TryParse(request.UserId, out var userId))
-            {
-                return new DeleteExternalUserResponse
-                {
-                    Success = false,
-                    Message = "UserId không hợp lệ."
-                };
-            }
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(x => x.Id == userId && !x.IsDeleted);
-
-            if (user == null)
-            {
-                return new DeleteExternalUserResponse
-                {
-                    Success = true,
-                    Message = string.Empty
-                };
-            }
-
-            if (user.RoleId != new Guid("551d1351-008e-4910-a39c-1fcdde409fdf"))
-            {
-                return new DeleteExternalUserResponse
-                {
-                    Success = false,
-                    Message = "Chỉ có thể xóa tài khoản có vai trò External Reviewer."
-                };
-            }
-
-            user.IsDeleted = true;
-            user.IsActived = false;
-            await _context.SaveChangesAsync();
-
-            return new DeleteExternalUserResponse
-            {
-                Success = true,
-                Message = string.Empty
-            };
         }
     }
 }

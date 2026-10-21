@@ -9,10 +9,8 @@ service SystemProto {
   rpc GetUsersByIds (GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
   rpc GetUsersByUsernames (GetUsersByUsernamesRequest) returns (GetUsersByUsernamesResponse);
   rpc SetUsersActived (SetUsersActivedRequest) returns (SetUsersActivedResponse);
-  rpc CreateExternalUser (CreateExternalUserRequest) returns (CreateExternalUserResponse);
   rpc GetUsersByIdsPaged (GetUsersByIdsPagedRequest) returns (GetUsersByIdsPagedResponse);
   rpc UpdateUserProfile (UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
-  rpc DeleteExternalUser (DeleteExternalUserRequest) returns (DeleteExternalUserResponse);
   rpc GetActiveUsersExceptRole (GetActiveUsersExceptRoleRequest) returns (GetActiveUsersExceptRoleResponse);
 }
 
@@ -60,20 +58,6 @@ message SetUsersActivedResponse {
   bool success = 1;
 }
 
-message CreateExternalUserRequest {
-  string fullname = 1;
-  string username = 2;
-  string email = 3;
-  string password = 4;
-  string role_id = 5;
-}
-
-message CreateExternalUserResponse {
-  string id = 1;
-  bool success = 2;
-  string message = 3;
-}
-
 message GetUsersByIdsPagedRequest {
   repeated string user_ids = 1;
   string text_search = 2;
@@ -100,15 +84,6 @@ message UpdateUserProfileResponse {
   bool success = 1;
   string message = 2;
   UserInfo user = 3;
-}
-
-message DeleteExternalUserRequest {
-  string user_id = 1;
-}
-
-message DeleteExternalUserResponse {
-  bool success = 1;
-  string message = 2;
 }
 
 message GetActiveUsersExceptRoleRequest {

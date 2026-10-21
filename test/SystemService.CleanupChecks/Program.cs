@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Reflection;
 using AutoMapper;
 using Blocks.Shared.Exceptions;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Requests;
@@ -6,8 +7,12 @@ using Blocks.SystemService.DTOs.CoreFeature.RefreshToken.Requests;
 using Blocks.SystemService.Entities;
 using Blocks.SystemService.Helpers;
 using Blocks.SystemService.Infrastructure.Data;
+using Blocks.SystemService.Infrastructure.Validation;
+using Blocks.SystemService.Protos;
 using Blocks.SystemService.Services.CoreFeature.Auth;
 using Blocks.SystemService.Services.CoreFeature.User;
+using Blocks.SystemService.Services.SystemGrpc;
+using Google.Protobuf.Reflection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -42,8 +47,16 @@ if (mode == "auth")
 }
 else if (mode == "contract")
 {
-    Console.Error.WriteLine("Contract mode not yet implemented (Task 3).");
-    return 1;
+    try
+    {
+        RunContractChecks();
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Contract check failed: {ex.Message}");
+        return 1;
+    }
 }
 else
 {
@@ -643,4 +656,247 @@ async Task RunAuthChecksAsync()
             }
         }
     }
+}
+
+void RunContractChecks()
+{
+    Console.WriteLine("Running contract checks...");
+
+    // --- 1. SystemProto Service Identity and Methods ---
+    var systemDescriptor = SystemReflection.Descriptor;
+    var service = systemDescriptor.Services.Single();
+    Assert(service.FullName == "system.SystemProto", "service identity preserved");
+
+    var actualMethods = service.Methods.Select(m => m.Name).OrderBy(x => x).ToArray();
+    var expectedMethods = new[] {
+        "CheckPermission", "GetUsersByIds", "GetUsersByUsernames",
+        "SetUsersActived", "GetUsersByIdsPaged", "UpdateUserProfile",
+        "GetActiveUsersExceptRole"
+    }.OrderBy(x => x).ToArray();
+
+    Assert(actualMethods.SequenceEqual(expectedMethods), "only seven retained RPCs");
+
+    var removedMessages = new[] {
+        "CreateExternalUserRequest", "CreateExternalUserResponse",
+        "DeleteExternalUserRequest", "DeleteExternalUserResponse"
+    };
+    Assert(!systemDescriptor.MessageTypes.Any(m => removedMessages.Contains(m.Name)), "specialized messages removed");
+
+    // --- 2. RPC Signatures Snapshot for 7 Retained RPCs ---
+    var expectedMethodSnapshots = new Dictionary<string, (string FullName, string InputType, string OutputType, bool ClientStreaming, bool ServerStreaming)>
+    {
+        ["CheckPermission"] = ("system.SystemProto.CheckPermission", "system.CheckPermissionRequest", "system.CheckActionResponse", false, false),
+        ["GetUsersByIds"] = ("system.SystemProto.GetUsersByIds", "system.GetUsersByIdsRequest", "system.GetUsersByIdsResponse", false, false),
+        ["GetUsersByUsernames"] = ("system.SystemProto.GetUsersByUsernames", "system.GetUsersByUsernamesRequest", "system.GetUsersByUsernamesResponse", false, false),
+        ["SetUsersActived"] = ("system.SystemProto.SetUsersActived", "system.SetUsersActivedRequest", "system.SetUsersActivedResponse", false, false),
+        ["GetUsersByIdsPaged"] = ("system.SystemProto.GetUsersByIdsPaged", "system.GetUsersByIdsPagedRequest", "system.GetUsersByIdsPagedResponse", false, false),
+        ["UpdateUserProfile"] = ("system.SystemProto.UpdateUserProfile", "system.UpdateUserProfileRequest", "system.UpdateUserProfileResponse", false, false),
+        ["GetActiveUsersExceptRole"] = ("system.SystemProto.GetActiveUsersExceptRole", "system.GetActiveUsersExceptRoleRequest", "system.GetActiveUsersExceptRoleResponse", false, false)
+    };
+
+    foreach (var method in service.Methods)
+    {
+        Assert(expectedMethodSnapshots.TryGetValue(method.Name, out var snap), $"unexpected method {method.Name}");
+        Assert(method.FullName == snap.FullName, $"method {method.Name} FullName matches");
+        Assert(method.InputType.FullName == snap.InputType, $"method {method.Name} InputType matches");
+        Assert(method.OutputType.FullName == snap.OutputType, $"method {method.Name} OutputType matches");
+        Assert(method.IsClientStreaming == snap.ClientStreaming, $"method {method.Name} ClientStreaming matches");
+        Assert(method.IsServerStreaming == snap.ServerStreaming, $"method {method.Name} ServerStreaming matches");
+    }
+
+    // --- 3. Retained Message Types and Fields in system.proto ---
+    var expectedSystemMessages = new Dictionary<string, (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]>
+    {
+        ["CheckPermissionRequest"] = new[]
+        {
+            ("user_id", 1, FieldType.String, false, (string?)null),
+            ("controller", 2, FieldType.String, false, (string?)null),
+            ("action", 3, FieldType.Int32, false, (string?)null)
+        },
+        ["CheckActionResponse"] = new[]
+        {
+            ("success", 1, FieldType.Bool, false, (string?)null)
+        },
+        ["GetUsersByIdsRequest"] = new[]
+        {
+            ("user_ids", 1, FieldType.String, true, (string?)null)
+        },
+        ["UserInfo"] = new[]
+        {
+            ("id", 1, FieldType.String, false, (string?)null),
+            ("fullname", 2, FieldType.String, false, (string?)null),
+            ("avatar", 3, FieldType.String, false, (string?)null),
+            ("username", 4, FieldType.String, false, (string?)null),
+            ("is_actived", 5, FieldType.Bool, false, (string?)null),
+            ("email", 6, FieldType.String, false, (string?)null)
+        },
+        ["GetUsersByIdsResponse"] = new (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]
+        {
+            ("users", 1, FieldType.Message, true, "system.UserInfo")
+        },
+        ["GetUsersByUsernamesRequest"] = new[]
+        {
+            ("usernames", 1, FieldType.String, true, (string?)null)
+        },
+        ["GetUsersByUsernamesResponse"] = new (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]
+        {
+            ("users", 1, FieldType.Message, true, "system.UserInfo")
+        },
+        ["SetUsersActivedRequest"] = new[]
+        {
+            ("user_ids", 1, FieldType.String, true, (string?)null),
+            ("is_actived", 2, FieldType.Bool, false, (string?)null)
+        },
+        ["SetUsersActivedResponse"] = new[]
+        {
+            ("success", 1, FieldType.Bool, false, (string?)null)
+        },
+        ["GetUsersByIdsPagedRequest"] = new[]
+        {
+            ("user_ids", 1, FieldType.String, true, (string?)null),
+            ("text_search", 2, FieldType.String, false, (string?)null),
+            ("page_index", 3, FieldType.Int32, false, (string?)null),
+            ("page_size", 4, FieldType.Int32, false, (string?)null)
+        },
+        ["GetUsersByIdsPagedResponse"] = new (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]
+        {
+            ("users", 1, FieldType.Message, true, "system.UserInfo"),
+            ("page_index", 2, FieldType.Int32, false, (string?)null),
+            ("page_size", 3, FieldType.Int32, false, (string?)null),
+            ("total_row", 4, FieldType.Int32, false, (string?)null)
+        },
+        ["UpdateUserProfileRequest"] = new[]
+        {
+            ("user_id", 1, FieldType.String, false, (string?)null),
+            ("fullname", 2, FieldType.String, false, (string?)null),
+            ("username", 3, FieldType.String, false, (string?)null),
+            ("email", 4, FieldType.String, false, (string?)null),
+            ("password", 5, FieldType.String, false, (string?)null)
+        },
+        ["UpdateUserProfileResponse"] = new (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]
+        {
+            ("success", 1, FieldType.Bool, false, (string?)null),
+            ("message", 2, FieldType.String, false, (string?)null),
+            ("user", 3, FieldType.Message, false, "system.UserInfo")
+        },
+        ["GetActiveUsersExceptRoleRequest"] = new[]
+        {
+            ("excluded_role_id", 1, FieldType.String, false, (string?)null)
+        },
+        ["GetActiveUsersExceptRoleResponse"] = new (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]
+        {
+            ("users", 1, FieldType.Message, true, "system.UserInfo")
+        }
+    };
+
+    var actualMessageNames = systemDescriptor.MessageTypes.Select(m => m.Name).OrderBy(x => x).ToArray();
+    var expectedMessageNames = expectedSystemMessages.Keys.OrderBy(x => x).ToArray();
+    Assert(actualMessageNames.SequenceEqual(expectedMessageNames), "system message names match retained snapshot exactly");
+
+    foreach (var msgDesc in systemDescriptor.MessageTypes)
+    {
+        Assert(expectedSystemMessages.TryGetValue(msgDesc.Name, out var expectedFields), $"unexpected message type {msgDesc.Name}");
+        var actualFields = msgDesc.Fields.InDeclarationOrder().Select(f =>
+            (Name: f.Name, Number: f.FieldNumber, Type: f.FieldType, Repeated: f.IsRepeated,
+             MessageType: f.FieldType == FieldType.Message || f.FieldType == FieldType.Group ? f.MessageType.FullName : null)
+        ).ToArray();
+
+        Assert(actualFields.Length == expectedFields!.Length, $"field count match for {msgDesc.Name}");
+        for (int i = 0; i < expectedFields.Length; i++)
+        {
+            var exp = expectedFields[i];
+            var act = actualFields[i];
+            Assert(act.Name == exp.Name, $"field {i} Name match for {msgDesc.Name}: expected {exp.Name}, got {act.Name}");
+            Assert(act.Number == exp.Number, $"field {i} Number match for {msgDesc.Name}");
+            Assert(act.Type == exp.Type, $"field {i} Type match for {msgDesc.Name}");
+            Assert(act.Repeated == exp.Repeated, $"field {i} Repeated match for {msgDesc.Name}");
+            Assert(act.MessageType == exp.MessageType, $"field {i} MessageType match for {msgDesc.Name}");
+        }
+    }
+
+    // --- 4. AuditProto Snapshot ---
+    var auditDescriptor = AuditReflection.Descriptor;
+    var auditService = auditDescriptor.Services.Single();
+    Assert(auditService.FullName == "audit.AuditProto", "audit service identity preserved");
+    var auditMethods = auditService.Methods.Select(m => m.Name).ToArray();
+    Assert(auditMethods.SequenceEqual(new[] { "WriteAuditLog" }), "audit has exactly WriteAuditLog");
+
+    var writeAuditMethod = auditService.Methods.Single();
+    Assert(writeAuditMethod.FullName == "audit.AuditProto.WriteAuditLog", "audit method full name");
+    Assert(writeAuditMethod.InputType.FullName == "audit.WriteAuditLogRequest", "audit method input type");
+    Assert(writeAuditMethod.OutputType.FullName == "audit.WriteAuditLogReply", "audit method output type");
+    Assert(!writeAuditMethod.IsClientStreaming, "audit method not client streaming");
+    Assert(!writeAuditMethod.IsServerStreaming, "audit method not server streaming");
+
+    var expectedAuditMessages = new Dictionary<string, (string Name, int Number, FieldType Type, bool Repeated, string? MessageType)[]>
+    {
+        ["WriteAuditLogRequest"] = new[]
+        {
+            ("user_id", 1, FieldType.String, false, (string?)null),
+            ("user_name", 2, FieldType.String, false, (string?)null),
+            ("action", 3, FieldType.String, false, (string?)null),
+            ("entity_name", 4, FieldType.String, false, (string?)null),
+            ("entity_id", 5, FieldType.String, false, (string?)null),
+            ("old_values", 6, FieldType.String, false, (string?)null),
+            ("new_values", 7, FieldType.String, false, (string?)null),
+            ("ip_address", 8, FieldType.String, false, (string?)null),
+            ("service_name", 9, FieldType.String, false, (string?)null),
+            ("is_success", 10, FieldType.Bool, false, (string?)null),
+            ("error_message", 11, FieldType.String, false, (string?)null)
+        },
+        ["WriteAuditLogReply"] = new[]
+        {
+            ("success", 1, FieldType.Bool, false, (string?)null),
+            ("message", 2, FieldType.String, false, (string?)null)
+        }
+    };
+
+    var actualAuditMsgNames = auditDescriptor.MessageTypes.Select(m => m.Name).OrderBy(x => x).ToArray();
+    var expectedAuditMsgNames = expectedAuditMessages.Keys.OrderBy(x => x).ToArray();
+    Assert(actualAuditMsgNames.SequenceEqual(expectedAuditMsgNames), "audit message types match snapshot");
+
+    foreach (var msgDesc in auditDescriptor.MessageTypes)
+    {
+        Assert(expectedAuditMessages.TryGetValue(msgDesc.Name, out var expectedFields), $"unexpected audit message {msgDesc.Name}");
+        var actualFields = msgDesc.Fields.InDeclarationOrder().Select(f =>
+            (Name: f.Name, Number: f.FieldNumber, Type: f.FieldType, Repeated: f.IsRepeated,
+             MessageType: f.FieldType == FieldType.Message || f.FieldType == FieldType.Group ? f.MessageType.FullName : null)
+        ).ToArray();
+
+        Assert(actualFields.Length == expectedFields!.Length, $"audit field count match for {msgDesc.Name}");
+        for (int i = 0; i < expectedFields.Length; i++)
+        {
+            var exp = expectedFields[i];
+            var act = actualFields[i];
+            Assert(act.Name == exp.Name, $"audit field {i} Name match for {msgDesc.Name}");
+            Assert(act.Number == exp.Number, $"audit field {i} Number match for {msgDesc.Name}");
+            Assert(act.Type == exp.Type, $"audit field {i} Type match for {msgDesc.Name}");
+            Assert(act.Repeated == exp.Repeated, $"audit field {i} Repeated match for {msgDesc.Name}");
+            Assert(act.MessageType == exp.MessageType, $"audit field {i} MessageType match for {msgDesc.Name}");
+        }
+    }
+
+    // --- 5. SystemGrpcService Reflection ---
+    var serviceType = typeof(SystemGrpcService);
+
+    // Declared public instance methods (overrides)
+    var declaredPublicMethods = serviceType.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+        .Select(m => m.Name)
+        .OrderBy(x => x)
+        .ToArray();
+    Assert(declaredPublicMethods.SequenceEqual(expectedMethods), "SystemGrpcService has exactly seven declared override methods");
+
+    // Constructor: SystemGrpcService(SystemContext context, IUserService userService)
+    var ctors = serviceType.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+    Assert(ctors.Length == 1, "SystemGrpcService has exactly one public constructor");
+    var ctorParams = ctors[0].GetParameters().Select(p => p.ParameterType).ToArray();
+    var expectedParams = new[] { typeof(SystemContext), typeof(IUserService) };
+    Assert(ctorParams.SequenceEqual(expectedParams), "constructor parameter types match (SystemContext context, IUserService userService)");
+
+    // No ISystemReferenceGuard field
+    var instanceFields = serviceType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+    Assert(!instanceFields.Any(f => f.FieldType == typeof(ISystemReferenceGuard) || f.Name.Contains("referenceGuard", StringComparison.OrdinalIgnoreCase)),
+        "SystemGrpcService has no reference guard field");
+
+    Console.WriteLine("All contract checks passed!");
 }
