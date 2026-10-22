@@ -1,16 +1,26 @@
+using Blocks.FileService;
 using Blocks.FileService.Configs;
 using Blocks.FileService.Infrastructure.Storage;
 using Blocks.FileService.Protos;
 using Blocks.FileService.Services.CoreFeature.UploadFile;
 using Blocks.FileService.Services.Grpc;
+using Blocks.ApiGateway;
+using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
 using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 
 var mode = args.Length > 0 ? args[0].TrimStart('-').ToLowerInvariant() : "all";
 var temporaryRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));
@@ -34,6 +44,16 @@ if (mode is "sessions" or "all")
 if (mode is "lifecycle" or "all")
 {
     await RunLifecycleChecksAsync();
+}
+
+if (mode is "transport" or "all")
+{
+    await RunTransportChecksAsync();
+}
+
+if (mode is "gateway" or "all")
+{
+    await RunGatewayChecksAsync();
 }
 
 Console.WriteLine($"FileService checks: {failures} failure(s).");
@@ -1043,6 +1063,282 @@ async Task RunLifecycleChecksAsync()
     }
     finally
     {
+        Require(Path.GetDirectoryName(Path.GetFullPath(fixtureDir)) == temporaryRoot, "Unsafe fixture cleanup path.");
+        Directory.Delete(fixtureDir, recursive: true);
+    }
+}
+
+string CreateTestJwt(Guid actorGuid, string issuer = "TestIssuer", string audience = "TestAudience", string key = "test_jwt_key_super_secret_for_hardening_checks_32_bytes_long!", TimeSpan? lifetime = null)
+{
+    var tokenHandler = new JwtSecurityTokenHandler();
+    var tokenDescriptor = new SecurityTokenDescriptor
+    {
+        Subject = new ClaimsIdentity(new[]
+        {
+            new Claim("name", actorGuid.ToString("D")),
+            new Claim("unique_name", "testuser")
+        }),
+        Expires = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
+        Issuer = issuer,
+        Audience = audience,
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+            SecurityAlgorithms.HmacSha256Signature)
+    };
+    var token = tokenHandler.CreateToken(tokenDescriptor);
+    return tokenHandler.WriteToken(token);
+}
+
+async Task RunTransportChecksAsync()
+{
+    var fixtureDir = Path.Combine(temporaryRoot, $"blocks-transport-check-{Guid.NewGuid():N}");
+    var webDir = Path.Combine(fixtureDir, "wwwroot");
+    var storageDir = Path.Combine(fixtureDir, "storage");
+
+    Directory.CreateDirectory(webDir);
+    Directory.CreateDirectory(storageDir);
+
+    var jwtKey = "test_jwt_key_super_secret_for_hardening_checks_32_bytes_long!";
+
+    // Write sentinels
+    await File.WriteAllTextAsync(Path.Combine(webDir, "sentinel.txt"), "web sentinel");
+    Directory.CreateDirectory(Path.Combine(storageDir, "Temp"));
+    await File.WriteAllTextAsync(Path.Combine(storageDir, "Temp", "sentinel.txt"), "temp sentinel");
+
+    var fileApp = FileServiceHost.Build(new[]
+    {
+        "--urls", "http://127.0.0.1:0",
+        "--FileStorage:RootPath", storageDir,
+        "--Jwt:Issuer", "TestIssuer",
+        "--Jwt:Audience", "TestAudience",
+        "--Jwt:Key", jwtKey,
+        "--Environment", "Production"
+    });
+
+    await fileApp.StartAsync();
+    var fileBaseUrl = fileApp.Urls.First();
+    using var httpClient = new HttpClient { BaseAddress = new Uri(fileBaseUrl) };
+
+    try
+    {
+        await CheckAsync("legacy_static_urls_are_not_served", async () =>
+        {
+            var resp = await httpClient.GetAsync("/sentinel.txt");
+            Require(resp.StatusCode == System.Net.HttpStatusCode.NotFound, "static files must not be served");
+
+            var respTemp = await httpClient.GetAsync("/Temp/sentinel.txt");
+            Require(respTemp.StatusCode == System.Net.HttpStatusCode.NotFound, "temp files must not be served via static path");
+        });
+
+        await CheckAsync("avatar_requires_jwt", async () =>
+        {
+            var avatarGuid = Guid.NewGuid();
+            var pngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 11, 22, 33 };
+            var avatarsDir = Path.Combine(storageDir, "Avatars");
+            Directory.CreateDirectory(avatarsDir);
+            await File.WriteAllBytesAsync(Path.Combine(avatarsDir, $"{avatarGuid:D}.png"), pngBytes);
+
+            // Without token: 401 challenge envelope
+            var respNoAuth = await httpClient.GetAsync($"/api/Avatar/{avatarGuid:D}.png");
+            var jsonNoAuth = await respNoAuth.Content.ReadAsStringAsync();
+            var envNoAuth = JsonSerializer.Deserialize<BaseResponse>(jsonNoAuth);
+            Require(envNoAuth != null && envNoAuth.StatusCode == 401 && !envNoAuth.Success, "HTTP auth envelope 401");
+
+            // With valid token
+            var actor = Guid.NewGuid();
+            var token = CreateTestJwt(actor, key: jwtKey);
+            using var reqAuth = new HttpRequestMessage(HttpMethod.Get, $"/api/Avatar/{avatarGuid:D}.png");
+            reqAuth.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var respAuth = await httpClient.SendAsync(reqAuth);
+
+            Require(respAuth.StatusCode == System.Net.HttpStatusCode.OK, "avatar with token returns 200 OK");
+            Require(respAuth.Headers.CacheControl?.NoStore == true, "no-store cache control required");
+            Require(respAuth.Headers.Contains("X-Content-Type-Options"), "nosniff header required");
+            var contentBytes = await respAuth.Content.ReadAsByteArrayAsync();
+            Require(contentBytes.SequenceEqual(pngBytes), "avatar bytes must match");
+        });
+
+        await CheckAsync("grpc_owner_is_raw_name_guid", async () =>
+        {
+            var actorA = Guid.NewGuid();
+            var actorB = Guid.NewGuid();
+            var folderGuid = Guid.NewGuid();
+
+            var tokenA = CreateTestJwt(actorA, key: jwtKey);
+            var tokenB = CreateTestJwt(actorB, key: jwtKey);
+
+            // Upload batch as Actor A via HTTP POST
+            using var multipart = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(new byte[] { 1, 2, 3 });
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+            multipart.Add(fileContent, "files", "item.txt");
+            multipart.Add(new StringContent(folderGuid.ToString("D")), "FolderName");
+
+            using var uploadReq = new HttpRequestMessage(HttpMethod.Post, "/api/UploadFile")
+            {
+                Content = multipart
+            };
+            uploadReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenA);
+            var uploadResp = await httpClient.SendAsync(uploadReq);
+            Require(uploadResp.IsSuccessStatusCode, "upload as actor A succeeded");
+
+            // Now call gRPC UploadData as Actor B on the same folderGuid
+            var grpcWebHandler = new Grpc.Net.Client.Web.GrpcWebHandler(Grpc.Net.Client.Web.GrpcWebMode.GrpcWeb, new HttpClientHandler())
+            {
+                HttpVersion = new Version(1, 1)
+            };
+            var grpcHttpClient = new HttpClient(grpcWebHandler)
+            {
+                DefaultRequestVersion = new Version(1, 1),
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact
+            };
+            using var channel = GrpcChannel.ForAddress(fileBaseUrl, new GrpcChannelOptions { HttpClient = grpcHttpClient });
+            var invoker = channel.CreateCallInvoker();
+            var uploadMethod = new Method<UploadDataRequest, UploadDataResponse>(
+                MethodType.Unary,
+                "file.FileProto",
+                "UploadData",
+                Marshallers.Create(r => Google.Protobuf.MessageExtensions.ToByteArray(r), b => UploadDataRequest.Parser.ParseFrom(b)),
+                Marshallers.Create(r => Google.Protobuf.MessageExtensions.ToByteArray(r), b => UploadDataResponse.Parser.ParseFrom(b))
+            );
+
+            var metaB = new Metadata { { "Authorization", $"Bearer {tokenB}" } };
+            bool actorBFailed = false;
+            try
+            {
+                await invoker.AsyncUnaryCall(uploadMethod, null, new CallOptions(metaB), new UploadDataRequest
+                {
+                    RelatedId = Guid.NewGuid().ToString("D"),
+                    ServicePath = "System",
+                    FolderName = "Attachments",
+                    TempFolder = folderGuid.ToString("D")
+                }).ResponseAsync;
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound || ex.StatusCode == StatusCode.FailedPrecondition)
+            {
+                actorBFailed = true;
+            }
+
+            Require(actorBFailed, "foreign alias cannot resolve another actor's batch");
+
+            // Actor A can resolve their own batch
+            var metaA = new Metadata { { "Authorization", $"Bearer {tokenA}" } };
+            var relatedId = Guid.NewGuid().ToString("D");
+            var resA = await invoker.AsyncUnaryCall(uploadMethod, null, new CallOptions(metaA), new UploadDataRequest
+            {
+                RelatedId = relatedId,
+                ServicePath = "System",
+                FolderName = "Attachments",
+                TempFolder = folderGuid.ToString("D")
+            }).ResponseAsync;
+
+            Require(resA.Attachments.Count == 1, "actor A can resolve own batch");
+        });
+    }
+    finally
+    {
+        await fileApp.StopAsync();
+        Require(Path.GetDirectoryName(Path.GetFullPath(fixtureDir)) == temporaryRoot, "Unsafe fixture cleanup path.");
+        Directory.Delete(fixtureDir, recursive: true);
+    }
+}
+
+async Task RunGatewayChecksAsync()
+{
+    var fixtureDir = Path.Combine(temporaryRoot, $"blocks-gateway-check-{Guid.NewGuid():N}");
+    var storageDir = Path.Combine(fixtureDir, "storage");
+    Directory.CreateDirectory(storageDir);
+
+    var jwtKey = "test_jwt_key_super_secret_for_hardening_checks_32_bytes_long!";
+
+    // 1. Mock other cluster destination
+    var otherBuilder = WebApplication.CreateBuilder(new[] { "--urls", "http://127.0.0.1:0" });
+    var otherApp = otherBuilder.Build();
+    otherApp.MapGet("/test", () => "other cluster ok");
+    await otherApp.StartAsync();
+    var otherPort = new Uri(otherApp.Urls.First()).Port;
+
+    // 2. FileService host
+    var fileApp = FileServiceHost.Build(new[]
+    {
+        "--urls", "http://127.0.0.1:0",
+        "--FileStorage:RootPath", storageDir,
+        "--Jwt:Issuer", "TestIssuer",
+        "--Jwt:Audience", "TestAudience",
+        "--Jwt:Key", jwtKey,
+        "--Environment", "Production"
+    });
+    await fileApp.StartAsync();
+    var filePort = new Uri(fileApp.Urls.First()).Port;
+
+    // 3. Gateway host
+    var gwApp = GatewayHost.Build(new[]
+    {
+        "--urls", "http://127.0.0.1:0",
+        "--FileProxy:ClusterId", "fileCluster",
+        "--ReverseProxy:Clusters:fileCluster:Destinations:fileDest:Address", $"http://127.0.0.1:{filePort}",
+        "--ReverseProxy:Routes:fileRoute:ClusterId", "fileCluster",
+        "--ReverseProxy:Routes:fileRoute:Match:Path", "/File/{**catch-all}",
+        "--ReverseProxy:Routes:fileRoute:Transforms:0:PathRemovePrefix", "/File",
+        "--ReverseProxy:Clusters:otherCluster:Destinations:otherDest:Address", $"http://127.0.0.1:{otherPort}",
+        "--ReverseProxy:Routes:otherRoute:ClusterId", "otherCluster",
+        "--ReverseProxy:Routes:otherRoute:Match:Path", "/Other/{**catch-all}",
+        "--ReverseProxy:Routes:otherRoute:Transforms:0:PathRemovePrefix", "/Other",
+        "--Environment", "Production"
+    });
+    await gwApp.StartAsync();
+    var gwBaseUrl = gwApp.Urls.First();
+    using var gwClient = new HttpClient { BaseAddress = new Uri(gwBaseUrl) };
+
+    try
+    {
+        await CheckAsync("other_cluster_still_proxies", async () =>
+        {
+            var resp = await gwClient.GetAsync("/Other/test");
+            Require(resp.IsSuccessStatusCode, "other cluster proxied");
+            var text = await resp.Content.ReadAsStringAsync();
+            Require(text == "other cluster ok", "other cluster content correct");
+        });
+
+        await CheckAsync("file_cluster_alias_is_denied", async () =>
+        {
+            // Blocked HTTP route to File cluster
+            var resp = await gwClient.GetAsync("/File/api/SomeRandomPath");
+            var json = await resp.Content.ReadAsStringAsync();
+            var env = JsonSerializer.Deserialize<BaseResponse>(json);
+            Require(env != null && env.StatusCode == 403 && !env.Success, "blocked gateway request returns 403 envelope");
+
+            // Blocked gRPC attempt to File cluster
+            using var grpcReq = new HttpRequestMessage(HttpMethod.Post, "/File/file.FileProto/UploadData");
+            grpcReq.Content = new ByteArrayContent(new byte[0]);
+            grpcReq.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
+            var grpcResp = await gwClient.SendAsync(grpcReq);
+            var grpcJson = await grpcResp.Content.ReadAsStringAsync();
+            var grpcEnv = JsonSerializer.Deserialize<BaseResponse>(grpcJson);
+            Require(grpcEnv != null && grpcEnv.StatusCode == 403 && !grpcEnv.Success, "gRPC over gateway blocked with 403 envelope");
+        });
+
+        await CheckAsync("file_cluster_reload_cannot_expose_rpc", async () =>
+        {
+            // Embed endpoint is allowed and returns 410
+            using var embedReq = new HttpRequestMessage(HttpMethod.Post, "/File/api/UploadFile/embed");
+            embedReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateTestJwt(Guid.NewGuid(), key: jwtKey));
+            embedReq.Content = new MultipartFormDataContent();
+            var embedResp = await gwClient.SendAsync(embedReq);
+            var embedJson = await embedResp.Content.ReadAsStringAsync();
+            var embedEnv = JsonSerializer.Deserialize<BaseResponse>(embedJson);
+            Require(embedEnv != null && embedEnv.StatusCode == 410, "embed route forwarded and returns 410");
+
+            // Direct route /file.FileProto/... without /File prefix is 404 or blocked
+            var rpcDirectResp = await gwClient.PostAsync("/file.FileProto/UploadData", new ByteArrayContent(new byte[0]));
+            Require(rpcDirectResp.StatusCode == System.Net.HttpStatusCode.NotFound || !rpcDirectResp.IsSuccessStatusCode, "direct RPC route not exposed");
+        });
+    }
+    finally
+    {
+        await gwApp.StopAsync();
+        await fileApp.StopAsync();
+        await otherApp.StopAsync();
         Require(Path.GetDirectoryName(Path.GetFullPath(fixtureDir)) == temporaryRoot, "Unsafe fixture cleanup path.");
         Directory.Delete(fixtureDir, recursive: true);
     }

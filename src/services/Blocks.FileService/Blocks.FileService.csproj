@@ -48,6 +48,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Update="wwwroot\**" CopyToPublishDirectory="Never" />
     <Content Remove="wwwroot\Business\Evidence\**" />
     <None Remove="wwwroot\Business\Evidence\**" />
   </ItemGroup>

@@ -27,8 +27,7 @@ namespace Blocks.FileService.Controllers
 
         [HttpPost("embed")]
         [RequestSizeLimit(52428800)]
-        [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
-        public IActionResult Embed(List<IFormFile> files, [FromForm] string FolderName)
+        public IActionResult Embed()
         {
             return Ok(new BaseResponse(false, 410, "SAR embeds are retired"));
         }
