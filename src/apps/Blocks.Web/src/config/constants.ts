@@ -259,5 +259,8 @@ export const API_ENDPOINTS = {
       GET: `${FILE_BASE}/`,
       EMBED: `${FILE_BASE}/api/UploadFile/embed`,
     },
+    Avatar: {
+      GET: (fileName: string) => `${FILE_BASE}/api/Avatar/${fileName}`,
+    },
   },
 };

@@ -15,7 +15,6 @@ import { useState, useRef } from "react";
 import UploadAvatar, {
   type UploadAvatarRef,
 } from "@/components/ui/upload-avatar";
-import { getFileUrl } from "@/lib/utils";
 import { toast } from "sonner";
 
 const PopupEditProfile = ({
@@ -27,7 +26,7 @@ const PopupEditProfile = ({
   user: User | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  saveChange: (user: User, isAddMore?: boolean) => Promise<boolean> | Promise<void> | void;
+  saveChange: (user: User, isAddMore?: boolean) => Promise<boolean> | boolean;
 }) => {
   const [id] = useState<string | null>(user?.Id || uuidv4());
   const [fullName, setFullName] = useState(user?.Fullname || "");
@@ -101,7 +100,7 @@ const PopupEditProfile = ({
           <div className="flex justify-center mb-4">
             <UploadAvatar
               ref={avatarRef}
-              defaultImage={getFileUrl(user?.Avatar)}
+              defaultImage={user?.Avatar}
             />
           </div>
 

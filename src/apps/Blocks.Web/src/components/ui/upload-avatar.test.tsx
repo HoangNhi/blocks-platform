@@ -10,6 +10,13 @@ vi.mock("@/features/file/api/uploadfile.api", () => ({
   },
 }));
 
+vi.mock("@/features/file/hooks/useAvatarUrl", () => ({
+  useAvatarUrl: vi.fn((src?: string) => {
+    if (!src) return undefined;
+    return "blob:mock-server-avatar";
+  }),
+}));
+
 describe("UploadAvatar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,5 +102,26 @@ describe("UploadAvatar", () => {
     const retryResult = await ref.current?.upload();
     expect(retryResult).toEqual(firstResult);
     expect(fileService.uploadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("revokes_previous_preview_on_new_file_or_unmount", async () => {
+    let urlCounter = 0;
+    vi.mocked(URL.createObjectURL).mockImplementation(() => `blob:mock-preview-${++urlCounter}`);
+
+    const { container, unmount } = render(<UploadAvatar />);
+    const input = container.querySelector("input[type=file]") as HTMLInputElement;
+
+    const file1 = new File(["test1"], "avatar1.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file1] } });
+    expect(URL.createObjectURL).toHaveBeenCalledWith(file1);
+
+    // Select second file -> first preview revoked
+    const file2 = new File(["test2"], "avatar2.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file2] } });
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-preview-1");
+
+    // Unmount -> active preview revoked
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-preview-2");
   });
 });

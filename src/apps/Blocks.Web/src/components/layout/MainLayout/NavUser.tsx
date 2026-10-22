@@ -24,7 +24,6 @@ import type {
   ChangePasswordRequest,
 } from "@/features/system/types/user.types";
 import { useAuth } from "@/hooks/useAuth";
-import { getFileUrl } from "@/lib/utils";
 import { useState } from "react";
 import PopupEditProfile from "./PopupEditProfile";
 import PopupChangePassword from "./PopupChangePassword";
@@ -38,7 +37,7 @@ export function NavUser({ user }: { user: User }) {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
-  const handleSaveProfile = async (updatedUser: User) => {
+  const handleSaveProfile = async (updatedUser: User): Promise<boolean> => {
     try {
       const response = await userService.editProfile({
         Fullname: updatedUser.Fullname,
@@ -52,11 +51,14 @@ export function NavUser({ user }: { user: User }) {
         toast.success("Cập nhật hồ sơ thành công");
         await refreshProfile();
         setIsEditProfileOpen(false);
+        return true;
       } else {
         toast.error(response.Message || "Cập nhật hồ sơ thất bại");
+        return false;
       }
     } catch (_error) {
       toast.error("Đã xảy ra lỗi khi cập nhật hồ sơ");
+      return false;
     }
   };
 
@@ -85,7 +87,7 @@ export function NavUser({ user }: { user: User }) {
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage
-                  src={getFileUrl(user.Avatar)}
+                  src={user.Avatar}
                   alt={user.Fullname}
                 />
                 <AvatarFallback className="rounded-lg">CN</AvatarFallback>
@@ -111,7 +113,7 @@ export function NavUser({ user }: { user: User }) {
               <div className="flex items-center gap-3 px-2 py-2 text-left text-sm">
                 <Avatar className="h-10 w-10 rounded-lg">
                   <AvatarImage
-                    src={getFileUrl(user.Avatar)}
+                    src={user.Avatar}
                     alt={user.Fullname}
                   />
                   <AvatarFallback className="rounded-lg text-sm font-semibold">

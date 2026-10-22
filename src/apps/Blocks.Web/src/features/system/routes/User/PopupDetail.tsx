@@ -32,7 +32,6 @@ import { v4 as uuidv4 } from "uuid";
 import UploadAvatar, {
   type UploadAvatarRef,
 } from "@/components/ui/upload-avatar";
-import { getFileUrl } from "@/lib/utils";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -161,7 +160,7 @@ const PopupDetail = ({
             <div className="flex justify-center mb-4">
               <UploadAvatar
                 ref={avatarRef}
-                defaultImage={getFileUrl(user?.Avatar)}
+                defaultImage={user?.Avatar}
               />
             </div>
 

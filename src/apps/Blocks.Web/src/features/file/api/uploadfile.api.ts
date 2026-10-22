@@ -50,6 +50,27 @@ export const fileService = {
   downloadFile: (url: string) => {
     return api.downloadFile(API_ENDPOINTS.File.UploadFile.GET + url);
   },
+  getAvatarBlob: async (key: string, signal?: AbortSignal): Promise<Blob> => {
+    // Validate key matches System/Avatar/<uuid>.<ext>
+    const cleanKey = key.trim().replace(/^\\+/, "").replace(/^\/+/, "");
+    const match = cleanKey.match(
+      /(?:^|\/)?System\/Avatar\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.(?:png|jpg|jpeg|webp))$/i
+    );
+    if (!match) {
+      throw new Error("Khóa ảnh đại diện không hợp lệ");
+    }
+
+    const fileName = match[1];
+    const endpoint = API_ENDPOINTS.File.Avatar.GET(fileName);
+    const response = await api.downloadFile(endpoint, { signal });
+    const blob: Blob = response.data;
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+    const mimeType = blob?.type ? blob.type.split(";")[0].trim().toLowerCase() : "";
+    if (!blob || !allowedTypes.includes(mimeType)) {
+      throw new Error("Định dạng ảnh đại diện không hợp lệ");
+    }
+    return blob;
+  },
   previewFile: async (
     attachmentId: string,
     mode: "internal" | "external" = "internal",

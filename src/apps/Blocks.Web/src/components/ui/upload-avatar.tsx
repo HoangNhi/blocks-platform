@@ -1,11 +1,13 @@
 import { fileService } from "@/features/file/api/uploadfile.api";
 import type { AvatarUploadResult } from "@/features/file/types/avatar.types";
+import { useAvatarUrl } from "@/features/file/hooks/useAvatarUrl";
 import { Camera, User as UserIcon, X } from "lucide-react";
 import React, {
   forwardRef,
   useImperativeHandle,
   useRef,
   useState,
+  useEffect,
 } from "react";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from "uuid";
@@ -23,7 +25,8 @@ export interface UploadAvatarRef {
 
 const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
   ({ defaultImage, className, onChange }, ref) => {
-    const [preview, setPreview] = useState<string | null>(defaultImage || null);
+    const serverAvatarUrl = useAvatarUrl(defaultImage);
+    const [selectedPreview, setSelectedPreview] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isRemoved, setIsRemoved] = useState<boolean>(false);
 
@@ -33,6 +36,17 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
     } | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeBlobUrlRef = useRef<string | null>(null);
+
+    const preview = selectedPreview ?? (isRemoved ? null : serverAvatarUrl);
+
+    useEffect(() => {
+      return () => {
+        if (activeBlobUrlRef.current) {
+          URL.revokeObjectURL(activeBlobUrlRef.current);
+        }
+      };
+    }, []);
 
     useImperativeHandle(ref, () => ({
       upload: async (): Promise<AvatarUploadResult> => {
@@ -64,7 +78,11 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
         return { kind: "unchanged" };
       },
       reset: () => {
-        setPreview(defaultImage || null);
+        if (activeBlobUrlRef.current) {
+          URL.revokeObjectURL(activeBlobUrlRef.current);
+          activeBlobUrlRef.current = null;
+        }
+        setSelectedPreview(null);
         setSelectedFile(null);
         setIsRemoved(false);
         stagedSessionRef.current = null;
@@ -83,8 +101,13 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
         return;
       }
 
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+      }
+
       const objectUrl = URL.createObjectURL(file);
-      setPreview(objectUrl);
+      activeBlobUrlRef.current = objectUrl;
+      setSelectedPreview(objectUrl);
       setSelectedFile(file);
       setIsRemoved(false);
       stagedSessionRef.current = null;
@@ -94,7 +117,11 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
     const handleRemove = (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setPreview(null);
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
+      setSelectedPreview(null);
       setSelectedFile(null);
       setIsRemoved(true);
       stagedSessionRef.current = null;

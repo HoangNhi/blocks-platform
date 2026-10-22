@@ -66,7 +66,41 @@ class ApiClient {
 
     // Interceptor 1: Convert "soft" 401s (HTTP 200 with StatusCode 401) to actual errors
     this.axiosInstance.interceptors.response.use(
-      (response) => {
+      async (response) => {
+        // Handle blob responses that contain JSON error envelopes
+        if (
+          response.config.responseType === "blob" &&
+          response.data instanceof Blob &&
+          response.data.type?.includes("application/json")
+        ) {
+          try {
+            const text = await response.data.text();
+            const json = JSON.parse(text);
+            if (
+              json &&
+              typeof json === "object" &&
+              json.Success === false &&
+              typeof json.StatusCode === "number" &&
+              Number.isFinite(json.StatusCode)
+            ) {
+              const statusCode = json.StatusCode;
+              const error = new AxiosError(
+                json.Message || "Error",
+                String(statusCode),
+                response.config,
+                response.request,
+                response
+              );
+              if (error.response) {
+                error.response.status = statusCode;
+              }
+              return Promise.reject(error);
+            }
+          } catch {
+            // Keep original blob if JSON parsing fails
+          }
+        }
+
         if (response.data && response.data.StatusCode === 401) {
           const error = new AxiosError(
             response.data.Message || "Unauthorized",
@@ -207,9 +241,10 @@ class ApiClient {
     return response.data;
   }
 
-  downloadFile(url: string) {
+  downloadFile(url: string, config?: Pick<AxiosRequestConfig, "signal">) {
     return this.axiosInstance.get(url, {
       responseType: "blob",
+      signal: config?.signal,
     });
   }
 }
