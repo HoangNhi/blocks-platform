@@ -165,7 +165,7 @@ namespace Blocks.SystemService.Services.SystemGrpc
             }
 
             var users = await _context.Users
-                .Where(u => userIds.Contains(u.Id))
+                .Where(u => userIds.Contains(u.Id) && !u.IsDeleted)
                 .ToListAsync();
 
             foreach (var user in users)

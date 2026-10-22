@@ -1186,6 +1186,198 @@ async Task RunAuthChecksAsync()
                 Assert(resp.Users.Count == 2, "N and B format IDs resolved");
             });
 
+            async Task<User> CreateAndSaveTestUserAsync(bool isActived, bool isDeleted, string prefix)
+            {
+                using var scope = serviceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<SystemContext>();
+                var now = DateTime.UtcNow;
+                var user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = $"{prefix}_{Guid.NewGuid():N}"[..20],
+                    Fullname = $"{prefix} User",
+                    Password = "hashedpassword",
+                    PasswordSalt = "salt",
+                    CreatedAt = now,
+                    CreatedBy = "test",
+                    UpdatedAt = now,
+                    UpdatedBy = "test",
+                    IsActived = isActived,
+                    IsDeleted = isDeleted,
+                    RoleId = normalRoleId,
+                    Email = $"{prefix}_{Guid.NewGuid():N}@test.local"
+                };
+                db.Users.Add(user);
+                await db.SaveChangesAsync();
+                return user;
+            }
+
+            await RunRequestCaseAsync("grpc_set_active_excludes_deleted", async () =>
+            {
+                var liveUser = await CreateAndSaveTestUserAsync(isActived: false, isDeleted: false, "live_act");
+                var deletedUser = await CreateAndSaveTestUserAsync(isActived: false, isDeleted: true, "del_act");
+
+                User deletedBefore;
+                using (var prepScope = serviceProvider.CreateScope())
+                {
+                    var dbPrep = prepScope.ServiceProvider.GetRequiredService<SystemContext>();
+                    deletedBefore = await dbPrep.Users.AsNoTracking().SingleAsync(u => u.Id == deletedUser.Id);
+                }
+
+                var req = new SetUsersActivedRequest { IsActived = true };
+                req.UserIds.AddRange(new[]
+                {
+                    liveUser.Id.ToString(),
+                    deletedUser.Id.ToString(),
+                    Guid.NewGuid().ToString(),
+                    liveUser.Id.ToString(),
+                    "not-a-guid"
+                });
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "SetUsersActived", req,
+                    SetUsersActivedRequest.Parser, SetUsersActivedResponse.Parser, authValidJwt);
+
+                Assert(resp.Success, "batch contract preserved");
+
+                using var verifyScope = serviceProvider.CreateScope();
+                var db = verifyScope.ServiceProvider.GetRequiredService<SystemContext>();
+
+                var liveAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == liveUser.Id);
+                Assert(liveAfter.IsActived, "live user activated");
+
+                var deletedAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == deletedUser.Id);
+                Assert(deletedAfter.IsDeleted && deletedAfter.IsActived == deletedBefore.IsActived,
+                    "soft-deleted user unchanged");
+                Assert(deletedAfter.UpdatedAt == deletedBefore.UpdatedAt,
+                    $"deleted UpdatedAt: before={deletedBefore.UpdatedAt?.Ticks}, after={deletedAfter.UpdatedAt?.Ticks}");
+                Assert(deletedAfter.UpdatedBy == deletedBefore.UpdatedBy,
+                    $"deleted UpdatedBy: before={deletedBefore.UpdatedBy}, after={deletedAfter.UpdatedBy}");
+
+                var latestAudit = await db.AuditLogs.AsNoTracking()
+                    .OrderByDescending(a => a.CreatedAt)
+                    .FirstOrDefaultAsync(a => a.Action == "UPDATE");
+                Assert(latestAudit != null, "audit log recorded");
+                Assert(latestAudit.UserId == normalActiveUser.Id && latestAudit.IsSuccess, "actor audit retained");
+                Assert(latestAudit.EntityId == liveUser.Id.ToString(), "audit entity matches live user");
+                Assert(latestAudit.NewValues != null && latestAudit.NewValues.Contains("IsActived"), "audit contains IsActived change");
+                Assert(!latestAudit.NewValues.Contains(deletedUser.Id.ToString()), "audit excludes deleted user");
+            });
+
+            await RunRequestCaseAsync("grpc_set_inactive_excludes_deleted", async () =>
+            {
+                var liveUser = await CreateAndSaveTestUserAsync(isActived: true, isDeleted: false, "live_inact");
+                var deletedUser = await CreateAndSaveTestUserAsync(isActived: true, isDeleted: true, "del_inact");
+
+                User deletedBefore;
+                using (var prepScope = serviceProvider.CreateScope())
+                {
+                    var dbPrep = prepScope.ServiceProvider.GetRequiredService<SystemContext>();
+                    deletedBefore = await dbPrep.Users.AsNoTracking().SingleAsync(u => u.Id == deletedUser.Id);
+                }
+
+                var req = new SetUsersActivedRequest { IsActived = false };
+                req.UserIds.AddRange(new[]
+                {
+                    liveUser.Id.ToString(),
+                    deletedUser.Id.ToString(),
+                    Guid.NewGuid().ToString(),
+                    liveUser.Id.ToString(),
+                    "not-a-guid"
+                });
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "SetUsersActived", req,
+                    SetUsersActivedRequest.Parser, SetUsersActivedResponse.Parser, authValidJwt);
+
+                Assert(resp.Success, "batch contract preserved");
+
+                using var verifyScope = serviceProvider.CreateScope();
+                var db = verifyScope.ServiceProvider.GetRequiredService<SystemContext>();
+
+                var liveAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == liveUser.Id);
+                Assert(!liveAfter.IsActived, "live user deactivated");
+
+                var deletedAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == deletedUser.Id);
+                Assert(deletedAfter.IsDeleted && deletedAfter.IsActived == deletedBefore.IsActived,
+                    "soft-deleted user unchanged");
+                Assert(deletedAfter.UpdatedAt == deletedBefore.UpdatedAt,
+                    $"deleted UpdatedAt: before={deletedBefore.UpdatedAt?.Ticks}, after={deletedAfter.UpdatedAt?.Ticks}");
+                Assert(deletedAfter.UpdatedBy == deletedBefore.UpdatedBy,
+                    $"deleted UpdatedBy: before={deletedBefore.UpdatedBy}, after={deletedAfter.UpdatedBy}");
+
+                var latestAudit = await db.AuditLogs.AsNoTracking()
+                    .OrderByDescending(a => a.CreatedAt)
+                    .FirstOrDefaultAsync(a => a.Action == "UPDATE");
+                Assert(latestAudit != null, "audit log recorded");
+                Assert(latestAudit.UserId == normalActiveUser.Id && latestAudit.IsSuccess, "actor audit retained");
+                Assert(latestAudit.EntityId == liveUser.Id.ToString(), "audit entity matches live user");
+                Assert(latestAudit.NewValues != null && latestAudit.NewValues.Contains("IsActived"), "audit contains IsActived change");
+                Assert(!latestAudit.NewValues.Contains(deletedUser.Id.ToString()), "audit excludes deleted user");
+            });
+
+            await RunRequestCaseAsync("grpc_set_only_deleted_no_audit", async () =>
+            {
+                var deletedUser = await CreateAndSaveTestUserAsync(isActived: false, isDeleted: true, "del_only");
+                using var countScope = serviceProvider.CreateScope();
+                var dbBefore = countScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var beforeCount = await dbBefore.AuditLogs.CountAsync();
+
+                var req = new SetUsersActivedRequest { IsActived = true };
+                req.UserIds.Add(deletedUser.Id.ToString());
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "SetUsersActived", req,
+                    SetUsersActivedRequest.Parser, SetUsersActivedResponse.Parser, authValidJwt);
+
+                Assert(resp.Success, "batch contract preserved");
+
+                using var verifyScope = serviceProvider.CreateScope();
+                var db = verifyScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var afterCount = await db.AuditLogs.CountAsync();
+                Assert(beforeCount == afterCount, "no audit row created when only deleted user in batch");
+
+                var deletedAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == deletedUser.Id);
+                Assert(deletedAfter.IsDeleted && !deletedAfter.IsActived, "deleted user unchanged");
+            });
+
+            await RunRequestCaseAsync("grpc_set_empty_no_audit", async () =>
+            {
+                using var countScope = serviceProvider.CreateScope();
+                var dbBefore = countScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var beforeCount = await dbBefore.AuditLogs.CountAsync();
+
+                var req = new SetUsersActivedRequest { IsActived = true };
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "SetUsersActived", req,
+                    SetUsersActivedRequest.Parser, SetUsersActivedResponse.Parser, authValidJwt);
+
+                Assert(resp.Success, "batch contract preserved");
+
+                using var verifyScope = serviceProvider.CreateScope();
+                var db = verifyScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var afterCount = await db.AuditLogs.CountAsync();
+                Assert(beforeCount == afterCount, "no audit row created for empty batch");
+            });
+
+            await RunRequestCaseAsync("grpc_set_noop_no_audit", async () =>
+            {
+                var liveUser = await CreateAndSaveTestUserAsync(isActived: true, isDeleted: false, "noop_user");
+                using var countScope = serviceProvider.CreateScope();
+                var dbBefore = countScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var beforeCount = await dbBefore.AuditLogs.CountAsync();
+
+                var req = new SetUsersActivedRequest { IsActived = true };
+                req.UserIds.Add(liveUser.Id.ToString());
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "SetUsersActived", req,
+                    SetUsersActivedRequest.Parser, SetUsersActivedResponse.Parser, authValidJwt);
+
+                Assert(resp.Success, "batch contract preserved");
+
+                using var verifyScope = serviceProvider.CreateScope();
+                var db = verifyScope.ServiceProvider.GetRequiredService<SystemContext>();
+                var afterCount = await db.AuditLogs.CountAsync();
+                Assert(beforeCount == afterCount, "no audit row created for no-op state change");
+            });
+
             Console.WriteLine("[NOT RUN] grpc_permission_valid_allow: Missing fn_user_checkpermission and operator permission fixture");
             Console.WriteLine("[NOT RUN] grpc_permission_valid_deny: Missing fn_user_checkpermission and operator permission fixture");
         }
