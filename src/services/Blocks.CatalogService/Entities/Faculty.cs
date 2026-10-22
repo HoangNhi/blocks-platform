@@ -9,7 +9,7 @@ public partial class Faculty
 
     public string Name { get; set; } = null!;
 
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     public string CreatedBy { get; set; } = null!;
 
