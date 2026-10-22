@@ -33,6 +33,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using OpenTelemetry.Trace;
+using System.Net;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
@@ -285,6 +287,16 @@ async Task RunRuntimeChecksAsync()
         using var healthResp = await client.GetAsync("/health");
         Assert(healthResp.IsSuccessStatusCode, "health check /health succeeds");
 
+        Assert(IsValidOtlpEndpoint("http://[::1]:4318", out _), "IPv6 loopback with port is valid");
+        Assert(IsValidOtlpEndpoint("http://127.0.0.1:4318", out _), "IPv4 loopback with port is valid");
+        Assert(IsValidOtlpEndpoint("http://localhost:4318", out _), "localhost with port is valid");
+        Assert(!IsValidOtlpEndpoint("http://localhost", out _), "localhost without explicit port is rejected");
+        Assert(!IsValidOtlpEndpoint("http://[::1]", out _), "IPv6 without explicit port is rejected");
+        Assert(!IsValidOtlpEndpoint("http://127.0.0.1", out _), "IPv4 without explicit port is rejected");
+        Assert(!IsValidOtlpEndpoint("https://localhost:4318", out _), "https scheme is rejected");
+        Assert(!IsValidOtlpEndpoint("http://user:pass@localhost:4318", out _), "credentials in endpoint are rejected");
+        Assert(!IsValidOtlpEndpoint("http://remotehost:4318", out _), "non-loopback host is rejected");
+
         var wrongSigJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('y', 64));
         var expiredJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('x', 64),
             expires: DateTime.UtcNow.AddMinutes(-5), notBefore: DateTime.UtcNow.AddMinutes(-10));
@@ -373,6 +385,30 @@ async Task RunRuntimeChecksAsync()
     Console.WriteLine("All runtime checks passed (no database connection).");
 }
 
+bool IsValidOtlpEndpoint(string? endpoint, out Uri? uri)
+{
+    uri = null;
+    if (string.IsNullOrWhiteSpace(endpoint)) return false;
+    if (!Uri.TryCreate(endpoint, UriKind.Absolute, out uri)) return false;
+    if (uri.Scheme != Uri.UriSchemeHttp) return false;
+    if (!string.IsNullOrEmpty(uri.UserInfo)) return false;
+
+    var host = uri.DnsSafeHost.Trim('[', ']');
+    var isLoopback = string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                     (IPAddress.TryParse(host, out var ip) && IPAddress.IsLoopback(ip));
+    if (!isLoopback) return false;
+
+    var afterScheme = endpoint.Substring(uri.Scheme.Length + 3);
+    var hostPort = afterScheme.Split('/', '?')[0];
+    var colonIndex = hostPort.LastIndexOf(':');
+    if (colonIndex < 0 || (hostPort.StartsWith("[") && colonIndex < hostPort.IndexOf(']'))) return false;
+
+    var portStr = hostPort.Substring(colonIndex + 1);
+    if (!int.TryParse(portStr, out var port) || port <= 0 || port > 65535 || port != uri.Port) return false;
+
+    return true;
+}
+
 async Task RunTelemetryChecksAsync()
 {
     var endpoint = Environment.GetEnvironmentVariable("SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT");
@@ -381,11 +417,7 @@ async Task RunTelemetryChecksAsync()
         throw new InvalidOperationException("Missing SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT environment variable. Prerequisite required for telemetry check.");
     }
 
-    if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ||
-        uri.Scheme != Uri.UriSchemeHttp ||
-        (uri.Host != "localhost" && uri.Host != "127.0.0.1" && uri.Host != "::1") ||
-        uri.Port <= 0 ||
-        !string.IsNullOrEmpty(uri.UserInfo))
+    if (!IsValidOtlpEndpoint(endpoint, out var uri))
     {
         throw new InvalidOperationException("SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT must be an absolute http URI pointing to localhost/127.0.0.1/::1 with an explicit port and no credentials.");
     }
@@ -417,10 +449,8 @@ async Task RunTelemetryChecksAsync()
             Assert(resp.IsSuccessStatusCode, "health check succeeded");
         }
 
-        var tracerProvider = app.Services.GetRequiredService<OpenTelemetry.Trace.TracerProvider>();
-        var forceFlushMethod = tracerProvider.GetType().GetMethod("ForceFlush", new[] { typeof(int) });
-        Assert(forceFlushMethod != null, "TracerProvider has ForceFlush method");
-        var flushed = (bool)forceFlushMethod!.Invoke(tracerProvider, new object[] { 10000 })!;
+        var tracerProvider = app.Services.GetRequiredService<TracerProvider>();
+        var flushed = TracerProviderExtensions.ForceFlush(tracerProvider, 10000);
         Assert(flushed, "TracerProvider ForceFlush succeeded");
         Console.WriteLine("Telemetry exported and flushed.");
     }
@@ -1349,8 +1379,21 @@ async Task RunAuthChecksAsync()
                 Assert(latestAudit != null, "audit log recorded");
                 Assert(latestAudit.UserId == normalActiveUser.Id && latestAudit.IsSuccess, "actor audit retained");
                 Assert(latestAudit.EntityId == liveUser.Id.ToString(), "audit entity matches live user");
-                Assert(latestAudit.NewValues != null && latestAudit.NewValues.Contains("IsActived"), "audit contains IsActived change");
-                Assert(!latestAudit.NewValues.Contains(deletedUser.Id.ToString()), "audit excludes deleted user");
+                Assert(latestAudit.NewValues != null && latestAudit.OldValues != null, "audit values populated");
+
+                using (var newDoc = JsonDocument.Parse(latestAudit.NewValues!))
+                {
+                    var newUsers = newDoc.RootElement.GetProperty("User");
+                    Assert(newUsers.GetArrayLength() == 1, "audit NewValues contains exactly one updated user (deleted user excluded)");
+                    Assert(newUsers[0].GetProperty("IsActived").GetBoolean() == true, "audit NewValues IsActived is true");
+                }
+
+                using (var oldDoc = JsonDocument.Parse(latestAudit.OldValues!))
+                {
+                    var oldUsers = oldDoc.RootElement.GetProperty("User");
+                    Assert(oldUsers.GetArrayLength() == 1, "audit OldValues contains exactly one updated user (deleted user excluded)");
+                    Assert(oldUsers[0].GetProperty("IsActived").GetBoolean() == false, "audit OldValues IsActived is false");
+                }
             });
 
             await RunRequestCaseAsync("grpc_set_inactive_excludes_deleted", async () =>
@@ -1400,8 +1443,21 @@ async Task RunAuthChecksAsync()
                 Assert(latestAudit != null, "audit log recorded");
                 Assert(latestAudit.UserId == normalActiveUser.Id && latestAudit.IsSuccess, "actor audit retained");
                 Assert(latestAudit.EntityId == liveUser.Id.ToString(), "audit entity matches live user");
-                Assert(latestAudit.NewValues != null && latestAudit.NewValues.Contains("IsActived"), "audit contains IsActived change");
-                Assert(!latestAudit.NewValues.Contains(deletedUser.Id.ToString()), "audit excludes deleted user");
+                Assert(latestAudit.NewValues != null && latestAudit.OldValues != null, "audit values populated");
+
+                using (var newDoc = JsonDocument.Parse(latestAudit.NewValues!))
+                {
+                    var newUsers = newDoc.RootElement.GetProperty("User");
+                    Assert(newUsers.GetArrayLength() == 1, "audit NewValues contains exactly one updated user (deleted user excluded)");
+                    Assert(newUsers[0].GetProperty("IsActived").GetBoolean() == false, "audit NewValues IsActived is false");
+                }
+
+                using (var oldDoc = JsonDocument.Parse(latestAudit.OldValues!))
+                {
+                    var oldUsers = oldDoc.RootElement.GetProperty("User");
+                    Assert(oldUsers.GetArrayLength() == 1, "audit OldValues contains exactly one updated user (deleted user excluded)");
+                    Assert(oldUsers[0].GetProperty("IsActived").GetBoolean() == true, "audit OldValues IsActived is true");
+                }
             });
 
             await RunRequestCaseAsync("grpc_set_only_deleted_no_audit", async () =>
