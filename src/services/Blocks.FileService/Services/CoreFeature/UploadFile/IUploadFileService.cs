@@ -4,7 +4,7 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 {
     public interface IUploadFileService
     {
-        Task Insert(List<IFormFile> files, string FolderName);
+        Task Insert(List<IFormFile> files, string FolderName, CancellationToken cancellationToken = default);
         Task<List<ModelAttachment>> InsertAndReturn(List<IFormFile> files, string folderName);
         List<ModelAttachment> UploadData(object lienKetId, string servicePath, string folderName, string tempFolder);
         bool DeleteData(IEnumerable<string> filePaths);

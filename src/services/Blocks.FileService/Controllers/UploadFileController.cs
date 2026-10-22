@@ -21,7 +21,7 @@ namespace Blocks.FileService.Controllers
         [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
         public async Task<IActionResult> Post(List<IFormFile> files, [FromForm] string FolderName)
         {
-            await _service.Insert(files, FolderName);
+            await _service.Insert(files, FolderName, HttpContext.RequestAborted);
             return Ok(new BaseResponse(true, 200));
         }
 

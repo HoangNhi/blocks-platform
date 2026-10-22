@@ -20,6 +20,7 @@ namespace Blocks.FileService.Configs
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             builder.Services.AddSingleton<Blocks.FileService.Infrastructure.Storage.FileStorage>();
+            builder.Services.AddSingleton<Blocks.FileService.Infrastructure.Storage.UploadSessionStore>();
 
             // Audit action filter
             builder.Services.AddScoped<Blocks.FileService.Infrastructure.Filters.AuditActionFilter>();

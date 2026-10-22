@@ -12,11 +12,13 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
     public class UploadFileService : IUploadFileService
     {
         private readonly FileStorage _storage;
+        private readonly UploadSessionStore _sessions;
         private readonly IHttpContextAccessor _contextAccessor;
 
-        public UploadFileService(FileStorage storage, IHttpContextAccessor contextAccessor)
+        public UploadFileService(FileStorage storage, UploadSessionStore sessions, IHttpContextAccessor contextAccessor)
         {
             _storage = storage;
+            _sessions = sessions;
             _contextAccessor = contextAccessor;
         }
 
@@ -40,7 +42,7 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             return actorId;
         }
 
-        public async Task Insert(List<IFormFile> files, string FolderName)
+        public async Task Insert(List<IFormFile> files, string FolderName, CancellationToken cancellationToken = default)
         {
             if (files == null || files.Count == 0)
             {
@@ -55,10 +57,9 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             var actorId = GetActorId();
-            var sessionPath = _storage.ResolveSession(actorId, folderGuid);
-            Directory.CreateDirectory(sessionPath);
 
-            long totalBytes = 0;
+            // Validate all files in the batch first
+            long declaredTotal = 0;
             foreach (var file in files)
             {
                 if (file == null || file.Length == 0)
@@ -66,8 +67,8 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                     throw new BusinessException("Tệp tải lên không được rỗng", 400);
                 }
 
-                totalBytes += file.Length;
-                if (totalBytes > FileStorage.MaxFileBytes)
+                declaredTotal += file.Length;
+                if (declaredTotal > FileStorage.MaxFileBytes)
                 {
                     throw new BusinessException("Tổng dung lượng tệp vượt quá giới hạn", 413);
                 }
@@ -79,14 +80,69 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 {
                     throw new BusinessException("Định dạng tệp không được hỗ trợ", 400);
                 }
+            }
 
-                var physicalFileName = $"{Guid.NewGuid():D}{ext}";
-                var targetPath = Path.Combine(sessionPath, physicalFileName);
+            // Acquire singleton write gate
+            await _sessions.WriteGate.WaitAsync(cancellationToken);
+            try
+            {
+                var sessionDir = _storage.ResolveSession(actorId, folderGuid);
+                Directory.CreateDirectory(sessionDir);
 
-                using (var stream = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write))
+                var batchId = Guid.NewGuid();
+                var batchDir = Path.Combine(sessionDir, "batches", batchId.ToString("D"));
+                Directory.CreateDirectory(batchDir);
+
+                var storedFiles = new List<StoredUploadFile>();
+                long totalBytesWritten = 0;
+
+                foreach (var file in files)
                 {
-                    await file.CopyToAsync(stream);
+                    var fileId = Guid.NewGuid();
+                    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                    var physicalFileName = $"{fileId:D}{ext}";
+                    var targetFilePath = Path.Combine(batchDir, physicalFileName);
+
+                    long fileBytesWritten = 0;
+                    using (var inputStream = file.OpenReadStream())
+                    using (var outputStream = new FileStream(targetFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        var buffer = new byte[81920];
+                        int bytesRead;
+                        while ((bytesRead = await inputStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                        {
+                            await outputStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                            fileBytesWritten += bytesRead;
+                            totalBytesWritten += bytesRead;
+                            if (totalBytesWritten > FileStorage.MaxFileBytes)
+                            {
+                                throw new BusinessException("Tổng dung lượng tệp vượt quá giới hạn", 413);
+                            }
+                        }
+                    }
+
+                    using var hashStream = File.OpenRead(targetFilePath);
+                    var hashBytes = await System.Security.Cryptography.SHA256.HashDataAsync(hashStream, cancellationToken);
+                    var sha256 = Convert.ToHexString(hashBytes);
+
+                    storedFiles.Add(new StoredUploadFile(fileId, file.FileName, ext, fileBytesWritten, sha256));
                 }
+
+                var session = new UploadSession(
+                    actorId,
+                    folderGuid,
+                    batchId,
+                    DateTimeOffset.UtcNow,
+                    "Staged",
+                    storedFiles,
+                    null,
+                    null);
+
+                await _sessions.WriteAsync(session, cancellationToken);
+            }
+            finally
+            {
+                _sessions.WriteGate.Release();
             }
         }
 
@@ -118,7 +174,17 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             var actorId = GetActorId();
-            var sourceDir = _storage.ResolveSession(actorId, folderGuid);
+            var sessionDir = _storage.ResolveSession(actorId, folderGuid);
+            if (!Directory.Exists(sessionDir))
+            {
+                throw new BusinessException("Thư mục tạm không tồn tại", 404);
+            }
+
+            var session = _sessions.ReadAsync(actorId, folderGuid, CancellationToken.None).GetAwaiter().GetResult();
+            var sourceDir = session != null
+                ? Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"))
+                : sessionDir;
+
             if (!Directory.Exists(sourceDir))
             {
                 throw new BusinessException("Thư mục tạm không tồn tại", 404);
@@ -200,7 +266,17 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             var actorId = GetActorId();
-            var sourceDir = _storage.ResolveSession(actorId, folderGuid);
+            var sessionDir = _storage.ResolveSession(actorId, folderGuid);
+            if (!Directory.Exists(sessionDir))
+            {
+                return oldImage ?? string.Empty;
+            }
+
+            var session = _sessions.ReadAsync(actorId, folderGuid, CancellationToken.None).GetAwaiter().GetResult();
+            var sourceDir = session != null
+                ? Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"))
+                : sessionDir;
+
             if (!Directory.Exists(sourceDir))
             {
                 return oldImage ?? string.Empty;
@@ -223,7 +299,7 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 
             try
             {
-                Directory.Delete(sourceDir, recursive: true);
+                Directory.Delete(sessionDir, recursive: true);
             }
             catch
             {

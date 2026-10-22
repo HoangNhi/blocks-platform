@@ -40,6 +40,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="FileService.RemovalChecks" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="wwwroot\System\" />
   </ItemGroup>
 
