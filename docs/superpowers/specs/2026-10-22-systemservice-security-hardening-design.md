@@ -2,8 +2,8 @@
 
 Ngày: 2026-10-22
 
-Trạng thái: Người dùng đã duyệt hướng xử lý và phạm vi trong hội thoại.
-Bản spec này chờ duyệt trước khi viết implementation plan.
+Trạng thái: Người dùng đã duyệt bản spec ngày 2026-10-22 và yêu cầu viết
+implementation plan.
 Chưa cho phép triển khai code, đổi package hoặc thao tác DB thật.
 
 ## 1. Mục tiêu và phạm vi đã duyệt
@@ -261,6 +261,7 @@ Advisory chính thức đã đối chiếu ngày 2026-10-22:
 - API gRPC CallInvoker dùng cho request test không cần typed client:
   `https://grpc.github.io/grpc/csharp/api/Grpc.Core.CallInvoker.html`
 
-Người dùng duyệt bản spec này trước. Sau đó dùng writing-plans để tạo plan có
-task, file, lệnh kiểm tra, baseline và điều kiện rollout cụ thể. Duyệt spec không
-cho phép triển khai; cần duyệt plan và chọn cách thực hiện trước khi sửa code.
+Spec đã được duyệt ngày 2026-10-22. Plan nằm tại
+`docs/superpowers/plans/2026-10-22-systemservice-security-hardening.md`.
+Duyệt spec không cho phép triển khai; cần duyệt plan và chọn cách thực hiện
+trước khi sửa code.
