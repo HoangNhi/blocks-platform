@@ -32,6 +32,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { systemGroup, menu, user } = useAuth();
   const [openGroupId, setOpenGroupId] = React.useState<string | null>(null);
 
+  const filteredMenu = React.useMemo(() => {
+    const retiredKeys = new Set(["filetype", "stakeholder", "standard", "standardset"]);
+    return (
+      menu?.filter((item) => {
+        const ctrl = item.Controller?.toLowerCase();
+        return !ctrl || !retiredKeys.has(ctrl);
+      }) || []
+    );
+  }, [menu]);
+
   // Filter root groups (Level 1)
   const rootGroups = React.useMemo(
     () =>
@@ -77,18 +87,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             {/* Level 1: Root Groups */}
             {rootGroups.map((group) => {
-              // Find direct menus for this group
-              const groupMenus = menu?.filter(
+              // Find direct menus for this group from filteredMenu
+              const groupMenus = filteredMenu.filter(
                 (item) => item.SystemGroupId === group.Id,
               );
-              // Find child groups (Level 2)
+              // Find child groups (Level 2) that contain kept menus
               const childGroups = systemGroup
                 ?.filter((g) => g.ParentId === group.Id)
                 ?.sort((a, b) => a.Sort - b.Sort);
 
+              const validChildGroups = childGroups?.filter((subGroup) =>
+                filteredMenu.some((item) => item.SystemGroupId === subGroup.Id),
+              );
+
               const hasChildren =
-                (groupMenus && groupMenus.length > 0) ||
-                (childGroups && childGroups.length > 0);
+                groupMenus.length > 0 ||
+                (validChildGroups && validChildGroups.length > 0);
 
               if (!hasChildren) return null;
 
@@ -100,9 +114,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
               // Determine if any child menu (Level 1 or Level 2) is active
               const isGroupActive =
-                groupMenus?.some((item) => isPathActive(item.Controller)) ||
-                childGroups?.some((subGroup) =>
-                  menu?.some(
+                groupMenus.some((item) => isPathActive(item.Controller)) ||
+                validChildGroups?.some((subGroup) =>
+                  filteredMenu.some(
                     (item) =>
                       item.SystemGroupId === subGroup.Id &&
                       isPathActive(item.Controller),
@@ -156,12 +170,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         ))}
 
                         {/* Level 2: Sub Groups */}
-                        {childGroups?.map((subGroup) => {
-                          const subGroupMenus = menu?.filter(
+                        {validChildGroups?.map((subGroup) => {
+                          const subGroupMenus = filteredMenu.filter(
                             (item) => item.SystemGroupId === subGroup.Id,
                           );
 
-                          if (!subGroupMenus?.length) return null;
+                          if (!subGroupMenus.length) return null;
 
                           // Determine if any child menu (Level 3) is active
                           const isSubGroupActive = subGroupMenus.some((item) =>
