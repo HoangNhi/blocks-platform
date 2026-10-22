@@ -2,9 +2,19 @@
 
 Ngày: 2026-10-22
 
-Trạng thái: Bản spec đề xuất để người dùng duyệt. Đã xác nhận xóa dữ liệu và
-drop đúng sáu bảng bị loại, giữ database cùng bảng và dữ liệu `Faculty`.
-Chưa triển khai code, chạy SQL hoặc kiểm tra bản sao lưu.
+Trạng thái: Đã dọn database; người dùng đã scaffold lại CatalogService.
+Bản cập nhật này chờ duyệt phần xóa chức năng và đổi nhãn Phòng ban.
+Chưa triển khai phần xóa code, gỡ màn hình hoặc sửa metadata menu.
+
+| Hạng mục | Trạng thái |
+| --- | --- |
+| Database `catalog` | Đã drop `Council`, `Cycle`, `EvaluationSchedule`, `Stakeholder`; kiểm tra sau thao tác chỉ còn `faculty`. |
+| Dữ liệu `faculty` | Tại thời điểm sau DROP: 10 dòng, schema không đổi, checksum mở rộng trước/sau đều `2754119180`. |
+| Scaffold của người dùng | Context hiện chỉ có `Faculties`; `Faculty.CreatedAt` đã thành `DateTime` không nullable. |
+| Chức năng cũ | Controller, service, DTO, entity cũ và Catalog gRPC server vẫn còn; build hiện chưa đạt. |
+
+Phạm vi triển khai còn lại là code, giao diện, menu và kiểm thử.
+Không chạy lại SQL DROP, không scaffold lại và không sửa schema để chữa lỗi build.
 
 ## 1. Mục tiêu và quyết định
 
@@ -15,13 +25,13 @@ tiêu chí và yêu cầu minh chứng khỏi dịch vụ.
 Các yêu cầu đã xác nhận:
 
 - Giữ `Faculty`, đổi tên nghiệp vụ từ Khoa thành Phòng ban.
-- Xóa dữ liệu và drop sáu bảng: `CriterionRequirement`, `Criterion`,
-  `Standard`, `StandardSet`, `FileType`, `Stakeholder`.
-- Giữ nguyên database, bảng `Faculty` và toàn bộ dữ liệu hiện có của bảng này.
-- Không thực hiện `DROP DATABASE`.
+- Xóa chức năng của sáu domain trong source: `CriterionRequirement`,
+  `Criterion`, `Standard`, `StandardSet`, `FileType`, `Stakeholder`.
+- Giữ nguyên database `catalog`, bảng thực `faculty` và toàn bộ dữ liệu.
+- Không thực hiện thêm DDL/DML cho Catalog trong bước xóa chức năng.
 
 Đề xuất kỹ thuật trong spec: giữ tên `Faculty`, DTO, URL, khóa quyền và tên
-bảng hiện có; chỉ đổi tên hiển thị và thông báo nghiệp vụ. Việc đổi đồng bộ
+bảng thực `faculty`; chỉ đổi tên hiển thị và thông báo nghiệp vụ. Việc đổi đồng bộ
 sang `Department` không nằm trong đợt này.
 
 Kết quả mong muốn là một CatalogService nhỏ hơn, không còn phục vụ các
@@ -29,12 +39,17 @@ danh mục bị bỏ, nhưng Phòng ban vẫn dùng được các quyền và d�
 
 ## 2. Hiện trạng và ảnh hưởng
 
-Mốc source: `e2c5bf0ad87084c2050c9b902393501b1034402e`.
+Mốc source ban đầu: `e2c5bf0ad87084c2050c9b902393501b1034402e`.
+Bản cập nhật dựa trên working tree ngày 2026-10-22, bao gồm scaffold chưa
+commit của người dùng tại `Faculty.cs` và `CatalogContext.cs`. Phải giữ các
+thay đổi này; không khôi phục model cũ từ Git.
 Các đường dẫn dưới đây tính từ repository root.
 
 | Vị trí | Hiện trạng ảnh hưởng thiết kế |
 | --- | --- |
-| `src/services/Blocks.CatalogService/Infrastructure/Data/CatalogContext.cs` | Có bảy DbSet; model `Faculty` không có quan hệ tới sáu entity bị bỏ. Schema DB thực phải được kiểm tra riêng trước DDL. |
+| `src/services/Blocks.CatalogService/Infrastructure/Data/CatalogContext.cs` | Chỉ còn DbSet `Faculties` và mapping `Faculty` tới `faculty` với cột snake_case; không có `OnConfiguring` chứa connection string. |
+| `src/services/Blocks.CatalogService/Entities/` | Vẫn có bảy file entity. Scaffold đã cập nhật `Faculty.cs`, chưa xóa sáu file entity cũ. |
+| `src/services/Blocks.CatalogService/Services/CoreFeature/`, `Services/gRPC/` | Service cũ còn gọi `FileTypes`, `Stakeholders`, `StandardSets`, `Standards`, `Criteria`, `CriterionRequirements` đã mất khỏi context. |
 | `src/services/Blocks.CatalogService/Controllers/FacultyController.cs` | Có sáu endpoint danh sách, chi tiết, thêm, sửa, xóa mềm và combobox. |
 | `src/services/Blocks.CatalogService/Helpers/AttributePermission.cs` | Khóa kiểm tra quyền lấy từ tên controller viết thường; đổi controller sẽ ảnh hưởng khóa `faculty`. |
 | `src/services/Blocks.CatalogService/Protos/catalog.proto` | Cả bảy RPC chỉ phục vụ các danh mục bị loại, không có RPC Faculty. |
@@ -48,13 +63,26 @@ Không thấy project trong checkout link `catalog.proto` làm client. Trước
 rollout vẫn phải kiểm kê consumer ngoài repo; không coi kết quả tìm kiếm
 source là bằng chứng không có tích hợp bên ngoài.
 
+Baseline kiểm tra sau scaffold:
+
+```powershell
+dotnet build src/services/Blocks.CatalogService/Blocks.CatalogService.csproj --no-restore --nologo --verbosity quiet
+```
+
+Kết quả ngày 2026-10-22: exit code 1, 123 lỗi và 38 cảnh báo. Có lỗi `CS1061`
+do service/gRPC cũ gọi DbSet đã bị scaffold loại bỏ, kèm lỗi suy luận kiểu
+phát sinh từ các biểu thức đó. Mục tiêu là loại bỏ code chức năng cũ để build
+lại; không thêm lại DbSet, mapping hoặc bảng cũ. Cảnh báo baseline gồm
+`NU1903` của AutoMapper 16.0.0 và các cảnh báo nullable/obsolete; không nâng
+dependency hoặc sửa cảnh báo ngoài phạm vi chỉ để làm sạch đầu ra.
+
 ## 3. Các phương án
 
 | Phương án | Đánh đổi |
 | --- | --- |
-| **Đề xuất: giữ tên kỹ thuật Faculty, bỏ sáu danh mục và bảng tương ứng** | Giữ hợp đồng Phòng ban và khóa quyền cũ; các API bị bỏ là breaking change có chủ đích. |
+| **Đề xuất: giữ scaffold Faculty mới, xóa code sáu domain cũ** | Khớp DB hiện tại, giữ hợp đồng Phòng ban và khóa quyền cũ; các API bị bỏ là breaking change có chủ đích. |
 | Đổi cả code, API, khóa quyền và bảng thành Department | Tên kỹ thuật đúng nghiệp vụ mới hơn, nhưng phải chuyển schema và metadata quyền; tăng rủi ro mất tương thích không cần thiết. |
-| Chỉ ẩn danh mục hoặc giữ bảng cũ | Ít tác động hơn nhưng không đáp ứng yêu cầu xóa dữ liệu và drop sáu bảng đã xác nhận. |
+| Chỉ ẩn giao diện hoặc thêm lại DbSet cũ | Không giải quyết đầy đủ việc bỏ chức năng; truy vấn cũ vẫn nhắm tới bảng không còn tồn tại. |
 
 Không thêm service thay thế, adapter, feature flag, API giả hoặc dependency
 mới để duy trì các nghiệp vụ đã bị loại.
@@ -92,20 +120,45 @@ Giữ JWT, quyền ADD/UPDATE/DELETE, chính sách đọc hiện có, audit và 
 `Success`, `StatusCode`, `Data`, `Message`. Không đổi HTTP 200 chứa lỗi ứng dụng
 thành một hợp đồng mới. Không gom sửa các lỗi Faculty khác vào đợt dọn này.
 
+### 4.1. Bảo toàn model sau scaffold
+
+| Thành phần | Hợp đồng cần giữ |
+| --- | --- |
+| `Faculty` và `Faculties` | Giữ tên C#, `Guid Id`, `Name`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IsActived`, `IsDeleted`; không đổi thành `Department`. |
+| `Faculty.CreatedAt` | Giữ `DateTime` không nullable theo scaffold mới; không sửa lại nullable để khớp model cũ. |
+| Mapping bảng | `ToTable("faculty")`, không đổi lại `"Faculty"`. |
+| Mapping cột | `id`, `name`, `created_at`, `created_by`, `updated_at`, `updated_by`, `is_actived`, `is_deleted`. |
+| Timestamp | Giữ mapping `timestamp` và default `CURRENT_TIMESTAMP` của scaffold; không thay bằng default `utc_timestamp()` cũ. |
+| Cấu hình model | Giữ charset/collation hiện được scaffold và `OnModelCreatingPartial`; không chép lại cấu hình ID của model cũ. |
+
+`FacultyService.Insert` đang tự gán UUID và `CreatedAt = DateTime.UtcNow`;
+giữ hành vi này. Kiểm tra AutoMapper vẫn map được entity mới tới
+`ModelFaculty`; giữ kiểu `CreatedAt` nullable được kế thừa từ `BaseModel`
+trong DTO, không sửa Shared hoặc hợp đồng JSON vì entity đổi nullability.
+Không ghi connection string vào context hoặc tài liệu.
+
 ## 5. Loại bỏ mã Catalog không còn dùng
 
 Trong `src/services/Blocks.CatalogService/`:
 
 - Xóa controller, service, interface, profile và DTO riêng của `FileType`,
   `Stakeholder`, `StandardSet`, `Standard`; gồm DTO Criterion và Requirement.
-- Bỏ sáu entity và mapping tương ứng; `CatalogContext` chỉ còn model Faculty
-  trong nhóm bảy entity hiện tại.
+- Xóa đúng sáu file entity `Criterion.cs`, `CriterionRequirement.cs`,
+  `FileType.cs`, `Stakeholder.cs`, `Standard.cs`, `StandardSet.cs` sau khi bỏ
+  caller. Không purge thư mục `Entities/`; giữ `Faculty.cs` người dùng vừa scaffold.
+- Giữ `CatalogContext` mới chỉ có `Faculties`; không cần xóa mapping cũ
+  lần nữa vì scaffold đã loại bỏ chúng.
 - Bỏ `Services/gRPC/CatalogGrpcService.cs`, `Protos/catalog.proto` và mục
   protobuf server tương ứng trong `.csproj`.
 - Bỏ `MapGrpcService<CatalogGrpcService>`, middleware gRPC-Web server và
   `AddGrpc` khi không còn server nào khác.
 - Bỏ enum, using và helper chỉ phục vụ các domain bị xóa sau khi đối chiếu
   caller. Không dọn helper dùng chung theo tên hoặc theo phỏng đoán.
+
+Việc xóa service phải loại cả AutoMapper profile và đăng ký tự động
+`[RegisterClassAsTransient]` của các domain cũ. Xóa các using Catalog proto
+và Common đã hết dùng; không thay service cũ bằng stub hoặc đăng ký DI giả.
+Không xóa helper ngày tháng hoặc cấu hình mapper dùng chung chỉ vì bỏ Standard.
 
 Giữ protobuf client `system.proto`, `audit.proto`, JWT interceptor, cấu hình
 client, gRPC-Web client handler và các package còn cần cho client. Chỉ bỏ
@@ -125,24 +178,47 @@ Gỡ route và các màn hình quản trị `/filetype`, `/stakeholder`, `/stand
 `/standardset`; giữ `/faculty` với nhãn Phòng ban. Xóa hook, API hoặc kiểu dữ
 liệu riêng của các màn hình bị bỏ chỉ khi không còn caller.
 
-Các API, type, hook và component vẫn được `features/business` import phải
-được giữ để frontend biên dịch. Ví dụ có `useFileTypeOptions`, `standard.api`,
-`standardset.api`, `stakeholder.types`, `MultiStandardSetPanel` và
-`StandardCriteriaTable`. Không di chuyển chúng chỉ để làm sạch tên thư mục;
-không xóa cả `features/catalog`, `features/business` hay constants dùng chung.
+Danh sách dưới đây tính từ `src/apps/Blocks.Web/src/features/catalog/`.
+Đối chiếu lại import khi triển khai để không xóa caller mới xuất hiện.
+
+| Nhóm | Xử lý |
+| --- | --- |
+| `routes/FileType/`, `routes/Stakeholder/`, `routes/Standard/`, `routes/StandardSet/` | Xóa các màn hình và import/route tương ứng trong `Router.tsx`. |
+| `hooks/useFileType.ts`, `hooks/useStakeholder.ts`, `hooks/useStandard.ts`, `hooks/useStandardSet.ts` | Xóa cùng các màn hình quản trị là caller duy nhất hiện thấy. |
+| `hooks/useCriterionRequirements.ts`, `hooks/useStandardCriteria.ts` | Xóa nếu kiểm kê lại vẫn không còn caller. |
+| `api/stakeholder.api.ts` | Xóa sau `useStakeholder.ts`; giữ `types/stakeholder.types.ts` vì business còn import. |
+| `api/filetype.api.ts`, `api/standard.api.ts`, `api/standardset.api.ts` | Giữ vì business và các hook/component còn dùng. |
+| `types/filetype.types.ts`, `types/standard.types.ts`, `types/standardset.types.ts`, `types/stakeholder.types.ts` | Giữ các kiểu còn được import trực tiếp hoặc gián tiếp. |
+| `hooks/useFileTypeOptions.ts`, `hooks/useStandardSetOptions.ts`, `hooks/useMultiStandardSets.ts`, `hooks/useStandardsWithCriteria.ts` | Giữ cho các luồng business hiện có. |
+| `components/MultiStandardSetPanel.tsx`, `components/StandardCriteriaTable.tsx` | Giữ vì business còn import. |
+| `routes/Faculty/`, `api/faculty.api.ts`, `hooks/useFaculty.ts`, `types/faculty.types.ts` | Giữ chức năng Phòng ban; chỉ đổi chuỗi giao diện liên quan. |
+
+Không di chuyển các phần giữ lại chỉ để làm sạch tên thư mục; không xóa
+cả `features/catalog` hoặc `features/business`. Giữ
+`src/apps/Blocks.Web/src/constants/catalog.constants.ts` vì business còn
+dùng. Trong `src/config/constants.ts`, giữ endpoint Faculty và các endpoint
+FileType/Standard/StandardSet mà API wrapper giữ lại đang tham chiếu.
+
+Chuỗi Phòng ban cần đổi tại `routes/Faculty/columns.tsx` và
+`routes/Faculty/PopupFaculty.tsx`: tên cột, nhãn trường, validation và tiêu
+đề thêm/cập nhật. Giữ API client, query key, payload và invalidation hiện có.
 
 Đây không phải chuyển các domain cũ sang service mới. Các luồng business còn
 gọi API bị bỏ sẽ không hoạt động sau rollout; việc giữ mã consumer không có
-nghĩa là giữ nghiệp vụ chạy được. Người dùng phải duyệt giới hạn này cùng
-spec. Nếu cần duy trì chúng, phải tách thiết kế chuyển domain trước khi drop
-bảng; không thể vừa xóa backend và dữ liệu vừa cam kết giữ các luồng đó.
+nghĩa là giữ nghiệp vụ chạy được. DB đã bị dọn nên các luồng đó đã mất điều
+kiện hoạt động với dữ liệu cũ. Người dùng phải duyệt giới hạn này cùng spec.
+Nếu cần khôi phục nghiệp vụ, phải có thiết kế và nguồn phục hồi riêng;
+không tái tạo bảng hoặc fake response trong đợt xóa chức năng này.
 
 Trong `app-sidebar.tsx`, loại đúng bốn khóa controller `filetype`,
 `stakeholder`, `standard`, `standardset` khỏi tập menu dùng để render.
-Áp dụng nhất quán cho menu trực tiếp và menu trong nhóm con, kể cả dữ liệu
-menu cũ còn cache. Giữ tất cả menu khác và không thay đổi tập quyền trong
-AuthContext. Không thêm bộ lọc IsShowMenu tổng quát cho mọi domain vì đó là
-thay đổi hành vi ngoài phạm vi.
+So khớp không phân biệt hoa thường bằng giá trị `Controller` chuyển về
+lowercase. Áp dụng tập menu đã lọc nhất quán cho menu trực tiếp, nhóm con,
+trạng thái active và kiểm tra `hasChildren`, kể cả dữ liệu menu cũ còn cache.
+Không hiển thị nhóm con hoặc nhóm gốc rỗng chỉ vì vẫn tồn tại bản ghi
+SystemGroup. Nhóm chứa menu khác phải tiếp tục hiển thị. Giữ mọi menu khác
+và không thay đổi tập quyền trong AuthContext. Không thêm bộ lọc IsShowMenu
+tổng quát cho mọi domain vì đó là thay đổi hành vi ngoài phạm vi.
 
 Với menu Faculty, xác định đúng Menu ID rồi đổi duy nhất tên nghiệp vụ thành
 `Phòng ban` qua API quản trị SystemService hiện có, bằng tài khoản đủ quyền.
@@ -160,91 +236,62 @@ cache và tải menu mới; xác nhận cả sidebar và tiêu đề trang. F5 h
 trang không đủ vì AuthContext tái sử dụng localStorage. Không viết lại
 AuthContext hay thay đổi cơ chế xác thực để đổi nhãn.
 
-## 7. Xóa dữ liệu và drop bảng an toàn
+## 7. Database đã dọn và scaffold đã hoàn tất
 
-### 7.1. Điều kiện bắt buộc
+### 7.1. Lịch sử thao tác
 
-Ý định hủy dữ liệu sáu bảng đã được người dùng xác nhận. Việc đó không cho
-phép xóa bảng khác, xóa database hoặc bỏ qua kiểm tra môi trường.
+MCP `blocks_catalog_dev` đã xác nhận database đích là `catalog`. Tại thời
+điểm kiểm tra, schema thực có năm bảng: `faculty`, `Council`, `Cycle`,
+`EvaluationSchedule`, `Stakeholder`; không phải bảy bảng theo source ban đầu.
+Năm bảng `CriterionRequirement`, `Criterion`, `Standard`, `StandardSet`,
+`FileType` không xuất hiện trong metadata được tài khoản MCP phép đọc.
 
-Trước khi chạy DDL:
+Sau khi người dùng mở rộng phạm vi thành chỉ giữ `faculty`, đã DROP đúng
+bốn bảng `Council`, `Cycle`, `EvaluationSchedule`, `Stakeholder`. File
+`docs/database/2026-10-22-catalogservice-faculty-only.sql` là bản ghi thao
+tác đã thực hiện, không phải migration hoặc bước cần chạy lại.
 
-1. Dùng DBHub `blocks_dbhub`, source `blocks_catalog_dev`; xác minh database
-   thực, server, phiên bản MySQL, storage engine và sáu bảng đúng chữ hoa
-   thường; xác nhận đây là base table, không phải view. Không đoán tên
-   database từ tên service hoặc connection-string key.
-2. Kiểm tra metadata và số hàng; không đưa email, dữ liệu cá nhân, credentials
-   hoặc toàn bộ nội dung bảng vào log/chat. Chụp trạng thái schema và dữ liệu
-   Faculty để so sánh nội bộ sau thao tác.
-3. Kiểm kê foreign key, view, trigger, routine, scheduled event và consumer
-   liên quan. Nếu có dependency từ ngoài sáu bảng hoặc từ Faculty, dừng và
-   xử lý phạm vi riêng; không tự drop dependency bên ngoài.
-4. Xác minh bản sao lưu đủ schema và dữ liệu để phục hồi, cùng bằng chứng
-   restore được trên môi trường cô lập. Giữ backup ở nơi riêng có kiểm soát
-   truy cập; không commit dump hoặc connection string vào Git.
-5. Ngừng writer, job và các dịch vụ đang dùng các bảng này trong cửa sổ bảo
-   trì. Không drop khi bản triển khai cũ vẫn xử lý request liên quan.
-6. Ghi SQL được review vào Git trước khi áp dụng. Bản SQL chỉ được phép tác
-   động đúng sáu bảng đã xác minh trong database đích.
+Kiểm tra sau DROP thấy database vẫn còn, chỉ còn bảng `faculty`; schema,
+10 dòng và checksum mở rộng `2754119180` khớp trước/sau. Metadata lúc đó
+không thấy routine, trigger hoặc event; không chạy lệnh DROP các đối tượng
+này. Các số liệu trên là bằng chứng tại thời điểm DROP, không phải số dòng
+bắt buộc cố định mãi về sau.
 
-Thiếu backup, thiếu xác minh đích hoặc thiếu quyền là điều kiện dừng thao
-tác DB, không phải lý do đổi credentials, nguồn dữ liệu hay tắt bảo vệ.
-Nếu DBHub không khả dụng, báo rõ và chỉ dùng fallback theo AGENTS.md.
+Người dùng đã yêu cầu tiếp tục khi chưa xác minh backup. Không có bằng
+chứng backup đã khôi phục thử thành công; không coi việc quay lại commit cũ
+là cách phục hồi dữ liệu đã xóa.
 
-### 7.2. Thao tác và thứ tự
+### 7.2. Giới hạn bước triển khai còn lại
 
-Drop theo thứ tự phụ thuộc trong model hiện có, đối chiếu lại schema thực:
+- Không chạy lại DROP, DELETE, TRUNCATE, migration hoặc seed trên `catalog`.
+- Không thay đổi schema, dữ liệu, tên bảng hoặc tên cột của `faculty`.
+- Không scaffold lại hoặc dùng `--force` ghi đè scaffold người dùng vừa tạo.
+- Không tái tạo bảng hoặc thêm DbSet cũ để làm build hết lỗi.
+- Không xóa dữ liệu hoặc đối tượng của SystemService hay database khác.
 
-1. `CriterionRequirement`
-2. `Criterion`
-3. `Standard`
-4. `StandardSet`
-5. `FileType`
-6. `Stakeholder`
+Kiểm tra schema nếu cần chỉ dùng metadata read-only qua MCP đúng nguồn.
+Chỉ chạy CRUD trên DB kiểm thử cô lập, không trên database ứng dụng.
+Mở lại service sau khi phần code còn lại build và kiểm tra bắt buộc đạt;
+không tự bật lại consumer cũ hoặc tự phục hồi bảng khi startup.
 
-`DROP TABLE` đã loại bỏ dữ liệu, không cần chạy DELETE hoặc TRUNCATE trước.
-Không dùng `DROP DATABASE`, `FOREIGN_KEY_CHECKS=0`, lệnh wildcard hoặc drop
-mọi bảng trừ Faculty.
+### 7.3. Phục hồi
 
-MySQL DDL không được coi là transaction có thể rollback toàn bộ. Nếu lỗi
-giữa chừng, ghi nhận trạng thái đã thực hiện, giữ bảo trì và đối chiếu trước
-khi chạy tiếp. Không tự replay script hoặc che trạng thái thiếu bảng bằng
-`IF EXISTS` rồi báo thành công.
-
-Sau thao tác, database và Faculty phải còn nguyên; đúng sáu bảng không còn.
-Không xóa bảng khác nếu database còn chứa đối tượng ngoài bảy bảng đã biết.
-
-### 7.3. Đồng bộ model và phục hồi
-
-Theo database-first, SQL phải được review, áp dụng trên đúng DB phát triển
-đã cho phép, rồi mới scaffold model bị ảnh hưởng bằng EF/Pomelo đúng phiên
-bản dự án. Chỉ chọn bảng Faculty; dùng `--no-onconfiguring`, không sinh
-connection string vào code.
-
-Review file sẽ bị ghi đè trước `--force`, giữ custom/partial code, không
-purge thư mục entity. So sánh mapping và entity Faculty trước/sau; mọi thay
-đổi schema hoặc dữ liệu ngoài phạm vi phải được loại khỏi diff.
-
-Trong cửa sổ bảo trì, chỉ mở lại dịch vụ sau khi code đã đồng bộ schema,
-build và các kiểm tra bắt buộc đạt. Không tự phục hồi các bảng bị drop bằng
-migration, seed hoặc lúc ứng dụng khởi động.
-
-Khi cần quay lại phiên bản cũ, code rollback không đủ vì bảng đã mất. Phải
-restore schema và dữ liệu liên quan từ backup trước khi bật lại consumer
-cũ; không restore đè Faculty hiện tại. Việc phục hồi dữ liệu cũng cần xác
-nhận phạm vi đích và kiểm tra liên kết trước khi chạy.
+Rollback code không phục hồi các bảng đã DROP. Nếu cần phục hồi nghiệp vụ
+cũ, phải xác định nguồn backup thực tế, xin xác nhận phạm vi và kiểm tra
+khả năng restore riêng; không ghi đè dữ liệu `faculty` hiện tại và không
+cam kết có thể khôi phục khi chưa có nguồn phục hồi được xác minh.
 
 ## 8. Phạm vi file dự kiến
 
 | Nhóm | Thay đổi |
 | --- | --- |
-| `src/services/Blocks.CatalogService/Controllers/`, `Services/CoreFeature/`, `DTOs/CoreFeature/`, `Entities/` | Bỏ sáu domain; giữ Faculty và đổi thông báo tên nghiệp vụ. |
-| `src/services/Blocks.CatalogService/Infrastructure/Data/CatalogContext.cs` | Đồng bộ DB-first; giữ mapping Faculty, bỏ mapping domain cũ. |
+| `src/services/Blocks.CatalogService/Controllers/`, `Services/CoreFeature/`, `DTOs/CoreFeature/`, `Entities/` | Bỏ bốn nhóm controller/service/DTO và sáu entity cũ; giữ Faculty và đổi thông báo tên nghiệp vụ. |
+| `src/services/Blocks.CatalogService/Entities/Faculty.cs`, `Infrastructure/Data/CatalogContext.cs` | Giữ scaffold mới của người dùng; kiểm tra mapping/nullability, không scaffold hoặc phục hồi model cũ. |
 | `src/services/Blocks.CatalogService/Services/gRPC/`, `Protos/catalog.proto`, `Program.cs`, `Configs/ConfigService.cs`, `.csproj` | Bỏ Catalog gRPC server; giữ client phân quyền và audit. |
 | `src/apps/Blocks.Web/src/Router.tsx`, `features/catalog/` | Gỡ bốn màn hình quản trị, đổi nhãn Faculty; giữ mã còn được business import. |
 | `src/apps/Blocks.Web/src/components/layout/MainLayout/app-sidebar.tsx` | Không render bốn menu đã bỏ ở các cấp; giữ hành vi menu khác và dữ liệu quyền. |
-| `docs/database/2026-10-22-catalogservice-faculty-only.sql` | SQL hủy đúng sáu bảng, bổ sung ở bước triển khai sau preflight. |
-| `test/`, frontend Faculty tests | Kiểm tra hồi quy tập trung; chọn cơ chế cụ thể khi lập kế hoạch, không thêm framework mới. |
+| `docs/database/2026-10-22-catalogservice-faculty-only.sql` | Giữ làm lịch sử DROP bốn bảng đã chạy; không đưa vào startup hoặc chạy lại. |
+| `test/CatalogService.Removal.Check.ps1`, frontend tests | Bổ sung check nguồn theo mẫu PowerShell có sẵn và Vitest gần phần bị đổi; không thêm framework mới. |
 | `AGENTS.md` | Cập nhật trách nhiệm CatalogService và lệnh kiểm tra nếu thay đổi. |
 
 Metadata menu là thay đổi dữ liệu qua API hiện có, không phải lý do sửa
@@ -258,7 +305,14 @@ FileService, thư viện dùng chung hoặc dependency không liên quan.
 - Build trực tiếp CatalogService sau restore cần thiết:
   `dotnet build src/services/Blocks.CatalogService/Blocks.CatalogService.csproj`.
 - Có regression check chạy được chứng minh context chỉ còn Faculty trong
-  nhóm entity đã dọn, bốn controller và bảy RPC bị bỏ không còn được đăng ký.
+  nhóm entity đã dọn, sáu entity cũ đã được xóa, bốn controller và bảy RPC
+  bị bỏ không còn được đăng ký. Check nguồn PowerShell không thay thế kiểm
+  tra runtime hoặc phân quyền.
+- Kiểm tra model/SQL generation không mở DB: bảng `faculty`, tám tên cột
+  snake_case, `CreatedAt` required, không có entity cũ trong EF model.
+- Kiểm tra mapping `Faculty` mới sang `ModelFaculty`, giữ hợp đồng JSON
+  và hành vi tự gán UUID/thời gian của service. Không sửa Shared để chữa
+  thay đổi nullability nội bộ entity.
 - Swagger còn đủ sáu endpoint Faculty; không còn endpoint domain bị loại.
 - HTTP thật với token hợp lệ xác nhận routing domain cũ không còn phục vụ,
   không nhầm kết quả từ chối xác thực với kết quả loại bỏ route.
@@ -271,20 +325,23 @@ FileService, thư viện dùng chung hoặc dependency không liên quan.
 
 ### 9.2. Database và dữ liệu
 
-- Lưu bằng chứng preflight và xác minh backup trước khi thực hiện.
-- Sau DDL, metadata xác nhận đúng sáu bảng đã mất, Faculty và database còn.
-- Đối chiếu schema, số hàng và toàn bộ giá trị Faculty trước/sau bằng cơ chế
-  so sánh nội bộ; chỉ bằng nhau về số hàng không đủ chứng minh dữ liệu giữ
-  nguyên. Kiểm tra bảng ngoài phạm vi không bị thay đổi.
+- Không có thao tác ghi DB trong đợt xóa code; giữ bằng chứng DROP ở mục 7.
+- Không có DDL, DML, scaffold hoặc sửa mapping `faculty` ngoài scaffold mới.
 - Không chạy các ca kiểm thử CRUD tạo/xóa dữ liệu trên database ứng dụng.
-- Không có `DROP DATABASE`, DDL Faculty hoặc tắt foreign-key checks trong SQL.
+- Nếu xác minh DB bằng MCP, chỉ đọc metadata của `catalog`; không dump dữ
+  liệu cá nhân, credentials hoặc toàn bộ bản ghi vào log/chat.
 
 ### 9.3. Frontend và menu
 
-Chạy build, lint và test bằng lệnh trong AGENTS.md; ghi riêng lỗi baseline.
-Thêm kiểm tra gần Faculty cho nhãn Phòng ban và validation, cùng kiểm tra
-route của bốn màn hình bị gỡ. Kiểm tra sidebar với menu trực tiếp, menu nhóm
-con, dữ liệu cache cũ và menu của domain khác.
+Chạy build, lint và test bằng lệnh trong AGENTS.md; chạy `npm ci` khi chưa
+có dependencies, giữ `package-lock.json` và ghi riêng lỗi baseline.
+Hiện chưa có test riêng trong `features/catalog`; bổ sung Vitest gần
+`routes/Faculty/` cho nhãn Phòng ban và validation, cùng kiểm tra route
+của bốn màn hình bị gỡ. Không coi việc không có test là kết quả test đạt.
+
+Kiểm tra sidebar với menu trực tiếp, nhóm con, dữ liệu cache cũ, controller
+khác hoa/thường, nhóm chỉ chứa menu đã bỏ và nhóm trộn với menu còn giữ.
+Nhóm rỗng phải biến mất; menu khác và trạng thái active vẫn đúng.
 
 Frontend biên dịch, không có import hỏng do dọn Catalog. Faculty hiển thị
 Phòng ban ở bảng, popup, validation, sidebar và tiêu đề sau tải lại menu.
@@ -304,12 +361,13 @@ Full-solution build hoặc AppHost startup không phải acceptance check.
 
 Không tạo mới backend nghiệp vụ, chuyển dữ liệu sáu domain sang service
 khác, xóa dữ liệu SystemService hoặc xóa màn hình business. Mọi yêu cầu
-duy trì các nghiệp vụ phụ thuộc phải có thiết kế riêng trước DDL.
+khôi phục các nghiệp vụ phụ thuộc phải có thiết kế riêng, không làm trong
+đợt xóa chức năng.
 
 Người dùng cần duyệt spec bằng file này, bao gồm tên kỹ thuật Faculty giữ
 nguyên, breaking changes, phạm vi frontend và metadata menu. Sau đó mới lập
-kế hoạch triển khai và chọn cách thực hiện. Duyệt ý định drop sáu bảng không
-thay thế kiểm tra backup, môi trường và điều kiện bảo trì.
+kế hoạch triển khai và chọn cách thực hiện. DB và scaffold đã hoàn tất;
+duyệt bản cập nhật này không yêu cầu thực hiện lại hai bước đó.
 
 ## 11. Tài liệu kỹ thuật
 
@@ -320,5 +378,6 @@ thay thế kiểm tra backup, môi trường và điều kiện bảo trì.
   dùng `--no-onconfiguring`, bảo vệ thay đổi khi dùng `--force`.
   `https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/`
 
-Khi triển khai, đối chiếu tài liệu với phiên bản MySQL và EF/Pomelo thực tế;
-không giả định phiên bản server từ collation trong model.
+Tài liệu DROP chỉ giải thích thao tác lịch sử, không phải yêu cầu chạy DDL
+thêm. Giữ phiên bản EF Core 8.0.22 và Pomelo 8.0.3 trong `.csproj`; không
+giả định phiên bản server từ collation trong model.
