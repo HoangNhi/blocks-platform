@@ -5,12 +5,19 @@ using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
 using Microsoft.AspNetCore.StaticFiles;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 
 namespace Blocks.FileService.Services.CoreFeature.UploadFile
 {
+    public record DeleteReceipt(string Key, string DeletionId, DateTimeOffset DeletedAt, string State, string DestinationPath);
+
     [RegisterClassAsTransient]
     public class UploadFileService : IUploadFileService
     {
+        private static readonly byte[] PngHeader = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        private static readonly byte[] JpegHeader = [0xFF, 0xD8, 0xFF];
+
         private readonly FileStorage _storage;
         private readonly UploadSessionStore _sessions;
         private readonly IHttpContextAccessor _contextAccessor;
@@ -58,7 +65,6 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 
             var actorId = GetActorId();
 
-            // Validate all files in the batch first
             long declaredTotal = 0;
             foreach (var file in files)
             {
@@ -82,10 +88,15 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 }
             }
 
-            // Acquire singleton write gate
             await _sessions.WriteGate.WaitAsync(cancellationToken);
             try
             {
+                var existingSession = await _sessions.ReadAsync(actorId, folderGuid, cancellationToken);
+                if (existingSession?.State == "Finalized")
+                {
+                    throw new BusinessException("Phiên tải lên đã hoàn tất không thể thay thế", 409);
+                }
+
                 var sessionDir = _storage.ResolveSession(actorId, folderGuid);
                 Directory.CreateDirectory(sessionDir);
 
@@ -146,14 +157,12 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
         }
 
-        public async Task<List<ModelAttachment>> InsertAndReturn(List<IFormFile> files, string folderName)
-        {
-            await Insert(files, folderName);
-            var embedId = Guid.NewGuid();
-            return UploadData(embedId, "System", "Attachments", folderName);
-        }
-
-        public List<ModelAttachment> UploadData(object lienKetId, string servicePath, string folderName, string tempFolder)
+        public async Task<List<ModelAttachment>> UploadDataAsync(
+            string relatedId,
+            string servicePath,
+            string folderName,
+            string tempFolder,
+            CancellationToken cancellationToken = default)
         {
             if (!string.Equals(servicePath, "System", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(folderName, "Attachments", StringComparison.OrdinalIgnoreCase))
@@ -161,102 +170,195 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 throw new BusinessException("Mục tiêu lưu trữ không hợp lệ hoặc chưa được đăng ký", 400);
             }
 
-            if (lienKetId == null || !Guid.TryParse(lienKetId.ToString(), out var relatedGuid) || relatedGuid == Guid.Empty)
+            if (string.IsNullOrWhiteSpace(relatedId) || !Guid.TryParseExact(relatedId, "D", out var relatedGuid) || relatedGuid == Guid.Empty)
             {
                 throw new BusinessException("Mã liên kết không hợp lệ", 400);
             }
 
-            if (string.IsNullOrWhiteSpace(tempFolder) ||
-                !Guid.TryParseExact(tempFolder, "D", out var folderGuid) ||
-                folderGuid == Guid.Empty)
+            if (string.IsNullOrWhiteSpace(tempFolder) || !Guid.TryParseExact(tempFolder, "D", out var folderGuid) || folderGuid == Guid.Empty)
             {
                 throw new BusinessException("Thư mục lưu trữ tạm không hợp lệ", 400);
             }
 
             var actorId = GetActorId();
-            var sessionDir = _storage.ResolveSession(actorId, folderGuid);
-            if (!Directory.Exists(sessionDir))
+
+            await _sessions.WriteGate.WaitAsync(cancellationToken);
+            try
             {
-                throw new BusinessException("Thư mục tạm không tồn tại", 404);
-            }
-
-            var session = _sessions.ReadAsync(actorId, folderGuid, CancellationToken.None).GetAwaiter().GetResult();
-            var sourceDir = session != null
-                ? Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"))
-                : sessionDir;
-
-            if (!Directory.Exists(sourceDir))
-            {
-                throw new BusinessException("Thư mục tạm không tồn tại", 404);
-            }
-
-            var result = new List<ModelAttachment>();
-            var files = Directory.GetFiles(sourceDir);
-
-            foreach (var f in files)
-            {
-                var fileInfo = new FileInfo(f);
-                var fileLength = fileInfo.Length;
-                var fileExt = fileInfo.Extension.ToLowerInvariant();
-                var fileGuid = Guid.NewGuid();
-                var destFileName = $"{fileGuid:D}{fileExt}";
-                var destPath = _storage.Resolve(StorageArea.Files, "System", "Attachments", relatedGuid.ToString("D"), destFileName);
-
-                var destDir = Path.GetDirectoryName(destPath)!;
-                Directory.CreateDirectory(destDir);
-                File.Move(f, destPath, overwrite: true);
-
-                result.Add(new ModelAttachment
+                var session = await _sessions.ReadAsync(actorId, folderGuid, cancellationToken);
+                if (session == null)
                 {
-                    Id = fileGuid,
-                    FileName = destFileName,
-                    FileUrl = $"System/Attachments/{relatedGuid:D}/{destFileName}",
-                    FileExtension = fileExt,
-                    FileSize = (int)fileLength
-                });
-            }
+                    throw new BusinessException("Phiên tải lên không tồn tại", 404);
+                }
 
-            return result;
+                if (session.State == "Finalized")
+                {
+                    if (session.Target?.Kind != "Attachment" || session.Target?.RelatedId != relatedGuid)
+                    {
+                        throw new BusinessException("Phiên tải lên đã hoàn tất cho mục tiêu khác", 409);
+                    }
+
+                    // Check that all destination files exist
+                    if (session.Result == null || session.Result.Count == 0)
+                    {
+                        throw new BusinessException("Kết quả phiên tải lên bị thiếu", 409);
+                    }
+
+                    foreach (var item in session.Result)
+                    {
+                        var resolvedPath = _storage.ResolveActiveKey(item.FileUrl);
+                        if (!File.Exists(resolvedPath))
+                        {
+                            throw new BusinessException("Tệp đã bị xóa hoặc không thể phục hồi", 409);
+                        }
+                    }
+
+                    return session.Result;
+                }
+
+                if (session.State == "Finalizing")
+                {
+                    if (session.Target?.Kind != "Attachment" || session.Target?.RelatedId != relatedGuid)
+                    {
+                        throw new BusinessException("Phiên tải lên đang hoàn tất cho mục tiêu khác", 409);
+                    }
+                }
+                else
+                {
+                    session = session with
+                    {
+                        State = "Finalizing",
+                        Target = new UploadTarget("Attachment", "System", "Attachments", relatedGuid)
+                    };
+                    await _sessions.WriteAsync(session, cancellationToken);
+                }
+
+                var sessionDir = _storage.ResolveSession(actorId, folderGuid);
+                var batchDir = Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"));
+                if (!Directory.Exists(batchDir))
+                {
+                    throw new BusinessException("Thư mục lô tệp không tồn tại", 404);
+                }
+
+                var attachments = new List<ModelAttachment>();
+                foreach (var storedFile in session.Files)
+                {
+                    var sourcePath = Path.Combine(batchDir, $"{storedFile.Id:D}{storedFile.Extension}");
+                    if (!File.Exists(sourcePath))
+                    {
+                        throw new BusinessException("Tệp nguồn trong phiên không tồn tại", 409);
+                    }
+
+                    var destFileName = $"{storedFile.Id:D}{storedFile.Extension}";
+                    var destPath = _storage.Resolve(StorageArea.Files, "System", "Attachments", relatedGuid.ToString("D"), destFileName);
+
+                    if (File.Exists(destPath))
+                    {
+                        using var s = File.OpenRead(destPath);
+                        var h = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(s, cancellationToken));
+                        if (h != storedFile.Sha256)
+                        {
+                            throw new BusinessException("Tệp đích không khớp với manifest", 409);
+                        }
+                    }
+                    else
+                    {
+                        var destDir = Path.GetDirectoryName(destPath)!;
+                        Directory.CreateDirectory(destDir);
+                        File.Copy(sourcePath, destPath, overwrite: false);
+                    }
+
+                    attachments.Add(new ModelAttachment
+                    {
+                        Id = storedFile.Id,
+                        FileName = destFileName,
+                        FileUrl = $"System/Attachments/{relatedGuid:D}/{destFileName}",
+                        FileExtension = storedFile.Extension,
+                        FileSize = (int)storedFile.Length
+                    });
+                }
+
+                session = session with
+                {
+                    State = "Finalized",
+                    Result = attachments
+                };
+                await _sessions.WriteAsync(session, cancellationToken);
+
+                return attachments;
+            }
+            finally
+            {
+                _sessions.WriteGate.Release();
+            }
         }
 
-        public bool DeleteData(IEnumerable<string> filePaths)
+        public async Task<bool> DeleteDataAsync(IEnumerable<string> filePaths, CancellationToken cancellationToken = default)
         {
             if (filePaths == null || !filePaths.Any())
             {
                 return true;
             }
 
-            bool allSuccess = true;
-            foreach (var filePath in filePaths)
+            await _sessions.WriteGate.WaitAsync(cancellationToken);
+            try
             {
-                try
+                bool allSuccess = true;
+                foreach (var filePath in filePaths)
                 {
-                    var sourcePath = _storage.ResolveActiveKey(filePath);
-                    if (!File.Exists(sourcePath))
+                    try
+                    {
+                        var keyHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(filePath))).ToLowerInvariant();
+                        var receiptsDir = _storage.Resolve(StorageArea.Deleted, "receipts");
+                        Directory.CreateDirectory(receiptsDir);
+                        var receiptPath = Path.Combine(receiptsDir, $"{keyHash}.json");
+
+                        if (File.Exists(receiptPath))
+                        {
+                            var existingJson = await File.ReadAllTextAsync(receiptPath, cancellationToken);
+                            var receipt = JsonSerializer.Deserialize<DeleteReceipt>(existingJson);
+                            if (receipt?.State == "Completed")
+                            {
+                                continue;
+                            }
+                        }
+
+                        var sourcePath = _storage.ResolveActiveKey(filePath);
+                        if (!File.Exists(sourcePath))
+                        {
+                            allSuccess = false;
+                            continue;
+                        }
+
+                        var deletionId = Guid.NewGuid().ToString("D");
+                        var fileName = Path.GetFileName(sourcePath);
+                        var destPath = _storage.Resolve(StorageArea.Deleted, deletionId, fileName);
+
+                        var pendingReceipt = new DeleteReceipt(filePath, deletionId, DateTimeOffset.UtcNow, "Pending", destPath);
+                        await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(pendingReceipt), cancellationToken);
+
+                        var destDir = Path.GetDirectoryName(destPath)!;
+                        Directory.CreateDirectory(destDir);
+                        File.Move(sourcePath, destPath);
+
+                        var completedReceipt = pendingReceipt with { State = "Completed" };
+                        await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(completedReceipt), cancellationToken);
+                    }
+                    catch (Exception)
                     {
                         allSuccess = false;
-                        continue;
                     }
-
-                    var deletionId = Guid.NewGuid().ToString("D");
-                    var fileName = Path.GetFileName(sourcePath);
-                    var destPath = _storage.Resolve(StorageArea.Deleted, deletionId, fileName);
-
-                    var destDir = Path.GetDirectoryName(destPath)!;
-                    Directory.CreateDirectory(destDir);
-
-                    File.Move(sourcePath, destPath);
                 }
-                catch (Exception)
-                {
-                    allSuccess = false;
-                }
+
+                return allSuccess;
             }
-
-            return allSuccess;
+            finally
+            {
+                _sessions.WriteGate.Release();
+            }
         }
 
-        public string UploadAvatar(string folderUploadId, string oldImage)
+        public async Task<string> UploadAvatarAsync(string folderUploadId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(folderUploadId) ||
                 !Guid.TryParseExact(folderUploadId, "D", out var folderGuid) ||
@@ -266,50 +368,66 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             var actorId = GetActorId();
-            var sessionDir = _storage.ResolveSession(actorId, folderGuid);
-            if (!Directory.Exists(sessionDir))
-            {
-                return oldImage ?? string.Empty;
-            }
 
-            var session = _sessions.ReadAsync(actorId, folderGuid, CancellationToken.None).GetAwaiter().GetResult();
-            var sourceDir = session != null
-                ? Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"))
-                : sessionDir;
-
-            if (!Directory.Exists(sourceDir))
-            {
-                return oldImage ?? string.Empty;
-            }
-
-            var files = Directory.GetFiles(sourceDir);
-            if (files.Length == 0)
-            {
-                return oldImage ?? string.Empty;
-            }
-
-            var firstFile = files[0];
-            var ext = Path.GetExtension(firstFile).ToLowerInvariant();
-            var avatarGuid = Guid.NewGuid();
-            var avatarFileName = $"{avatarGuid:D}{ext}";
-            var avatarPath = _storage.ResolveAvatar(avatarFileName);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(avatarPath)!);
-            File.Move(firstFile, avatarPath, overwrite: true);
-
+            await _sessions.WriteGate.WaitAsync(cancellationToken);
             try
             {
-                Directory.Delete(sessionDir, recursive: true);
-            }
-            catch
-            {
-                // Best-effort cleanup
-            }
+                var session = await _sessions.ReadAsync(actorId, folderGuid, cancellationToken);
+                if (session == null)
+                {
+                    throw new BusinessException("Phiên tải lên không tồn tại", 404);
+                }
 
-            return $"System/Avatar/{avatarFileName}";
+                if (session.Files.Count != 1)
+                {
+                    throw new BusinessException("Chỉ cho phép tải lên đúng một tệp hình ảnh đại diện", 400);
+                }
+
+                var storedFile = session.Files[0];
+                var sessionDir = _storage.ResolveSession(actorId, folderGuid);
+                var sourcePath = Path.Combine(sessionDir, "batches", session.BatchId.ToString("D"), $"{storedFile.Id:D}{storedFile.Extension}");
+
+                if (!File.Exists(sourcePath))
+                {
+                    throw new BusinessException("Tệp avatar không tồn tại", 404);
+                }
+
+                // Bounded header validation: PNG, JPEG, WebP
+                var headerBytes = new byte[16];
+                using (var fs = File.OpenRead(sourcePath))
+                {
+                    var read = await fs.ReadAsync(headerBytes, 0, headerBytes.Length, cancellationToken);
+                    if (!IsValidRasterHeader(headerBytes, read))
+                    {
+                        throw new BusinessException("Định dạng tệp không phải ảnh raster hợp lệ (chỉ hỗ trợ PNG, JPEG, WebP)", 400);
+                    }
+                }
+
+                var avatarFileName = $"{storedFile.Id:D}{storedFile.Extension}";
+                var avatarPath = _storage.ResolveAvatar(avatarFileName);
+
+                if (!File.Exists(avatarPath))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(avatarPath)!);
+                    File.Copy(sourcePath, avatarPath, overwrite: false);
+                }
+
+                session = session with
+                {
+                    State = "Finalized",
+                    Target = new UploadTarget("Avatar", "System", "Avatar", null)
+                };
+                await _sessions.WriteAsync(session, cancellationToken);
+
+                return $"System/Avatar/{avatarFileName}";
+            }
+            finally
+            {
+                _sessions.WriteGate.Release();
+            }
         }
 
-        public async Task<ModelFilePreview> PreviewFileAsync(string fileUrl)
+        public async Task<ModelFilePreview> PreviewFileAsync(string fileUrl, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(fileUrl))
             {
@@ -329,7 +447,7 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             var originalContentType = GetContentType(absolutePath);
-            var fileContent = await File.ReadAllBytesAsync(absolutePath);
+            var fileContent = await File.ReadAllBytesAsync(absolutePath, cancellationToken);
             var fileName = Path.GetFileName(absolutePath);
 
             return new ModelFilePreview
@@ -339,6 +457,60 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 FileName = fileName,
                 OriginalContentType = originalContentType
             };
+        }
+
+        public async Task<ModelFilePreview> PreviewAvatarAsync(string fileName, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new BusinessException("Tên tệp không hợp lệ", 400);
+            }
+
+            var absolutePath = _storage.ResolveAvatar(fileName);
+            if (!File.Exists(absolutePath))
+            {
+                throw new BusinessException("Tệp không tồn tại", 404);
+            }
+
+            var fileInfo = new FileInfo(absolutePath);
+            if (fileInfo.Length > FileStorage.MaxFileBytes)
+            {
+                throw new BusinessException("Kích thước tệp vượt quá giới hạn", 413);
+            }
+
+            var originalContentType = GetContentType(absolutePath);
+            var fileContent = await File.ReadAllBytesAsync(absolutePath, cancellationToken);
+
+            return new ModelFilePreview
+            {
+                FileContent = fileContent,
+                ContentType = originalContentType,
+                FileName = Path.GetFileName(absolutePath),
+                OriginalContentType = originalContentType
+            };
+        }
+
+        private static bool IsValidRasterHeader(byte[] buffer, int length)
+        {
+            if (length >= 8 && buffer.Take(8).SequenceEqual(PngHeader))
+            {
+                return true;
+            }
+
+            if (length >= 3 && buffer.Take(3).SequenceEqual(JpegHeader))
+            {
+                return true;
+            }
+
+            // WebP: RIFF at 0..3, WEBP at 8..11
+            if (length >= 12 &&
+                buffer[0] == (byte)'R' && buffer[1] == (byte)'I' && buffer[2] == (byte)'F' && buffer[3] == (byte)'F' &&
+                buffer[8] == (byte)'W' && buffer[9] == (byte)'E' && buffer[10] == (byte)'B' && buffer[11] == (byte)'P')
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private static void ValidateUploadFileName(string fileName)

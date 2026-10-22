@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
+using System.Text;
 
 var mode = args.Length > 0 ? args[0].TrimStart('-').ToLowerInvariant() : "all";
 var temporaryRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));
@@ -28,6 +29,11 @@ if (mode is "paths" or "all")
 if (mode is "sessions" or "all")
 {
     await RunSessionsChecksAsync();
+}
+
+if (mode is "lifecycle" or "all")
+{
+    await RunLifecycleChecksAsync();
 }
 
 Console.WriteLine($"FileService checks: {failures} failure(s).");
@@ -150,23 +156,24 @@ async Task RunRemovalChecksAsync()
             using var uploadStream = new MemoryStream(bytes);
             var upload = new FormFile(uploadStream, 0, bytes.Length, "files", "attachment.txt");
             await service.Insert(new List<IFormFile> { upload }, folderId);
-            var attachments = service.UploadData(relatedId, "System", "Attachments", folderId);
+            var attachments = await service.UploadDataAsync(relatedId.ToString("D"), "System", "Attachments", folderId);
             Require(attachments.Count == 1, "Finalized attachment was not returned.");
             var original = await service.PreviewFileAsync(attachments[0].FileUrl);
             Require(original.FileContent.SequenceEqual(bytes), "Finalized attachment bytes changed.");
-            Require(service.DeleteData(new[] { attachments[0].FileUrl }), "Attachment deletion failed.");
+            Require(await service.DeleteDataAsync(new[] { attachments[0].FileUrl }), "Attachment deletion failed.");
             Require(!File.Exists(Path.Combine(privateRoot, "Files", attachments[0].FileUrl)), "Deleted attachment remains at its old path.");
 
             var avatarFolderId = Guid.NewGuid().ToString("D");
-            using var avatarStream = new MemoryStream(bytes);
-            var avatar = new FormFile(avatarStream, 0, bytes.Length, "files", "avatar.png");
+            var pngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4 };
+            using var avatarStream = new MemoryStream(pngBytes);
+            var avatar = new FormFile(avatarStream, 0, pngBytes.Length, "files", "avatar.png");
             await service.Insert(new List<IFormFile> { avatar }, avatarFolderId);
-            var avatarPath = service.UploadAvatar(avatarFolderId, "");
+            var avatarPath = await service.UploadAvatarAsync(avatarFolderId);
             Require(avatarPath.StartsWith("System/Avatar/", StringComparison.Ordinal), "Avatar path changed.");
             var avatarFileName = Path.GetFileName(avatarPath);
             var storedAvatarPath = Path.Combine(privateRoot, "Avatars", avatarFileName);
             Require(File.Exists(storedAvatarPath), "Stored avatar does not exist.");
-            Require((await File.ReadAllBytesAsync(storedAvatarPath)).SequenceEqual(bytes), "Avatar bytes changed.");
+            Require((await File.ReadAllBytesAsync(storedAvatarPath)).SequenceEqual(pngBytes), "Avatar bytes changed.");
         });
     }
     finally
@@ -299,7 +306,7 @@ async Task RunPathsChecksAsync()
             bool rejected = false;
             try
             {
-                service.UploadData(Guid.NewGuid(), "UnregisteredService", "UnregisteredModule", folderId);
+                await service.UploadDataAsync(Guid.NewGuid().ToString("D"), "UnregisteredService", "UnregisteredModule", folderId);
             }
             catch (BusinessException)
             {
@@ -741,6 +748,297 @@ async Task RunSessionsChecksAsync()
             }
 
             Require(threw, "corrupt manifest must fail closed with 409 Conflict");
+        });
+    }
+    finally
+    {
+        Require(Path.GetDirectoryName(Path.GetFullPath(fixtureDir)) == temporaryRoot, "Unsafe fixture cleanup path.");
+        Directory.Delete(fixtureDir, recursive: true);
+    }
+}
+
+async Task RunLifecycleChecksAsync()
+{
+    var fixtureDir = Path.Combine(temporaryRoot, $"blocks-lifecycle-check-{Guid.NewGuid():N}");
+    var webRoot = Path.Combine(fixtureDir, "www");
+    var privateRoot = Path.Combine(fixtureDir, "storage");
+
+    Directory.CreateDirectory(webRoot);
+    Directory.CreateDirectory(privateRoot);
+
+    try
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = "Production",
+            ContentRootPath = fixtureDir,
+            WebRootPath = webRoot
+        });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["GrpcClients:SystemService"] = "http://127.0.0.1:1",
+            ["FileStorage:RootPath"] = privateRoot
+        });
+        builder.ExecuteConfigService();
+        await using var app = builder.Build();
+        using var scope = app.Services.CreateScope();
+
+        var httpContextAccessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var actorId = Guid.NewGuid();
+        httpContextAccessor.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim("name", actorId.ToString("D"))
+            }, "TestAuth"))
+        };
+
+        var service = scope.ServiceProvider.GetRequiredService<IUploadFileService>();
+        var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
+        var sessionStore = scope.ServiceProvider.GetRequiredService<UploadSessionStore>();
+
+        await CheckAsync("partial_finalize_preserves_source", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+
+            var b1 = new byte[] { 1, 2, 3 };
+            var b2 = new byte[] { 4, 5, 6 };
+            using var ms1 = new MemoryStream(b1);
+            using var ms2 = new MemoryStream(b2);
+            await service.Insert(new List<IFormFile>
+            {
+                new FormFile(ms1, 0, b1.Length, "files", "f1.txt"),
+                new FormFile(ms2, 0, b2.Length, "files", "f2.txt")
+            }, folderStr);
+
+            var session = await sessionStore.ReadAsync(actorId, folderId, CancellationToken.None);
+            var file2Id = session!.Files[1].Id;
+
+            // Create a directory at destination for file2 to trigger copy error
+            var relatedId = Guid.NewGuid();
+            var conflictDir = storage.Resolve(StorageArea.Files, "System", "Attachments", relatedId.ToString("D"), $"{file2Id:D}.txt");
+            Directory.CreateDirectory(conflictDir);
+
+            bool threw = false;
+            try
+            {
+                await service.UploadDataAsync(relatedId.ToString("D"), "System", "Attachments", folderStr);
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
+
+            Require(threw, "finalize must throw on destination directory conflict");
+
+            // Source files must be preserved intact!
+            var batchDir = Path.Combine(storage.ResolveSession(actorId, folderId), "batches", session.BatchId.ToString("D"));
+            var s1 = Path.Combine(batchDir, $"{session.Files[0].Id:D}.txt");
+            var s2 = Path.Combine(batchDir, $"{session.Files[1].Id:D}.txt");
+            Require(File.Exists(s1) && File.Exists(s2), "source files preserved on partial finalize failure");
+            Require(File.ReadAllBytes(s1).SequenceEqual(b1), "source file 1 bytes unchanged");
+            Require(File.ReadAllBytes(s2).SequenceEqual(b2), "source file 2 bytes unchanged");
+        });
+
+        await CheckAsync("retry_returns_same_keys", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+            var b = new byte[] { 7, 8, 9 };
+            using var ms = new MemoryStream(b);
+            await service.Insert(new List<IFormFile> { new FormFile(ms, 0, b.Length, "files", "item.txt") }, folderStr);
+
+            var relatedId = Guid.NewGuid().ToString("D");
+            var first = await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+            var retry = await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+
+            Require(first.Select(f => f.FileUrl).SequenceEqual(retry.Select(f => f.FileUrl)), "stable retry keys");
+            Require(first.Select(f => f.Id).SequenceEqual(retry.Select(f => f.Id)), "stable attachment IDs");
+        });
+
+        await CheckAsync("different_target_is_rejected", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+            var b = new byte[] { 10, 11, 12 };
+            using var ms = new MemoryStream(b);
+            await service.Insert(new List<IFormFile> { new FormFile(ms, 0, b.Length, "files", "target_test.txt") }, folderStr);
+
+            var relatedId1 = Guid.NewGuid().ToString("D");
+            var relatedId2 = Guid.NewGuid().ToString("D");
+            await service.UploadDataAsync(relatedId1, "System", "Attachments", folderStr);
+
+            bool rejected = false;
+            try
+            {
+                await service.UploadDataAsync(relatedId2, "System", "Attachments", folderStr);
+            }
+            catch (BusinessException ex) when (ex.StatusCode == 409)
+            {
+                rejected = true;
+            }
+
+            Require(rejected, "finalized session called with different target must be rejected with 409");
+        });
+
+        await CheckAsync("finalized_session_cannot_be_replaced", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+            var b = new byte[] { 13, 14, 15 };
+            using var ms = new MemoryStream(b);
+            await service.Insert(new List<IFormFile> { new FormFile(ms, 0, b.Length, "files", "sealed.txt") }, folderStr);
+
+            var relatedId = Guid.NewGuid().ToString("D");
+            await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+
+            bool rejected = false;
+            try
+            {
+                using var msNew = new MemoryStream(new byte[] { 16, 17 });
+                await service.Insert(new List<IFormFile> { new FormFile(msNew, 0, 2, "files", "new.txt") }, folderStr);
+            }
+            catch (BusinessException ex) when (ex.StatusCode == 409)
+            {
+                rejected = true;
+            }
+
+            Require(rejected, "inserting into finalized session must be rejected with 409");
+        });
+
+        await CheckAsync("deleted_or_missing_receipt_target_is_not_resurrected", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+            var b = new byte[] { 18, 19, 20 };
+            using var ms = new MemoryStream(b);
+            await service.Insert(new List<IFormFile> { new FormFile(ms, 0, b.Length, "files", "ephemeral.txt") }, folderStr);
+
+            var relatedId = Guid.NewGuid().ToString("D");
+            var res = await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+            var destPath = storage.ResolveActiveKey(res[0].FileUrl);
+            File.Delete(destPath); // Target missing
+
+            bool rejected = false;
+            try
+            {
+                await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+            }
+            catch (BusinessException ex) when (ex.StatusCode == 409)
+            {
+                rejected = true;
+            }
+
+            Require(rejected, "missing finalized target must fail closed with 409, no resurrection");
+        });
+
+        await CheckAsync("delete_retry_is_distinguished_from_unknown_key", async () =>
+        {
+            var folderId = Guid.NewGuid();
+            var folderStr = folderId.ToString("D");
+            var b = new byte[] { 21, 22, 23 };
+            using var ms = new MemoryStream(b);
+            await service.Insert(new List<IFormFile> { new FormFile(ms, 0, b.Length, "files", "to_delete.txt") }, folderStr);
+
+            var relatedId = Guid.NewGuid().ToString("D");
+            var res = await service.UploadDataAsync(relatedId, "System", "Attachments", folderStr);
+            var fileUrl = res[0].FileUrl;
+            var originalPath = storage.ResolveActiveKey(fileUrl);
+
+            Require(await service.DeleteDataAsync(new[] { fileUrl }), "first delete succeeds");
+            Require(!File.Exists(originalPath), "original file moved");
+
+            // Delete retry returns true because of receipt
+            Require(await service.DeleteDataAsync(new[] { fileUrl }), "delete retry with receipt succeeds");
+
+            // Unknown key without receipt returns false
+            var fakeKey = $"System/Attachments/{Guid.NewGuid():D}/{Guid.NewGuid():D}.txt";
+            Require(!await service.DeleteDataAsync(new[] { fakeKey }), "unknown key returns false");
+        });
+
+        await CheckAsync("avatar_rejects_multiple_or_non_raster_files", async () =>
+        {
+            // Multiple files
+            var multiFolder = Guid.NewGuid();
+            using var m1 = new MemoryStream(new byte[] { 1 });
+            using var m2 = new MemoryStream(new byte[] { 2 });
+            await service.Insert(new List<IFormFile>
+            {
+                new FormFile(m1, 0, 1, "files", "a.png"),
+                new FormFile(m2, 0, 1, "files", "b.png")
+            }, multiFolder.ToString("D"));
+
+            bool multiRejected = false;
+            try
+            {
+                await service.UploadAvatarAsync(multiFolder.ToString("D"));
+            }
+            catch (BusinessException)
+            {
+                multiRejected = true;
+            }
+            Require(multiRejected, "multiple avatar files must be rejected");
+
+            // Non-raster: text file disguised as png
+            var fakeFolder = Guid.NewGuid();
+            var fakePng = Encoding.UTF8.GetBytes("<svg>fake</svg>");
+            using var mFake = new MemoryStream(fakePng);
+            await service.Insert(new List<IFormFile> { new FormFile(mFake, 0, fakePng.Length, "files", "fake.png") }, fakeFolder.ToString("D"));
+
+            bool fakeRejected = false;
+            try
+            {
+                await service.UploadAvatarAsync(fakeFolder.ToString("D"));
+            }
+            catch (BusinessException)
+            {
+                fakeRejected = true;
+            }
+            Require(fakeRejected, "non-raster content disguised as PNG must be rejected");
+
+            // Valid PNG
+            var pngFolder = Guid.NewGuid();
+            var validPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 1 };
+            using var mPng = new MemoryStream(validPng);
+            await service.Insert(new List<IFormFile> { new FormFile(mPng, 0, validPng.Length, "files", "valid.png") }, pngFolder.ToString("D"));
+            var pngKey = await service.UploadAvatarAsync(pngFolder.ToString("D"));
+            Require(pngKey.StartsWith("System/Avatar/"), "valid PNG avatar uploaded");
+
+            // Valid JPEG
+            var jpegFolder = Guid.NewGuid();
+            var validJpeg = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, 0x4A, 0x46 };
+            using var mJpeg = new MemoryStream(validJpeg);
+            await service.Insert(new List<IFormFile> { new FormFile(mJpeg, 0, validJpeg.Length, "files", "valid.jpg") }, jpegFolder.ToString("D"));
+            var jpegKey = await service.UploadAvatarAsync(jpegFolder.ToString("D"));
+            Require(jpegKey.StartsWith("System/Avatar/"), "valid JPEG avatar uploaded");
+
+            // Valid WebP
+            var webpFolder = Guid.NewGuid();
+            var validWebp = Encoding.ASCII.GetBytes("RIFF1234WEBPVP8 ......");
+            using var mWebp = new MemoryStream(validWebp);
+            await service.Insert(new List<IFormFile> { new FormFile(mWebp, 0, validWebp.Length, "files", "valid.webp") }, webpFolder.ToString("D"));
+            var webpKey = await service.UploadAvatarAsync(webpFolder.ToString("D"));
+            Require(webpKey.StartsWith("System/Avatar/"), "valid WebP avatar uploaded");
+        });
+
+        await CheckAsync("avatar_does_not_delete_old_image", async () =>
+        {
+            var oldAvatarFileName = $"{Guid.NewGuid():D}.png";
+            var oldAvatarPath = storage.ResolveAvatar(oldAvatarFileName);
+            var oldBytes = new byte[] { 99, 98, 97 };
+            Directory.CreateDirectory(Path.GetDirectoryName(oldAvatarPath)!);
+            await File.WriteAllBytesAsync(oldAvatarPath, oldBytes);
+
+            var newFolder = Guid.NewGuid();
+            var newPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 5, 6, 7 };
+            using var mNew = new MemoryStream(newPng);
+            await service.Insert(new List<IFormFile> { new FormFile(mNew, 0, newPng.Length, "files", "new.png") }, newFolder.ToString("D"));
+
+            var newAvatarKey = await service.UploadAvatarAsync(newFolder.ToString("D"));
+            Require(newAvatarKey.StartsWith("System/Avatar/"), "new avatar created");
+            Require(File.Exists(oldAvatarPath), "old avatar untouched by finalize");
+            Require(File.ReadAllBytes(oldAvatarPath).SequenceEqual(oldBytes), "old avatar bytes intact");
         });
     }
     finally

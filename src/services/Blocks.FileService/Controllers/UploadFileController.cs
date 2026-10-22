@@ -9,7 +9,7 @@ namespace Blocks.FileService.Controllers
     [ApiController]
     public class UploadFileController : BaseController<UploadFileController>
     {
-        IUploadFileService _service;
+        private readonly IUploadFileService _service;
 
         public UploadFileController(IUploadFileService service)
         {
@@ -28,10 +28,9 @@ namespace Blocks.FileService.Controllers
         [HttpPost("embed")]
         [RequestSizeLimit(52428800)]
         [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
-        public async Task<IActionResult> Embed(List<IFormFile> files, [FromForm] string FolderName)
+        public IActionResult Embed(List<IFormFile> files, [FromForm] string FolderName)
         {
-            var result = await _service.InsertAndReturn(files, FolderName);
-            return Ok(new BaseResponse<List<ModelAttachment>>(true, 200, result));
+            return Ok(new BaseResponse(false, 410, "SAR embeds are retired"));
         }
     }
 }
