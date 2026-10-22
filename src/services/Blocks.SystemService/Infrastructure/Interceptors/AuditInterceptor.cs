@@ -2,7 +2,6 @@ using System.Text.Json;
 using Blocks.Shared.Common;
 using Blocks.SystemService.Entities;
 using Blocks.SystemService.Infrastructure.Data;
-using Blocks.SystemService.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -12,17 +11,15 @@ namespace Blocks.SystemService.Infrastructure.Interceptors;
 public class AuditInterceptor : SaveChangesInterceptor
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ISystemReferenceGuard _referenceGuard;
 
     private static readonly HashSet<string> ExcludedProperties = new(StringComparer.OrdinalIgnoreCase)
     {
         "Password", "PasswordSalt", "Token", "RefreshToken"
     };
 
-    public AuditInterceptor(IHttpContextAccessor httpContextAccessor, ISystemReferenceGuard referenceGuard)
+    public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
     {
         _httpContextAccessor = httpContextAccessor;
-        _referenceGuard = referenceGuard;
     }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -74,7 +71,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         // EntityName = controller name from request path, or first entity type
         var controllerName = GetControllerName(httpContext) ?? entries.First().Entity.GetType().Name;
 
-        var userId = await ResolveAuditUserIdAsync(httpContext, cancellationToken);
+        var userId = await ResolveAuditUserIdAsync(context, httpContext, cancellationToken);
         if (!userId.HasValue)
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
 
@@ -100,13 +97,17 @@ public class AuditInterceptor : SaveChangesInterceptor
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private async Task<Guid?> ResolveAuditUserIdAsync(HttpContext? httpContext, CancellationToken cancellationToken)
+    private static async Task<Guid?> ResolveAuditUserIdAsync(
+        SystemContext context, HttpContext? httpContext, CancellationToken cancellationToken)
     {
         var claim = httpContext?.User?.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
-        if (!Guid.TryParse(claim, out var userId))
+        if (!Guid.TryParse(claim, out var userId) || userId == Guid.Empty)
             return null;
 
-        return await _referenceGuard.TryResolveExistingUserIdAsync(userId, cancellationToken);
+        // Reuse the saving context to avoid an options/interceptor/factory dependency cycle.
+        var exists = await context.Users.AsNoTracking()
+            .AnyAsync(user => user.Id == userId && !user.IsDeleted, cancellationToken);
+        return exists ? userId : null;
     }
 
     private static string InferAction(List<EntityEntry> entries)

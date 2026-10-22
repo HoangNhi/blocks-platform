@@ -51,7 +51,7 @@
 | `Blocks.slnx` | Backend solution; does not include the frontend project. |
 | `src/apps/Blocks.Web/` | React 19, TypeScript, Vite, Tailwind CSS, Radix UI, TanStack Query. |
 | `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
-| `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net8.0`. |
+| `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
 | `src/services/Blocks.CatalogService/` | Catalogs, standards, criteria; EF Core with MySQL; targets `net8.0`. |
 | `src/services/Blocks.FileService/` | Uploads, previews, conversion, watermarking; targets `net8.0`. |
 | `src/platform/Blocks.AppHost/` | Aspire orchestration; currently references missing services. |
@@ -89,6 +89,37 @@
   Preserve existing protobuf field numbers.
 - Changes under `Blocks.Shared` or `Blocks.ServiceDefaults` require checks of
   affected consumers, not only a build of the shared project.
+
+## Database MCP And Database-First Workflow
+
+- Prefer the local DBHub MCP server `blocks_dbhub` for database inspection and
+  explicitly requested SQL changes. Sources are `blocks_system_dev` for
+  SystemService PostgreSQL and `blocks_catalog_dev` for CatalogService MySQL.
+  Verify the selected source and database before executing SQL.
+- Local setup uses `.codex/config.toml` for the STDIO server and its working
+  directory, `.codex/dbhub.toml` for sources/tools, and `.codex/.env` for
+  `BLOCKS_SYSTEM_POSTGRES_DSN` and `BLOCKS_CATALOG_MYSQL_DSN`. This MCP setup does
+  not require .NET user secrets. These local files are ignored by Git; never
+  copy their secret values into tracked files, command output, or chat.
+- Start with `search_objects` and narrowly scoped `SELECT` queries. Limit rows
+  and avoid sensitive columns. Connection checks are read-only and do not
+  establish that DDL/DML permissions work.
+- Both sources are configured with `readonly = false`; this enables writes but
+  does not authorize unrequested changes. Apply DDL/DML only within explicitly
+  requested scope. Confirm destructive changes separately and verify backups
+  before changes that could lose data. Do not assume MySQL DDL can be rolled back.
+- Database-first means reviewing and recording SQL changes in Git, applying
+  authorized changes to the intended development database, then scaffolding the
+  affected service. DBHub does not scaffold C# code; use the existing EF tooling
+  with the project's actual provider and EF version.
+- Inspect existing entities, context, and scaffold options first. Use
+  `--no-onconfiguring` to avoid generating connection strings. Review the files
+  that `--force` would overwrite, preserve custom/partial code, and never purge
+  an entity directory. Review the generated diff and build/test the affected
+  service afterward.
+- If DBHub tools are unavailable, report that limitation. A local STDIO client
+  or database driver may use the same local configuration for the authorized
+  check; do not change credentials or permissions to bypass a connection error.
 
 ## Frontend Changes
 
@@ -140,6 +171,20 @@ Existing SystemService source-level regression check:
 ```
 
 This checks source references and file existence, not authentication behavior.
+The cleanup harness targets `net10.0`. Its DB-free checks are:
+
+```powershell
+dotnet run --project test/SystemService.CleanupChecks -- contract
+dotnet run --project test/SystemService.CleanupChecks -- runtime
+```
+
+The `runtime` mode checks EF/Npgsql SQL generation, startup, the unauthorized
+HTTP response envelope, and Swagger without opening a database connection.
+The `auth` mode also checks audit persistence through production DI. It requires
+`SYSTEMSERVICE_CLEANUP_TEST_CONNECTION` pointing to an isolated localhost database
+named `blocks_systemservice_cleanup_test`; it creates and drops a unique test
+schema. Never point it at a real application database.
+
 Add or update focused regression tests for behavior changes. Record baseline
 failures separately, and report exactly which checks ran, passed, failed, or
 could not run. Do not claim full-system success from isolated checks.

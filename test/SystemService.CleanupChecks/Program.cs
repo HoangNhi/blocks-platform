@@ -1,7 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
+using System.Text.Json;
 using AutoMapper;
 using Blocks.Shared.Exceptions;
+using Blocks.SystemService.Configs;
+using Blocks.SystemService.Controllers;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Requests;
 using Blocks.SystemService.DTOs.CoreFeature.RefreshToken.Requests;
 using Blocks.SystemService.Entities;
@@ -13,10 +16,14 @@ using Blocks.SystemService.Services.CoreFeature.Auth;
 using Blocks.SystemService.Services.CoreFeature.User;
 using Blocks.SystemService.Services.SystemGrpc;
 using Google.Protobuf.Reflection;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -26,7 +33,7 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/SystemService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: auth, contract");
+    Console.Error.WriteLine("Supported modes: auth, contract, runtime");
     return 1;
 }
 
@@ -45,16 +52,19 @@ if (mode == "auth")
         return 1;
     }
 }
-else if (mode == "contract")
+else if (mode == "contract" || mode == "runtime")
 {
     try
     {
-        RunContractChecks();
+        if (mode == "contract")
+            RunContractChecks();
+        else
+            await RunRuntimeChecksAsync();
         return 0;
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Contract check failed: {ex.Message}");
+        Console.Error.WriteLine($"{mode} check failed: {ex.Message}");
         return 1;
     }
 }
@@ -70,6 +80,78 @@ void Assert(bool condition, string name)
     {
         throw new InvalidOperationException($"Assertion failed: {name}");
     }
+}
+
+async Task RunRuntimeChecksAsync()
+{
+    Assert(Environment.Version.Major == 10, "checks run on .NET 10");
+    Assert(typeof(DbContext).Assembly.GetName().Version!.Major == 10, "EF Core 10 loaded");
+    Assert(typeof(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder)
+        .Assembly.GetName().Version!.Major == 10, "Npgsql EF Core provider 10 loaded");
+
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Production" });
+    builder.Host.UseDefaultServiceProvider(options =>
+    {
+        options.ValidateScopes = true;
+        options.ValidateOnBuild = true;
+    });
+    builder.Configuration.Sources.Clear();
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["ConnectionStrings:System"] = "Host=127.0.0.1;Port=1;Database=unused;Username=unused",
+        ["Jwt:Key"] = new string('x', 64),
+        ["Jwt:Issuer"] = "systemservice-runtime-checks",
+        ["Jwt:Audience"] = "systemservice-runtime-checks"
+    });
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+    builder.Services.AddControllers().AddApplicationPart(typeof(UserController).Assembly);
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+    builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+    builder.ExecuteConfigService();
+    builder.ExecuteConfigAuthentication();
+
+    await using var app = builder.Build();
+    app.UseSwagger();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
+
+    // Generate SQL without opening a connection or touching any database.
+    using (var scope = app.Services.CreateScope())
+    {
+        Console.WriteLine("Resolving SystemContext...");
+        var db = scope.ServiceProvider.GetRequiredService<SystemContext>();
+        Console.WriteLine("Generating PostgreSQL schema...");
+        var script = db.Database.GenerateCreateScript();
+        Assert(script.Contains("timestamp without time zone"), "legacy timestamp mapping preserved");
+        Assert(db.Users.Where(u => !u.IsDeleted).ToQueryString().Contains("is_deleted"),
+            "user query translates with PostgreSQL provider");
+        Console.WriteLine("Resolving AuthService...");
+        scope.ServiceProvider.GetRequiredService<IAuthService>();
+    }
+
+    await app.StartAsync();
+    try
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        using var response = await client.GetAsync("/api/User/get-current-user");
+        Assert(response.StatusCode == System.Net.HttpStatusCode.OK, "unauthorized HTTP envelope retained");
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert(!body.RootElement.GetProperty("Success").GetBoolean(), "unauthorized response fails");
+        Assert(body.RootElement.GetProperty("StatusCode").GetInt32() == 401, "unauthorized application code retained");
+        using var swagger = await client.GetAsync("/swagger/v1/swagger.json");
+        Assert(swagger.IsSuccessStatusCode, "Swagger generation succeeds");
+        using var document = JsonDocument.Parse(await swagger.Content.ReadAsStringAsync());
+        Assert(document.RootElement.GetProperty("paths").TryGetProperty("/api/User/get-current-user", out _),
+            "Swagger contains SystemService routes");
+    }
+    finally
+    {
+        await app.StopAsync();
+    }
+
+    Console.WriteLine("All runtime checks passed (no database connection).");
 }
 
 async Task ExpectBusinessExceptionAsync(Func<Task> action, string expectedMessage)
@@ -371,7 +453,7 @@ async Task RunAuthChecksAsync()
             await db.SaveChangesAsync();
         }
 
-        // 6. Run 15 test cases
+        // 6. Run auth checks and the production audit registration check.
         int passed = 0;
         int failed = 0;
 
@@ -627,6 +709,50 @@ async Task RunAuthChecksAsync()
 
             var newToken = await db.RefreshTokens.AsNoTracking().SingleAsync(t => t.Token == res.RefreshToken);
             Assert(newToken.UserId == normalActiveUser.Id, "new token belongs to user");
+        });
+
+        await RunCaseAsync("production_di_persists_audit", async _ =>
+        {
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Production" });
+            builder.Host.UseDefaultServiceProvider(options =>
+            {
+                options.ValidateScopes = true;
+                options.ValidateOnBuild = true;
+            });
+            builder.Configuration.Sources.Clear();
+            builder.Configuration.AddConfiguration(configuration);
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:System"] = scopedConnStr
+            });
+            builder.ExecuteConfigService();
+            await using var app = builder.Build();
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SystemContext>();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+            accessor.HttpContext = new DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                    new[] { new System.Security.Claims.Claim("name", normalActiveUser.Id.ToString()) }, "test"))
+            };
+            try
+            {
+                var user = await db.Users.SingleAsync(u => u.Id == normalActiveUser.Id);
+                user.Fullname = "Audit Test";
+                await db.SaveChangesAsync();
+                var audit = await db.AuditLogs.AsNoTracking().SingleAsync();
+                Assert(audit.UserId == normalActiveUser.Id, "audit references authenticated user");
+                Assert(audit.IsSuccess && audit.Action == "UPDATE", "audit records successful update");
+                using var values = JsonDocument.Parse(audit.NewValues!);
+                Assert(values.RootElement.GetProperty("User")[0].GetProperty("Fullname").GetString() == "Audit Test",
+                    "audit contains updated user values");
+            }
+            finally
+            {
+                accessor.HttpContext = null;
+                await transaction.RollbackAsync();
+            }
         });
 
         Console.WriteLine($"\nSummary: {passed} passed, {failed} failed (total {passed + failed})");

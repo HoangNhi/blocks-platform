@@ -35,7 +35,8 @@ namespace Blocks.SystemService.Configs
             builder.Services.AddScoped<Blocks.SystemService.Infrastructure.Interceptors.AuditInterceptor>();
 
             builder.Services.AddDbContextFactory<SystemContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("System")));
+                options.UseNpgsql(builder.Configuration.GetConnectionString("System")),
+                ServiceLifetime.Scoped);
 
             //DATABASE
             builder.Services.AddDbContext<SystemContext>((sp, options) =>
