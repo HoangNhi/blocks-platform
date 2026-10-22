@@ -444,12 +444,99 @@ async Task RunAuthChecksAsync()
             ReplacedByToken = null
         };
 
+        var normalInactiveValidToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalInactiveUser.Id,
+            Token = "normal-inactive-valid-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = null,
+            ReplacedByToken = null
+        };
+
+        var normalDeletedValidToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalDeletedUser.Id,
+            Token = "normal-deleted-valid-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = null,
+            ReplacedByToken = null
+        };
+
+        var normalInactiveRevokedToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalInactiveUser.Id,
+            Token = "normal-inactive-revoked-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = DateTime.UtcNow,
+            RevokedByIp = "127.0.0.1",
+            ReasonRevoked = "Testing",
+            ReplacedByToken = "normal-inactive-child-token"
+        };
+
+        var normalInactiveChildActiveToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalInactiveUser.Id,
+            Token = "normal-inactive-child-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = null,
+            ReplacedByToken = null
+        };
+
+        var normalDeletedRevokedToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalDeletedUser.Id,
+            Token = "normal-deleted-revoked-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = DateTime.UtcNow,
+            RevokedByIp = "127.0.0.1",
+            ReasonRevoked = "Testing",
+            ReplacedByToken = "normal-deleted-child-token"
+        };
+
+        var normalDeletedChildActiveToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = normalDeletedUser.Id,
+            Token = "normal-deleted-child-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = "127.0.0.1",
+            RevokedAt = null,
+            ReplacedByToken = null
+        };
+
         using (var seedScope = serviceProvider.CreateScope())
         {
             var db = seedScope.ServiceProvider.GetRequiredService<SystemContext>();
             db.Roles.AddRange(extRole, normalRole);
             db.Users.AddRange(normalActiveUser, normalInactiveUser, normalDeletedUser, extActiveUser, extInactiveUser);
-            db.RefreshTokens.AddRange(extActiveValidToken, extInactiveValidToken, normalValidToken, normalExpiredToken, normalRevokedToken);
+            db.RefreshTokens.AddRange(
+                extActiveValidToken,
+                extInactiveValidToken,
+                normalValidToken,
+                normalExpiredToken,
+                normalRevokedToken,
+                normalInactiveValidToken,
+                normalDeletedValidToken,
+                normalInactiveRevokedToken,
+                normalInactiveChildActiveToken,
+                normalDeletedRevokedToken,
+                normalDeletedChildActiveToken);
             await db.SaveChangesAsync();
         }
 
@@ -710,6 +797,42 @@ async Task RunAuthChecksAsync()
             var newToken = await db.RefreshTokens.AsNoTracking().SingleAsync(t => t.Token == res.RefreshToken);
             Assert(newToken.UserId == normalActiveUser.Id, "new token belongs to user");
         });
+
+        async Task RunDeniedTokenCaseAsync(string name, string tokenValue)
+        {
+            await RunCaseAsync(name, async sp =>
+            {
+                var auth = sp.GetRequiredService<IAuthService>();
+                var db = sp.GetRequiredService<SystemContext>();
+                var beforeCount = await db.RefreshTokens.CountAsync();
+                var beforeRows = (await db.RefreshTokens.AsNoTracking().OrderBy(t => t.Id)
+                    .Select(t => new { t.Id, t.UserId, t.Token, t.RevokedAt, t.RevokedByIp, t.ReasonRevoked, t.ReplacedByToken })
+                    .ToListAsync())
+                    .Select(t => (t.Id, t.UserId, t.Token, t.RevokedAt, t.RevokedByIp, t.ReasonRevoked, t.ReplacedByToken))
+                    .ToList();
+
+                var request = new RefreshTokenRequest { RefreshToken = tokenValue };
+
+                await ExpectBusinessExceptionAsync(
+                    () => Task.FromResult(auth.RefreshToken(request, "127.0.0.1")),
+                    "Token không hợp lệ");
+
+                var afterCount = await db.RefreshTokens.CountAsync();
+                var afterRows = (await db.RefreshTokens.AsNoTracking().OrderBy(t => t.Id)
+                    .Select(t => new { t.Id, t.UserId, t.Token, t.RevokedAt, t.RevokedByIp, t.ReasonRevoked, t.ReplacedByToken })
+                    .ToListAsync())
+                    .Select(t => (t.Id, t.UserId, t.Token, t.RevokedAt, t.RevokedByIp, t.ReasonRevoked, t.ReplacedByToken))
+                    .ToList();
+
+                Assert(beforeCount == afterCount, "no new token");
+                Assert(beforeRows.SequenceEqual(afterRows), "tokens and descendants unchanged");
+            });
+        }
+
+        await RunDeniedTokenCaseAsync("refresh_normal_inactive_denied", "normal-inactive-valid-token");
+        await RunDeniedTokenCaseAsync("refresh_normal_deleted_denied", "normal-deleted-valid-token");
+        await RunDeniedTokenCaseAsync("refresh_inactive_revoked_chain_unchanged", "normal-inactive-revoked-token");
+        await RunDeniedTokenCaseAsync("refresh_deleted_revoked_chain_unchanged", "normal-deleted-revoked-token");
 
         await RunCaseAsync("production_di_persists_audit", async _ =>
         {

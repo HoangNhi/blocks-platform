@@ -80,7 +80,7 @@ namespace Blocks.SystemService.Services.CoreFeature.Auth
         public ModelToken RefreshToken(RefreshTokenRequest request, string ipAddress)
         {
             var user = getUserByRefreshToken(request.RefreshToken);
-            if (user == null || user.RoleId == ExtRoleId)
+            if (user == null || user.IsDeleted || !user.IsActived || user.RoleId == ExtRoleId)
             {
                 throw new BusinessException("Token không hợp lệ");
             }
