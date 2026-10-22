@@ -22,9 +22,14 @@ namespace Blocks.SystemService.Services.SystemGrpc
 
         public override async Task<CheckActionResponse> CheckPermission(CheckPermissionRequest request, ServerCallContext context)
         {
+            if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
+            {
+                return new CheckActionResponse { Success = false };
+            }
+
             var permission = await _userService.CheckPermission(new DTOs.CoreFeature.User.Requests.CheckPermissionRequest
             {
-                UserId = Guid.Parse(request.UserId),
+                UserId = userId,
                 Controller = request.Controller,
                 Action = request.Action
             });
@@ -37,7 +42,16 @@ namespace Blocks.SystemService.Services.SystemGrpc
 
         public override async Task<GetUsersByIdsResponse> GetUsersByIds(GetUsersByIdsRequest request, ServerCallContext context)
         {
-            var ids = request.UserIds.Select(Guid.Parse).ToList();
+            var ids = new List<Guid>(request.UserIds.Count);
+            foreach (var idStr in request.UserIds)
+            {
+                if (!Guid.TryParse(idStr, out var id) || id == Guid.Empty)
+                {
+                    throw new RpcException(new Status(StatusCode.InvalidArgument, "UserIds không hợp lệ."));
+                }
+                ids.Add(id);
+            }
+
             var users = await _userService.GetByIds(ids);
 
             var response = new GetUsersByIdsResponse();

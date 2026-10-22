@@ -16,7 +16,10 @@ using Blocks.SystemService.Protos;
 using Blocks.SystemService.Services.CoreFeature.Auth;
 using Blocks.SystemService.Services.CoreFeature.User;
 using Blocks.SystemService.Services.SystemGrpc;
+using Google.Protobuf;
 using Google.Protobuf.Reflection;
+using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -31,6 +34,7 @@ using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
 if (args.Length == 0)
 {
@@ -105,6 +109,55 @@ string CreateTestJwt(Guid userId, string username, Guid roleId, string key, Date
         expires: exp,
         signingCredentials: credentials);
     return new JwtSecurityTokenHandler().WriteToken(token);
+}
+
+async Task<TResponse> CallSystemRpcAsync<TRequest, TResponse>(
+    GrpcChannel channel,
+    string methodName,
+    TRequest request,
+    MessageParser<TRequest> requestParser,
+    MessageParser<TResponse> responseParser,
+    string? accessToken = null)
+    where TRequest : class, IMessage<TRequest>
+    where TResponse : class, IMessage<TResponse>
+{
+    var method = new Method<TRequest, TResponse>(
+        MethodType.Unary,
+        "system.SystemProto",
+        methodName,
+        Marshallers.Create(r => r.ToByteArray(), data => requestParser.ParseFrom(data)),
+        Marshallers.Create(r => r.ToByteArray(), data => responseParser.ParseFrom(data)));
+
+    var headers = new Metadata();
+    if (!string.IsNullOrEmpty(accessToken))
+    {
+        headers.Add("authorization", $"Bearer {accessToken}");
+    }
+
+    var options = new CallOptions(headers, deadline: DateTime.UtcNow.AddSeconds(10));
+    using var call = channel.CreateCallInvoker().AsyncUnaryCall(method, null, options, request);
+    return await call.ResponseAsync;
+}
+
+async Task ExpectRpcExceptionAsync(Func<Task> action, Grpc.Core.StatusCode expectedStatus)
+{
+    try
+    {
+        await action();
+        throw new InvalidOperationException($"Expected RpcException with status {expectedStatus}, but call succeeded.");
+    }
+    catch (RpcException ex) when (ex.StatusCode == expectedStatus)
+    {
+        // Status matched
+    }
+    catch (RpcException ex)
+    {
+        throw new InvalidOperationException($"Expected RpcException with status {expectedStatus}, but got {ex.StatusCode}: {ex.Status.Detail}");
+    }
+    catch (Exception ex)
+    {
+        throw new InvalidOperationException($"Expected RpcException with status {expectedStatus}, but got {ex.GetType().Name}: {ex.Message}");
+    }
 }
 
 async Task<WebApplication> StartTestAppAsync(IConfiguration configuration, bool http2 = false)
@@ -227,6 +280,61 @@ async Task RunRuntimeChecksAsync()
     finally
     {
         await app.StopAsync();
+    }
+
+    await using var grpcApp = await StartTestAppAsync(runtimeConfig, http2: true);
+    try
+    {
+        using var channel = GrpcChannel.ForAddress(grpcApp.Urls.Single());
+        var validJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('x', 64));
+
+        // grpc_permission_invalid_guid_denied
+        foreach (var invalidId in new[] { "", "not-a-guid", Guid.Empty.ToString() })
+        {
+            var req = new CheckPermissionRequest
+            {
+                UserId = invalidId,
+                Controller = "User",
+                Action = 1
+            };
+            var resp = await CallSystemRpcAsync(channel, "CheckPermission", req,
+                CheckPermissionRequest.Parser, CheckActionResponse.Parser, validJwt);
+            Assert(!resp.Success, $"CheckPermission invalid guid '{invalidId}' returns Success=false");
+        }
+
+        // grpc_users_invalid_guid_rejected
+        var invalidIdGroups = new[]
+        {
+            new[] { "not-a-guid" },
+            new[] { "" },
+            new[] { Guid.Empty.ToString() },
+            new[] { Guid.NewGuid().ToString(), "not-a-guid" },
+            new[] { Guid.NewGuid().ToString(), Guid.Empty.ToString() },
+            new[] { Guid.NewGuid().ToString(), "" }
+        };
+        foreach (var group in invalidIdGroups)
+        {
+            await ExpectRpcExceptionAsync(async () =>
+            {
+                var req = new GetUsersByIdsRequest();
+                req.UserIds.AddRange(group);
+                await CallSystemRpcAsync(channel, "GetUsersByIds", req,
+                    GetUsersByIdsRequest.Parser, GetUsersByIdsResponse.Parser, validJwt);
+            }, Grpc.Core.StatusCode.InvalidArgument);
+        }
+
+        // grpc_without_token_unauthenticated
+        await ExpectRpcExceptionAsync(async () =>
+        {
+            var req = new GetUsersByIdsRequest();
+            req.UserIds.Add(Guid.NewGuid().ToString());
+            await CallSystemRpcAsync(channel, "GetUsersByIds", req,
+                GetUsersByIdsRequest.Parser, GetUsersByIdsResponse.Parser, accessToken: null);
+        }, Grpc.Core.StatusCode.Unauthenticated);
+    }
+    finally
+    {
+        await grpcApp.StopAsync();
     }
 
     Console.WriteLine("All runtime checks passed (no database connection).");
@@ -1013,6 +1121,78 @@ async Task RunAuthChecksAsync()
                 await app.StopAsync();
             }
         });
+
+        var grpcAuthAppConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:System"] = scopedConnStr,
+            ["Jwt:Key"] = new string('x', 64),
+            ["Jwt:Issuer"] = "systemservice-cleanup-checks",
+            ["Jwt:Audience"] = "systemservice-cleanup-checks",
+            ["Jwt:Expiry"] = "1",
+            ["Jwt:ExpireRefreshToken"] = "2",
+            ["GrpcClients:FileService"] = "http://127.0.0.1:1"
+        }).Build();
+
+        await using var grpcAuthApp = await StartTestAppAsync(grpcAuthAppConfig, http2: true);
+        try
+        {
+            using var grpcAuthChannel = GrpcChannel.ForAddress(grpcAuthApp.Urls.Single());
+            var authValidJwt = CreateTestJwt(normalActiveUser.Id, normalActiveUser.Username, normalRoleId, new string('x', 64));
+
+            await RunRequestCaseAsync("grpc_users_valid_ids_preserved", async () =>
+            {
+                var req = new GetUsersByIdsRequest();
+                req.UserIds.AddRange(new[]
+                {
+                    normalActiveUser.Id.ToString(),
+                    normalInactiveUser.Id.ToString(),
+                    normalDeletedUser.Id.ToString(),
+                    Guid.NewGuid().ToString(),
+                    normalActiveUser.Id.ToString()
+                });
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "GetUsersByIds", req,
+                    GetUsersByIdsRequest.Parser, GetUsersByIdsResponse.Parser, authValidJwt);
+
+                Assert(resp.Users.Count == 2, "only active and inactive non-deleted, no duplicate");
+                Assert(resp.Users.Any(u => u.Id == normalActiveUser.Id.ToString()), "contains normalActiveUser");
+                Assert(resp.Users.Any(u => u.Id == normalInactiveUser.Id.ToString()), "contains normalInactiveUser");
+                Assert(!resp.Users.Any(u => u.Id == normalDeletedUser.Id.ToString()), "excludes deleted user");
+
+                var activeInfo = resp.Users.Single(u => u.Id == normalActiveUser.Id.ToString());
+                Assert(activeInfo.Username == normalActiveUser.Username, "username matches");
+                Assert(activeInfo.Fullname == normalActiveUser.Fullname, "fullname matches");
+                Assert(activeInfo.Email == normalActiveUser.Email, "email matches");
+                Assert(activeInfo.IsActived == normalActiveUser.IsActived, "is_actived matches");
+            });
+
+            await RunRequestCaseAsync("grpc_users_empty_returns_empty", async () =>
+            {
+                var req = new GetUsersByIdsRequest();
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "GetUsersByIds", req,
+                    GetUsersByIdsRequest.Parser, GetUsersByIdsResponse.Parser, authValidJwt);
+                Assert(resp.Users.Count == 0, "empty list returns empty");
+            });
+
+            await RunRequestCaseAsync("grpc_users_guid_n_and_b_formats", async () =>
+            {
+                var req = new GetUsersByIdsRequest();
+                req.UserIds.Add(normalActiveUser.Id.ToString("N"));
+                req.UserIds.Add(normalInactiveUser.Id.ToString("B"));
+
+                var resp = await CallSystemRpcAsync(grpcAuthChannel, "GetUsersByIds", req,
+                    GetUsersByIdsRequest.Parser, GetUsersByIdsResponse.Parser, authValidJwt);
+
+                Assert(resp.Users.Count == 2, "N and B format IDs resolved");
+            });
+
+            Console.WriteLine("[NOT RUN] grpc_permission_valid_allow: Missing fn_user_checkpermission and operator permission fixture");
+            Console.WriteLine("[NOT RUN] grpc_permission_valid_deny: Missing fn_user_checkpermission and operator permission fixture");
+        }
+        finally
+        {
+            await grpcAuthApp.StopAsync();
+        }
 
         Console.WriteLine($"\nSummary: {passed} passed, {failed} failed (total {passed + failed})");
         Environment.ExitCode = failed > 0 ? 1 : 0;
