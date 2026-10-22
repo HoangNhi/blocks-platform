@@ -1,9 +1,7 @@
 using Blocks.CatalogService.Configs;
 using Blocks.CatalogService.Middlewares;
-using Blocks.CatalogService.Services.gRPC;
 using Blocks.ServiceDefaults;
 using Blocks.Shared.Common;
-using Grpc.AspNetCore.Web;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -59,8 +57,6 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseGrpcWeb(new GrpcWebOptions { DefaultEnabled = true });
 app.MapControllers();
-app.MapGrpcService<CatalogGrpcService>();
 
 app.Run();

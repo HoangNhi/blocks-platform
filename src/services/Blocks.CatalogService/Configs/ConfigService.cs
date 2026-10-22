@@ -1,5 +1,4 @@
 using Blocks.Shared.DTOs.Base;
-using Blocks.CatalogService.DTOs.Common;
 using Blocks.Shared.Common;
 using Grpc.Net.Client.Web;
 using Blocks.CatalogService.DTOs.CoreFeature.Faculty.Requests;
@@ -89,7 +88,6 @@ namespace Blocks.CatalogService.Configs
             });
 
             // gRPC
-            builder.Services.AddGrpc();
             builder.Services.AddTransient<Blocks.Shared.Common.GrpcJwtInterceptor>();
             builder.Services.AddGrpcClient<SystemProto.SystemProtoClient>(o =>
             {

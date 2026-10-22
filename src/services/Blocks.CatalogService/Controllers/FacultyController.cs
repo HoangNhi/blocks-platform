@@ -1,6 +1,5 @@
 using Blocks.Shared.DTOs.Base;
 using Blocks.CatalogService.DTOs.Base;
-using Blocks.CatalogService.DTOs.Common;
 using Blocks.Shared.Common;
 using Blocks.CatalogService.DTOs.CoreFeature.Faculty.Dtos;
 using Blocks.CatalogService.DTOs.CoreFeature.Faculty.Requests;

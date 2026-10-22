@@ -1,5 +1,4 @@
 using Blocks.Shared.DTOs.Base;
-using Blocks.CatalogService.DTOs.Common;
 using Blocks.Shared.Common;
 using Blocks.SystemService.Protos;
 using Microsoft.AspNetCore.Mvc;

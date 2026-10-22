@@ -16,8 +16,6 @@
     <PackageReference Include="AutoMapper" Version="16.0.0" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="Google.Protobuf" Version="3.33.2" />
-    <PackageReference Include="Grpc.AspNetCore" Version="2.76.0" />
-    <PackageReference Include="Grpc.AspNetCore.Web" Version="2.76.0" />
     <PackageReference Include="Grpc.Net.Client.Web" Version="2.76.0" />
     <PackageReference Include="Grpc.Net.ClientFactory" Version="2.76.0" />
     <PackageReference Include="Grpc.Tools" Version="2.76.0">
@@ -49,13 +47,11 @@
     <ItemGroup>
       <Protobuf Include="..\Blocks.SystemService\Protos\system.proto" GrpcServices="Client" Link="Protos\system.proto" />
 	  <Protobuf Include="..\Blocks.SystemService\Protos\audit.proto" GrpcServices="Client" Link="Protos\audit.proto" />
-	  <Protobuf Include="Protos\catalog.proto" GrpcServices="Server" />
     </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Controllers\" />
     <Folder Include="Entities\" />
-    <Folder Include="Services\gRPC\" />
   </ItemGroup>
 
 </Project>
