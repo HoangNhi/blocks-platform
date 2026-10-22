@@ -15,7 +15,7 @@ namespace Blocks.CatalogService.DTOs.CoreFeature.Faculty.Requests
         public FacultyRequestValidator()
         {
             RuleFor(x => x.Name)
-                .NotEmpty().WithMessage("Tên khoa không được để trống");
+                .NotEmpty().WithMessage("Tên phòng ban không được để trống");
         }
     }
 }

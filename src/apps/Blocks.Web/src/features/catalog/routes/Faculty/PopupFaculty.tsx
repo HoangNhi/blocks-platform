@@ -33,7 +33,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 const formSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "Tên khoa không được để trống"),
+  name: z.string().min(1, "Tên phòng ban không được để trống"),
   isActived: z.boolean(),
 });
 
@@ -98,7 +98,7 @@ const PopupFaculty = ({
           >
             <DialogHeader>
               <DialogTitle>
-                {faculty?.IsEdit ? "Cập nhật Khoa" : "Thêm mới Khoa"}
+                {faculty?.IsEdit ? "Cập nhật Phòng ban" : "Thêm mới Phòng ban"}
               </DialogTitle>
             </DialogHeader>
             <div className="grid gap-3">
@@ -107,7 +107,7 @@ const PopupFaculty = ({
                 name="name"
                 render={({ field }) => (
                   <FormItem className="grid gap-3 space-y-0">
-                    <FormLabel>Tên khoa <span className="text-red-500">*</span></FormLabel>
+                    <FormLabel>Tên phòng ban <span className="text-red-500">*</span></FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>

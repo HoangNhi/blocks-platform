@@ -145,6 +145,31 @@ static void RunContractChecks()
     var sql = db.Faculties.Where(x => !x.IsDeleted).ToQueryString();
     Require(sql.Contains("`faculty`") && sql.Contains("`is_deleted`"), "Scaffold SQL retained");
 
+    var validation = new FacultyRequestValidator().Validate(new FacultyRequest { Name = "" });
+    Require(validation.Errors.Any(e => e.ErrorMessage == "Tên phòng ban không được để trống"),
+        "Department validation copy retained");
+
+    var mapperConfig = new MapperConfiguration(cfg =>
+    {
+        cfg.AddProfile<FacultyProfile>();
+    }, NullLoggerFactory.Instance);
+    var mapper = mapperConfig.CreateMapper();
+
+    var facultyInstance = new Faculty
+    {
+        Id = Guid.NewGuid(),
+        Name = "Test Department",
+        CreatedAt = DateTime.UtcNow,
+        CreatedBy = "Tester",
+        IsActived = true,
+        IsDeleted = false
+    };
+
+    var dto = mapper.Map<ModelFaculty>(facultyInstance);
+    Require(dto.Id == facultyInstance.Id && dto.CreatedAt == facultyInstance.CreatedAt, "Identity and timestamp retained");
+    Require(typeof(ModelFaculty).GetProperty("CreatedAt")!.PropertyType == typeof(DateTime?),
+        "DTO nullability unchanged");
+
     Console.WriteLine("PASS contract checks");
 }
 

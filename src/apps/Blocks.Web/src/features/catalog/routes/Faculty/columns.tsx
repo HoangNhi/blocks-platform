@@ -47,7 +47,7 @@ export const getColumns = (
   },
   {
     accessorKey: "Name",
-    header: "Tên khoa",
+    header: "Tên phòng ban",
   },
   {
     id: "actions",

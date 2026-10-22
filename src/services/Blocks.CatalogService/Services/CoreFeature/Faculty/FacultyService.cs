@@ -46,7 +46,7 @@ namespace Blocks.CatalogService.Services.CoreFeature.Faculty
 
             if (data.Any())
             {
-                throw new BusinessException("Tên khoa đã tồn tại");
+                throw new BusinessException("Tên phòng ban đã tồn tại");
             }
 
             var add = _mapper.Map<Entities.Faculty>(request);
@@ -68,7 +68,7 @@ namespace Blocks.CatalogService.Services.CoreFeature.Faculty
 
             if (data.Any())
             {
-                throw new BusinessException("Tên khoa đã tồn tại");
+                throw new BusinessException("Tên phòng ban đã tồn tại");
             }
 
             var update = await _context.Faculties.FindAsync(request.Id);
