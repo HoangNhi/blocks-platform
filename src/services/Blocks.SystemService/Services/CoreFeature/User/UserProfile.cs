@@ -9,8 +9,12 @@ namespace Blocks.SystemService.Services.CoreFeature.User
         public UserProfile()
         {
             CreateMap<Entities.User, ModelUser>().ReverseMap();
-            CreateMap<Entities.User, UserRequest>().ReverseMap();
-            CreateMap<Entities.User, EditProfileRequest>().ReverseMap();
+            CreateMap<Entities.User, UserRequest>()
+                .ReverseMap()
+                .ForMember(dest => dest.Avatar, opt => opt.Ignore());
+            CreateMap<Entities.User, EditProfileRequest>()
+                .ReverseMap()
+                .ForMember(dest => dest.Avatar, opt => opt.Ignore());
         }
     }
 }

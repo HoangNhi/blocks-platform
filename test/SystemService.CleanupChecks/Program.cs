@@ -9,14 +9,17 @@ using Blocks.SystemService.Configs;
 using Blocks.SystemService.Controllers;
 using Blocks.SystemService.DTOs.CoreFeature.Auth.Requests;
 using Blocks.SystemService.DTOs.CoreFeature.RefreshToken.Requests;
+using Blocks.SystemService.DTOs.CoreFeature.User.Requests;
 using Blocks.SystemService.Entities;
 using Blocks.SystemService.Helpers;
 using Blocks.SystemService.Infrastructure.Data;
 using Blocks.SystemService.Infrastructure.Validation;
 using Blocks.SystemService.Protos;
+using Blocks.SystemService.Services.Commons.UploadFile;
 using Blocks.SystemService.Services.CoreFeature.Auth;
 using Blocks.SystemService.Services.CoreFeature.User;
 using Blocks.SystemService.Services.SystemGrpc;
+using FluentValidation;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using Grpc.Core;
@@ -336,14 +339,14 @@ async Task RunRuntimeChecksAsync()
         // grpc_permission_invalid_guid_denied
         foreach (var invalidId in new[] { "", "not-a-guid", Guid.Empty.ToString() })
         {
-            var req = new CheckPermissionRequest
+            var req = new Blocks.SystemService.Protos.CheckPermissionRequest
             {
                 UserId = invalidId,
                 Controller = "User",
                 Action = 1
             };
             var resp = await CallSystemRpcAsync(channel, "CheckPermission", req,
-                CheckPermissionRequest.Parser, CheckActionResponse.Parser, validJwt);
+                Blocks.SystemService.Protos.CheckPermissionRequest.Parser, CheckActionResponse.Parser, validJwt);
             Assert(!resp.Success, $"CheckPermission invalid guid '{invalidId}' returns Success=false");
         }
 
@@ -1526,6 +1529,399 @@ async Task RunAuthChecksAsync()
 
             Console.WriteLine("[NOT RUN] grpc_permission_valid_allow: Missing fn_user_checkpermission and operator permission fixture");
             Console.WriteLine("[NOT RUN] grpc_permission_valid_deny: Missing fn_user_checkpermission and operator permission fixture");
+
+            // --- 7. Avatar Action Cases ---
+            var recordingService = new RecordingUploadFileService();
+            var failInterceptor = new FailOnSaveInterceptor();
+
+            var avatarServices = new ServiceCollection();
+            avatarServices.AddSingleton<IConfiguration>(configuration);
+            avatarServices.AddAutoMapper(cfg =>
+            {
+                cfg.AddProfile<AuthProfile>();
+                cfg.AddProfile<UserProfile>();
+            });
+            avatarServices.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+            avatarServices.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+            avatarServices.AddDbContext<SystemContext>(options =>
+            {
+                options.UseNpgsql(scopedConnStr);
+                options.AddInterceptors(failInterceptor);
+            });
+            avatarServices.AddDbContextFactory<SystemContext>(options =>
+            {
+                options.UseNpgsql(scopedConnStr);
+            });
+            avatarServices.AddSingleton<IUploadFileService>(recordingService);
+            avatarServices.AddScoped<ISystemReferenceGuard, SystemReferenceGuard>();
+            avatarServices.AddScoped<IUserService, UserService>();
+
+            var avatarProvider = avatarServices.BuildServiceProvider();
+
+            async Task RunAvatarCaseAsync(string name, Func<IServiceProvider, Task> action)
+            {
+                using var scope = avatarProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<SystemContext>();
+                using var tx = await db.Database.BeginTransactionAsync();
+                try
+                {
+                    await action(scope.ServiceProvider);
+                    await tx.RollbackAsync();
+                    Console.WriteLine($"[PASS] {name}");
+                    passed++;
+                }
+                catch (Exception ex)
+                {
+                    try { await tx.RollbackAsync(); } catch { }
+                    Console.WriteLine($"[FAIL] {name}: {ex.Message}");
+                    failed++;
+                }
+            }
+
+            // Case A: avatar_keep_ignores_client_path
+            await RunAvatarCaseAsync("avatar_keep_ignores_client_path", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var existingUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "keep_user",
+                    Fullname = "Keep User",
+                    Password = hashedPassword,
+                    PasswordSalt = salt,
+                    RoleId = normalRoleId,
+                    Email = "keep_user@test.local",
+                    Avatar = "System/Avatar/original_avatar.png",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "seed",
+                    IsActived = true,
+                    IsDeleted = false
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync();
+
+                var updateReq = new UserRequest
+                {
+                    Id = existingUser.Id,
+                    Username = "keep_user",
+                    Fullname = "Keep User Updated",
+                    Password = "cleanup-test-only",
+                    RoleId = normalRoleId,
+                    Email = "keep_user@test.local",
+                    Avatar = "Client/Hacked/path.png", // Attempt to inject client avatar path
+                    AvatarAction = "keep",
+                    FolderUpload = Guid.NewGuid().ToString("D")
+                };
+
+                await userService.Update(updateReq);
+
+                var saved = await db.Users.AsNoTracking().SingleAsync(u => u.Id == existingUser.Id);
+                Assert(saved.Avatar == "System/Avatar/original_avatar.png", "keep ignores client path and preserves original avatar");
+            });
+
+            // Case B: avatar_replace_uses_server_key
+            await RunAvatarCaseAsync("avatar_replace_uses_server_key", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var existingUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "replace_user",
+                    Fullname = "Replace User",
+                    Password = hashedPassword,
+                    PasswordSalt = salt,
+                    RoleId = normalRoleId,
+                    Email = "replace_user@test.local",
+                    Avatar = "System/Avatar/old_replace.png",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "seed",
+                    IsActived = true,
+                    IsDeleted = false
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync();
+
+                var serverKey = "System/Avatar/new_server_avatar.png";
+                recordingService.ReturnAvatarKey = serverKey;
+                var folderGuid = Guid.NewGuid().ToString("D");
+
+                var updateReq = new UserRequest
+                {
+                    Id = existingUser.Id,
+                    Username = "replace_user",
+                    Fullname = "Replace User",
+                    Password = "cleanup-test-only",
+                    RoleId = normalRoleId,
+                    Email = "replace_user@test.local",
+                    Avatar = "Client/Ignored/avatar.png",
+                    AvatarAction = "replace",
+                    FolderUpload = folderGuid
+                };
+
+                await userService.Update(updateReq);
+
+                var saved = await db.Users.AsNoTracking().SingleAsync(u => u.Id == existingUser.Id);
+                Assert(saved.Avatar == serverKey, "server-owned avatar key");
+            });
+
+            // Case C: avatar_remove_clears_db_without_delete_call
+            await RunAvatarCaseAsync("avatar_remove_clears_db_without_delete_call", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var existingUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "remove_user",
+                    Fullname = "Remove User",
+                    Password = hashedPassword,
+                    PasswordSalt = salt,
+                    RoleId = normalRoleId,
+                    Email = "remove_user@test.local",
+                    Avatar = "System/Avatar/to_remove.png",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "seed",
+                    IsActived = true,
+                    IsDeleted = false
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync();
+
+                var deleteCallsBefore = recordingService.DeleteCalls;
+
+                var updateReq = new UserRequest
+                {
+                    Id = existingUser.Id,
+                    Username = "remove_user",
+                    Fullname = "Remove User",
+                    Password = "cleanup-test-only",
+                    RoleId = normalRoleId,
+                    Email = "remove_user@test.local",
+                    AvatarAction = "remove",
+                    FolderUpload = Guid.NewGuid().ToString("D")
+                };
+
+                await userService.Update(updateReq);
+
+                var saved = await db.Users.AsNoTracking().SingleAsync(u => u.Id == existingUser.Id);
+                Assert(string.IsNullOrEmpty(saved.Avatar), "avatar cleared in DB");
+                Assert(recordingService.DeleteCalls == deleteCallsBefore, "no online avatar cleanup");
+            });
+
+            // Case D: avatar_db_failure_keeps_old_key
+            await RunAvatarCaseAsync("avatar_db_failure_keeps_old_key", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var oldKey = "System/Avatar/persisted_old.png";
+                var existingUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "fail_user",
+                    Fullname = "Fail User",
+                    Password = hashedPassword,
+                    PasswordSalt = salt,
+                    RoleId = normalRoleId,
+                    Email = "fail_user@test.local",
+                    Avatar = oldKey,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "seed",
+                    IsActived = true,
+                    IsDeleted = false
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync();
+
+                failInterceptor.ShouldFail = true;
+                bool threw = false;
+                try
+                {
+                    var updateReq = new UserRequest
+                    {
+                        Id = existingUser.Id,
+                        Username = "fail_user",
+                        Fullname = "Fail User Updated",
+                        Password = "cleanup-test-only",
+                        RoleId = normalRoleId,
+                        Email = "fail_user@test.local",
+                        AvatarAction = "replace",
+                        FolderUpload = Guid.NewGuid().ToString("D")
+                    };
+                    await userService.Update(updateReq);
+                }
+                catch (Exception)
+                {
+                    threw = true;
+                }
+                finally
+                {
+                    failInterceptor.ShouldFail = false;
+                }
+
+                Assert(threw, "interceptor threw on SaveChanges");
+
+                db.ChangeTracker.Clear();
+                var persistedAfterFailure = await db.Users.AsNoTracking().SingleAsync(u => u.Id == existingUser.Id);
+                Assert(persistedAfterFailure.Avatar == oldKey, "DB failure preserves old reference");
+            });
+
+            // Case E: avatar_upload_failure_does_not_save
+            await RunAvatarCaseAsync("avatar_upload_failure_does_not_save", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var oldKey = "System/Avatar/intact.png";
+                var existingUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "upload_fail_user",
+                    Fullname = "Upload Fail User",
+                    Password = hashedPassword,
+                    PasswordSalt = salt,
+                    RoleId = normalRoleId,
+                    Email = "upload_fail@test.local",
+                    Avatar = oldKey,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "seed",
+                    IsActived = true,
+                    IsDeleted = false
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync();
+
+                recordingService.ShouldThrowOnUpload = true;
+                bool threw = false;
+                try
+                {
+                    var updateReq = new UserRequest
+                    {
+                        Id = existingUser.Id,
+                        Username = "upload_fail_user",
+                        Fullname = "Upload Fail User Changed",
+                        Password = "cleanup-test-only",
+                        RoleId = normalRoleId,
+                        Email = "upload_fail@test.local",
+                        AvatarAction = "replace",
+                        FolderUpload = Guid.NewGuid().ToString("D")
+                    };
+                    await userService.Update(updateReq);
+                }
+                catch (BusinessException)
+                {
+                    threw = true;
+                }
+                finally
+                {
+                    recordingService.ShouldThrowOnUpload = false;
+                }
+
+                Assert(threw, "upload failure threw exception");
+                var userAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == existingUser.Id);
+                Assert(userAfter.Avatar == oldKey, "user avatar untouched after upload failure");
+                Assert(userAfter.Fullname == "Upload Fail User", "user properties not saved on upload failure");
+            });
+
+            // Case F: avatar_invalid_action_is_rejected
+            await RunAvatarCaseAsync("avatar_invalid_action_is_rejected", async sp =>
+            {
+                var validator = new UserRequestValidator();
+                var req = new UserRequest
+                {
+                    Username = "test_invalid",
+                    Fullname = "Test Invalid",
+                    Password = "test",
+                    RoleId = normalRoleId,
+                    Email = "invalid@test.local",
+                    AvatarAction = "hack_action"
+                };
+
+                var valResult = await validator.ValidateAsync(req);
+                Assert(!valResult.IsValid, "invalid avatar action must fail validation");
+
+                var reqMissingFolder = new UserRequest
+                {
+                    Username = "test_invalid2",
+                    Fullname = "Test Invalid2",
+                    Password = "test",
+                    RoleId = normalRoleId,
+                    Email = "invalid2@test.local",
+                    AvatarAction = "replace",
+                    FolderUpload = "not-a-guid"
+                };
+
+                var valResultFolder = await validator.ValidateAsync(reqMissingFolder);
+                Assert(!valResultFolder.IsValid, "replace without valid FolderUpload GUID must fail validation");
+            });
+
+            // Case G: avatar_retry_reuses_finalized_key
+            await RunAvatarCaseAsync("avatar_retry_reuses_finalized_key", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var serverKey = "System/Avatar/finalized_key.png";
+                recordingService.ReturnAvatarKey = serverKey;
+                var folderGuid = Guid.NewGuid().ToString("D");
+
+                var createReq = new UserRequest
+                {
+                    Username = "retry_user",
+                    Fullname = "Retry User",
+                    Password = "cleanup-test-only",
+                    RoleId = normalRoleId,
+                    Email = "retry_user@test.local",
+                    AvatarAction = "replace",
+                    FolderUpload = folderGuid
+                };
+
+                failInterceptor.ShouldFail = true;
+                try
+                {
+                    await userService.Insert(createReq);
+                }
+                catch
+                {
+                    // First DB save failed after upload RPC succeeded
+                }
+                finally
+                {
+                    failInterceptor.ShouldFail = false;
+                }
+
+                // Retry with same request & folderUpload
+                var res = await userService.Insert(createReq);
+                Assert(res.Avatar == serverKey, "retry reuses finalized key");
+            });
+
+            // Case H: avatar_insert_keep_does_not_call_file_rpc
+            await RunAvatarCaseAsync("avatar_insert_keep_does_not_call_file_rpc", async sp =>
+            {
+                var userService = sp.GetRequiredService<IUserService>();
+                var db = sp.GetRequiredService<SystemContext>();
+
+                var callsBefore = recordingService.UploadCalls;
+                var req = new UserRequest
+                {
+                    Username = "insert_keep_user",
+                    Fullname = "Insert Keep User",
+                    Password = "cleanup-test-only",
+                    RoleId = normalRoleId,
+                    Email = "insert_keep@test.local",
+                    AvatarAction = "keep",
+                    FolderUpload = Guid.NewGuid().ToString("D")
+                };
+
+                var res = await userService.Insert(req);
+                Assert(string.IsNullOrEmpty(res.Avatar), "insert with keep initializes empty avatar");
+                Assert(recordingService.UploadCalls == callsBefore, "insert with keep does not call file RPC");
+            });
         }
         finally
         {
@@ -1802,4 +2198,56 @@ void RunContractChecks()
         "SystemGrpcService has no reference guard field");
 
     Console.WriteLine("All contract checks passed!");
+}
+
+class RecordingUploadFileService : IUploadFileService
+{
+    public int UploadCalls { get; private set; }
+    public int DeleteCalls { get; private set; }
+    public string? LastFolderUploadId { get; private set; }
+    public string? LastOldImage { get; private set; }
+    public string ReturnAvatarKey { get; set; } = "System/Avatar/00000000-0000-0000-0000-000000000001.png";
+    public bool ShouldThrowOnUpload { get; set; }
+
+    public Task<List<Blocks.Shared.DTOs.Base.ModelAttachment>> UploadDataAsync(string lienKetId, string folderName, string tempFolder)
+    {
+        return Task.FromResult(new List<Blocks.Shared.DTOs.Base.ModelAttachment>());
+    }
+
+    public Task<bool> DeleteDataAsync(List<string> filePaths)
+    {
+        DeleteCalls += filePaths.Count;
+        return Task.FromResult(true);
+    }
+
+    public Task<string> UploadAvatarAsync(string folderUploadId, string? oldImage)
+    {
+        UploadCalls++;
+        LastFolderUploadId = folderUploadId;
+        LastOldImage = oldImage;
+
+        if (ShouldThrowOnUpload)
+        {
+            throw new BusinessException("Lỗi tải tệp ảnh đại diện lên FileService", 400);
+        }
+
+        return Task.FromResult(ReturnAvatarKey);
+    }
+}
+
+class FailOnSaveInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+{
+    public bool ShouldFail { get; set; }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+        Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        if (ShouldFail)
+        {
+            throw new InvalidOperationException("Simulated database failure during SaveChanges.");
+        }
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
 }

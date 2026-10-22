@@ -1,3 +1,5 @@
+using AutoDependencyRegistration.Attributes;
+using AutoMapper;
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
 using Blocks.SystemService.DTOs.CoreFeature.User.Dtos;
@@ -6,9 +8,8 @@ using Blocks.SystemService.Helpers;
 using Blocks.SystemService.Infrastructure.Data;
 using Blocks.SystemService.Infrastructure.Validation;
 using Blocks.SystemService.Services.Commons.UploadFile;
-using AutoDependencyRegistration.Attributes;
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Blocks.SystemService.Services.CoreFeature.User
@@ -147,7 +148,21 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             add.Password = Encrypt_DecryptHelper.EncodePassword(request.Password, add.PasswordSalt);
             add.CreatedBy = _contextAccessor.HttpContext?.User?.Identity?.Name ?? "System";
             add.CreatedAt = DateTime.UtcNow;
-            add.Avatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, "");
+
+            var action = request.AvatarAction?.Trim().ToLowerInvariant() ?? "keep";
+            if (action == "replace")
+            {
+                var newAvatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, "");
+                if (string.IsNullOrWhiteSpace(newAvatar) || !newAvatar.StartsWith("System/Avatar/", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BusinessException("Tải ảnh đại diện thất bại hoặc đường dẫn trả về không hợp lệ", 400);
+                }
+                add.Avatar = newAvatar;
+            }
+            else
+            {
+                add.Avatar = string.Empty;
+            }
 
             await _context.Users.AddAsync(add);
             await _context.SaveChangesAsync();
@@ -173,6 +188,7 @@ namespace Blocks.SystemService.Services.CoreFeature.User
             }
 
             var oldPassword = update.Password;
+            var oldAvatar = update.Avatar ?? string.Empty;
             await _referenceGuard.EnsureRoleExistsAsync(request.RoleId);
             _mapper.Map(request, update);
 
@@ -185,7 +201,25 @@ namespace Blocks.SystemService.Services.CoreFeature.User
                 update.Password = oldPassword;
             }
 
-            update.Avatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, update.Avatar);
+            var updateAction = request.AvatarAction?.Trim().ToLowerInvariant() ?? "keep";
+            if (updateAction == "replace")
+            {
+                var newAvatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, "");
+                if (string.IsNullOrWhiteSpace(newAvatar) || !newAvatar.StartsWith("System/Avatar/", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BusinessException("Tải ảnh đại diện thất bại hoặc đường dẫn trả về không hợp lệ", 400);
+                }
+                update.Avatar = newAvatar;
+            }
+            else if (updateAction == "remove")
+            {
+                update.Avatar = string.Empty;
+            }
+            else
+            {
+                update.Avatar = oldAvatar;
+            }
+
             update.UpdatedBy = _contextAccessor.HttpContext?.User?.Identity?.Name ?? "System";
             update.UpdatedAt = DateTime.UtcNow;
 
@@ -282,8 +316,28 @@ namespace Blocks.SystemService.Services.CoreFeature.User
                 throw new BusinessException("Dữ liệu không tồn tại");
             }
 
+            var oldProfileAvatar = update.Avatar ?? string.Empty;
             _mapper.Map(request, update);
-            update.Avatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, update.Avatar);
+
+            var profileAction = request.AvatarAction?.Trim().ToLowerInvariant() ?? "keep";
+            if (profileAction == "replace")
+            {
+                var newAvatar = await _uploadFileService.UploadAvatarAsync(request.FolderUpload, "");
+                if (string.IsNullOrWhiteSpace(newAvatar) || !newAvatar.StartsWith("System/Avatar/", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BusinessException("Tải ảnh đại diện thất bại hoặc đường dẫn trả về không hợp lệ", 400);
+                }
+                update.Avatar = newAvatar;
+            }
+            else if (profileAction == "remove")
+            {
+                update.Avatar = string.Empty;
+            }
+            else
+            {
+                update.Avatar = oldProfileAvatar;
+            }
+
             update.UpdatedBy = _contextAccessor.HttpContext?.User?.Identity?.Name ?? "System";
             update.UpdatedAt = DateTime.UtcNow;
 
