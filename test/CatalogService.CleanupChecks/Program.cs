@@ -31,7 +31,7 @@ using Microsoft.IdentityModel.Tokens;
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/CatalogService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: contract, runtime");
+    Console.Error.WriteLine("Supported modes: contract, runtime, provider");
     return 1;
 }
 
@@ -63,6 +63,20 @@ else if (mode == "runtime")
         return 1;
     }
 }
+else if (mode == "provider")
+{
+    try
+    {
+        await ProviderChecks.RunAsync();
+        Console.WriteLine("PASS provider checks");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"provider check failed: {ex.Message}");
+        return 1;
+    }
+}
 else
 {
     Console.Error.WriteLine($"Unknown mode: {args[0]}");
@@ -79,6 +93,7 @@ static void Require(bool condition, string message)
 
 static void RunContractChecks()
 {
+    ProviderChecks.RunGuardChecks();
     var options = new DbContextOptionsBuilder<CatalogContext>()
         .UseMySql("Server=localhost;Database=test;Uid=test;Pwd=test;", new MySqlServerVersion(new Version(8, 0, 0)))
         .Options;
@@ -231,6 +246,23 @@ static async Task RunRuntimeChecksAsync()
     app.UseCors();
     app.UseAuthentication();
     app.UseAuthorization();
+    app.MapGet("/__checks/claims", (ClaimsPrincipal user) =>
+    {
+        var rawName = user.FindFirst("name")?.Value;
+        var rawUniqueName = user.FindFirst("unique_name")?.Value;
+        var rawRole = user.FindFirst("role")?.Value;
+        var identityName = user.Identity?.Name;
+        var roleValue = rawRole ?? user.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        var isInRole = !string.IsNullOrEmpty(roleValue) && user.IsInRole(roleValue);
+        return Results.Ok(new
+        {
+            raw_name = rawName,
+            raw_unique_name = rawUniqueName,
+            raw_role = rawRole,
+            identity_name = identityName,
+            is_in_role = isInRole
+        });
+    }).ExcludeFromDescription().RequireAuthorization();
     app.MapControllers();
 
     await app.StartAsync();
@@ -298,7 +330,24 @@ static async Task RunRuntimeChecksAsync()
             Require(resp.StatusCode == System.Net.HttpStatusCode.NotFound, $"Retired route {route} returns 404");
         }
 
-        // Test 3: Swagger only contains six Faculty routes, no retired routes
+                // Test 3: Claims endpoint verification
+        var testUserId = Guid.NewGuid().ToString();
+        var testUserName = "test_user_principal";
+        var testRoleId = Guid.NewGuid().ToString();
+        var claimsJwt = CreateJwt(testJwtKey, testIssuer, testAudience, userId: testUserId, userName: testUserName, roleId: testRoleId);
+        using (var claimsReq = new HttpRequestMessage(HttpMethod.Get, "/__checks/claims"))
+        {
+            claimsReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", claimsJwt);
+            using var claimsResp = await client.SendAsync(claimsReq);
+            Require(claimsResp.StatusCode == System.Net.HttpStatusCode.OK, "Claims endpoint returns HTTP 200");
+            var claimsJson = await claimsResp.Content.ReadAsStringAsync();
+            using var claimsDoc = JsonDocument.Parse(claimsJson);
+            var claimsRoot = claimsDoc.RootElement;
+            Require(claimsRoot.TryGetProperty("identity_name", out _), "identity_name present in claims response");
+            Require(claimsRoot.GetProperty("is_in_role").GetBoolean(), "IsInRole returns true for token role");
+        }
+
+        // Test 4: Swagger only contains six Faculty routes, no retired routes
         using (var swaggerResp = await client.GetAsync("/swagger/v1/swagger.json"))
         {
             Require(swaggerResp.IsSuccessStatusCode, "Swagger schema endpoint returned success");
@@ -320,6 +369,8 @@ static async Task RunRuntimeChecksAsync()
             {
                 Require(paths.TryGetProperty(route, out _), $"Swagger includes Faculty route: {route}");
             }
+
+            Require(!paths.TryGetProperty("/__checks/claims", out _), "Swagger must not contain /__checks/claims");
 
             foreach (var retiredPrefix in new[] { "/api/FileType", "/api/Stakeholder", "/api/Standard", "/api/StandardSet" })
             {
@@ -359,15 +410,23 @@ static async Task RunRuntimeChecksAsync()
     }
 }
 
-static string CreateJwt(string key, string issuer, string audience, DateTime? expires = null, DateTime? notBefore = null)
+static string CreateJwt(
+    string key,
+    string issuer,
+    string audience,
+    DateTime? expires = null,
+    DateTime? notBefore = null,
+    string? userId = null,
+    string? userName = null,
+    string? roleId = null)
 {
     var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
     var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
     var claims = new[]
     {
-        new Claim("name", Guid.NewGuid().ToString()),
-        new Claim("unique_name", "test_user"),
-        new Claim("role", Guid.NewGuid().ToString())
+        new Claim("name", userId ?? Guid.NewGuid().ToString()),
+        new Claim("unique_name", userName ?? "test_user"),
+        new Claim("role", roleId ?? Guid.NewGuid().ToString())
     };
     var now = DateTime.UtcNow;
     var token = new JwtSecurityToken(
