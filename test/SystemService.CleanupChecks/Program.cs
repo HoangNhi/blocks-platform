@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using AutoMapper;
 using Blocks.Shared.Exceptions;
@@ -26,6 +27,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -82,13 +84,31 @@ void Assert(bool condition, string name)
     }
 }
 
-async Task RunRuntimeChecksAsync()
+string CreateTestJwt(Guid userId, string username, Guid roleId, string key, DateTime? expires = null, DateTime? notBefore = null)
 {
-    Assert(Environment.Version.Major == 10, "checks run on .NET 10");
-    Assert(typeof(DbContext).Assembly.GetName().Version!.Major == 10, "EF Core 10 loaded");
-    Assert(typeof(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder)
-        .Assembly.GetName().Version!.Major == 10, "Npgsql EF Core provider 10 loaded");
+    var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+    var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+    var claims = new[]
+    {
+        new System.Security.Claims.Claim("name", userId.ToString()),
+        new System.Security.Claims.Claim("unique_name", username),
+        new System.Security.Claims.Claim("role", roleId.ToString())
+    };
+    var now = DateTime.UtcNow;
+    var nbf = notBefore ?? now.AddMinutes(-5);
+    var exp = expires ?? now.AddHours(1);
+    var token = new JwtSecurityToken(
+        issuer: "systemservice-cleanup-checks",
+        audience: "systemservice-cleanup-checks",
+        claims: claims,
+        notBefore: nbf,
+        expires: exp,
+        signingCredentials: credentials);
+    return new JwtSecurityTokenHandler().WriteToken(token);
+}
 
+async Task<WebApplication> StartTestAppAsync(IConfiguration configuration, bool http2 = false)
+{
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Production" });
     builder.Host.UseDefaultServiceProvider(options =>
     {
@@ -96,26 +116,60 @@ async Task RunRuntimeChecksAsync()
         options.ValidateOnBuild = true;
     });
     builder.Configuration.Sources.Clear();
-    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+    builder.Configuration.AddConfiguration(configuration);
+
+    builder.Services.AddControllers(options =>
     {
-        ["ConnectionStrings:System"] = "Host=127.0.0.1;Port=1;Database=unused;Username=unused",
-        ["Jwt:Key"] = new string('x', 64),
-        ["Jwt:Issuer"] = "systemservice-runtime-checks",
-        ["Jwt:Audience"] = "systemservice-runtime-checks"
-    });
-    builder.WebHost.UseUrls("http://127.0.0.1:0");
-    builder.Services.AddControllers().AddApplicationPart(typeof(UserController).Assembly);
+        options.Filters.AddService<Blocks.SystemService.Infrastructure.Filters.AuditActionFilter>();
+    }).AddApplicationPart(typeof(UserController).Assembly);
+
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
     builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
     builder.ExecuteConfigService();
     builder.ExecuteConfigAuthentication();
 
-    await using var app = builder.Build();
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Listen(System.Net.IPAddress.Loopback, 0, listenOptions =>
+        {
+            listenOptions.Protocols = http2
+                ? Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2
+                : Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1;
+        });
+    });
+
+    var app = builder.Build();
+    app.UseMiddleware<Blocks.SystemService.Middlewares.GlobalExceptionHandler>();
     app.UseSwagger();
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
+    app.MapGrpcService<SystemGrpcService>();
+
+    await app.StartAsync();
+    return app;
+}
+
+async Task RunRuntimeChecksAsync()
+{
+    Assert(Environment.Version.Major == 10, "checks run on .NET 10");
+    Assert(typeof(DbContext).Assembly.GetName().Version!.Major == 10, "EF Core 10 loaded");
+    Assert(typeof(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder)
+        .Assembly.GetName().Version!.Major == 10, "Npgsql EF Core provider 10 loaded");
+
+    var runtimeConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["ConnectionStrings:System"] = "Host=127.0.0.1;Port=1;Database=unused;Username=unused",
+        ["Jwt:Key"] = new string('x', 64),
+        ["Jwt:Issuer"] = "systemservice-cleanup-checks",
+        ["Jwt:Audience"] = "systemservice-cleanup-checks",
+        ["Jwt:Expiry"] = "1",
+        ["Jwt:ExpireRefreshToken"] = "2",
+        ["GrpcClients:FileService"] = "http://127.0.0.1:1"
+    }).Build();
+
+    await using var app = await StartTestAppAsync(runtimeConfig, http2: false);
 
     // Generate SQL without opening a connection or touching any database.
     using (var scope = app.Services.CreateScope())
@@ -131,7 +185,6 @@ async Task RunRuntimeChecksAsync()
         scope.ServiceProvider.GetRequiredService<IAuthService>();
     }
 
-    await app.StartAsync();
     try
     {
         using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
@@ -145,6 +198,31 @@ async Task RunRuntimeChecksAsync()
         using var document = JsonDocument.Parse(await swagger.Content.ReadAsStringAsync());
         Assert(document.RootElement.GetProperty("paths").TryGetProperty("/api/User/get-current-user", out _),
             "Swagger contains SystemService routes");
+
+        var wrongSigJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('y', 64));
+        var expiredJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('x', 64),
+            expires: DateTime.UtcNow.AddMinutes(-5), notBefore: DateTime.UtcNow.AddMinutes(-10));
+
+        async Task AssertComboboxDeniedAsync(string? token, string caseName)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, "/api/User/get-all-combobox");
+            if (token != null)
+            {
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            using var resp = await client.SendAsync(req);
+            Assert(resp.StatusCode == System.Net.HttpStatusCode.OK, $"{caseName}: HTTP envelope");
+            using var respBody = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var root = respBody.RootElement;
+            Assert(!root.GetProperty("Success").GetBoolean(), $"{caseName}: request denied");
+            Assert(root.GetProperty("StatusCode").GetInt32() == 401, $"{caseName}: application 401");
+            Assert(!root.TryGetProperty("Data", out var data) || data.ValueKind == JsonValueKind.Null, $"{caseName}: no directory disclosed");
+        }
+
+        await AssertComboboxDeniedAsync(null, "combobox_anonymous_denied");
+        await AssertComboboxDeniedAsync("invalid-token", "combobox_invalid_token_denied");
+        await AssertComboboxDeniedAsync(wrongSigJwt, "combobox_wrong_signature_denied");
+        await AssertComboboxDeniedAsync(expiredJwt, "combobox_expired_token_denied");
     }
     finally
     {
@@ -564,6 +642,21 @@ async Task RunAuthChecksAsync()
             }
         }
 
+        async Task RunRequestCaseAsync(string name, Func<Task> action)
+        {
+            try
+            {
+                await action();
+                Console.WriteLine($"[PASS] {name}");
+                passed++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[FAIL] {name}: {ex.Message}");
+                failed++;
+            }
+        }
+
         // Case 1: di_without_business_client
         await RunCaseAsync("di_without_business_client", sp =>
         {
@@ -875,6 +968,49 @@ async Task RunAuthChecksAsync()
             {
                 accessor.HttpContext = null;
                 await transaction.RollbackAsync();
+            }
+        });
+
+        await RunRequestCaseAsync("combobox_authenticated_without_user_view_succeeds", async () =>
+        {
+            var authAppConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:System"] = scopedConnStr,
+                ["Jwt:Key"] = new string('x', 64),
+                ["Jwt:Issuer"] = "systemservice-cleanup-checks",
+                ["Jwt:Audience"] = "systemservice-cleanup-checks",
+                ["Jwt:Expiry"] = "1",
+                ["Jwt:ExpireRefreshToken"] = "2",
+                ["GrpcClients:FileService"] = "http://127.0.0.1:1"
+            }).Build();
+
+            await using var app = await StartTestAppAsync(authAppConfig, http2: false);
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+                var jwt = CreateTestJwt(normalActiveUser.Id, normalActiveUser.Username, normalRoleId, new string('x', 64));
+                using var req = new HttpRequestMessage(HttpMethod.Get, "/api/User/get-all-combobox");
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
+
+                using var response = await client.SendAsync(req);
+                Assert(response.StatusCode == System.Net.HttpStatusCode.OK, "HTTP envelope");
+                using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var root = body.RootElement;
+                Assert(root.GetProperty("Success").GetBoolean(), "request succeeds");
+                Assert(root.GetProperty("StatusCode").GetInt32() == 200, "application 200");
+                var data = root.GetProperty("Data");
+                Assert(data.ValueKind == JsonValueKind.Array, "Data is array");
+
+                var items = data.EnumerateArray().ToList();
+                Assert(items.Count == 2, "only active non-deleted users");
+                Assert(items[0].GetProperty("Value").GetString() == extActiveUser.Id.ToString(), "first user id");
+                Assert(items[0].GetProperty("Text").GetString() == $"[{extActiveUser.Username}] - {extActiveUser.Fullname}", "first user text");
+                Assert(items[1].GetProperty("Value").GetString() == normalActiveUser.Id.ToString(), "second user id");
+                Assert(items[1].GetProperty("Text").GetString() == $"[{normalActiveUser.Username}] - {normalActiveUser.Fullname}", "second user text");
+            }
+            finally
+            {
+                await app.StopAsync();
             }
         });
 

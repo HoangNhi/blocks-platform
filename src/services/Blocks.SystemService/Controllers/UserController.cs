@@ -71,7 +71,6 @@ namespace Blocks.SystemService.Controllers
         }
 
         [HttpGet, Route("get-all-combobox")]
-        [AllowAnonymous]
         [AttributePermission(Action = ActionType.NONE)]
         public async Task<IActionResult> GetAllForCombobox()
         {
