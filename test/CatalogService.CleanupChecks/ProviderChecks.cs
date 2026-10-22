@@ -23,11 +23,13 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using MySqlConnector;
 
 internal static class ProviderChecks
@@ -38,6 +40,43 @@ internal static class ProviderChecks
         {
             throw new InvalidOperationException($"Assertion failed: {message}");
         }
+    }
+
+    internal static string SanitizeMessage(Exception? ex)
+    {
+        if (ex == null) return "Unknown error";
+
+        var msg = ex.Message ?? "";
+        if (ContainsSensitiveKeywords(msg))
+        {
+            return $"[{ex.GetType().Name}] Redacted error containing sensitive credentials";
+        }
+
+        if (ex is InvalidOperationException &&
+            (msg.StartsWith("Assertion failed:", StringComparison.Ordinal) ||
+             msg.StartsWith("CATALOGSERVICE_UPGRADE_TEST_CONNECTION", StringComparison.Ordinal) ||
+             msg.StartsWith("Probe refused:", StringComparison.Ordinal) ||
+             msg.StartsWith("Leftover table report:", StringComparison.Ordinal) ||
+             msg.StartsWith("Connection string", StringComparison.Ordinal) ||
+             msg.StartsWith("Connection host", StringComparison.Ordinal) ||
+             msg.StartsWith("Database must be", StringComparison.Ordinal) ||
+             msg.StartsWith("Protocol must be", StringComparison.Ordinal) ||
+             msg.StartsWith("Named pipes", StringComparison.Ordinal) ||
+             msg.StartsWith("Preexisting", StringComparison.Ordinal) ||
+             msg.StartsWith("Target database", StringComparison.Ordinal)))
+        {
+            return msg;
+        }
+
+        return $"[{ex.GetType().Name}] Database or driver operation failed";
+    }
+
+    private static bool ContainsSensitiveKeywords(string text)
+    {
+        return text.IndexOf("pwd", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("uid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("secret", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     internal static string ValidateIsolatedConnection(string? connectionString)
@@ -88,8 +127,8 @@ internal static class ProviderChecks
     {
         connection_guard_rejects_unsafe_target_before_open();
         connection_guard_accepts_only_isolated_tcp_target();
+        exception_sanitization_masks_driver_and_credentials();
     }
-
     private static void connection_guard_rejects_unsafe_target_before_open()
     {
         const string secretMarker = "distinctive_secret_password";
@@ -146,50 +185,66 @@ internal static class ProviderChecks
         Require(ValidateIsolatedConnection(safe3) == safe3, "Safe input retained without opening DB");
     }
 
-    internal static async Task RunAsync()
+    private static void exception_sanitization_masks_driver_and_credentials()
     {
-        var connectionString = Environment.GetEnvironmentVariable("CATALOGSERVICE_UPGRADE_TEST_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException("CATALOGSERVICE_UPGRADE_TEST_CONNECTION environment variable is not configured. Live database checks require an isolated test database.");
-        }
+        const string secretPass = "super_secret_test_password";
+        var credentialEx = new InvalidOperationException($"Failed to connect Server=127.0.0.1;Uid=admin;Pwd={secretPass};Database=test");
+        var sanitizedCred = SanitizeMessage(credentialEx);
+        Require(!sanitizedCred.Contains(secretPass), "Sanitized message must not contain password");
+        Require(!sanitizedCred.Contains("admin"), "Sanitized message must not contain username");
 
+                var driverEx = (MySqlException)Activator.CreateInstance(
+            typeof(MySqlException),
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            null,
+            new object[] { "Access denied for user 'root'@'localhost' (using password: YES)" },
+            null)!;
+        var sanitizedDriver = SanitizeMessage(driverEx);
+        Require(!sanitizedDriver.Contains("root"), "Driver error must not leak user");
+        Require(sanitizedDriver.StartsWith("[MySqlException]"), "Driver error includes generic exception type");
+
+        var safeAssertionEx = new InvalidOperationException("Assertion failed: TotalRow == 3");
+        Require(SanitizeMessage(safeAssertionEx) == safeAssertionEx.Message, "Safe assertion message preserved");
+
+        var safeEnvEx = new InvalidOperationException("CATALOGSERVICE_UPGRADE_TEST_CONNECTION environment variable is not configured. Live database checks require an isolated test database.");
+        Require(SanitizeMessage(safeEnvEx) == safeEnvEx.Message, "Safe env refusal message preserved");
+    }
+    private static async Task<bool> TryEnsureEmptyDatabaseAndCreateFacultyAsync(string connectionString, bool takeOwnership)
+    {
         ValidateIsolatedConnection(connectionString);
 
-        bool tableCreatedByThisRun = false;
-
-        try
+        using var conn = new MySqlConnection(connectionString);
+        await conn.OpenAsync();
+        using (var tzCmd = conn.CreateCommand())
         {
-            using (var conn = new MySqlConnection(connectionString))
+            tzCmd.CommandText = "SET time_zone = '+00:00';";
+            await tzCmd.ExecuteNonQueryAsync();
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT DATABASE();";
+            var currentDb = (string?)await cmd.ExecuteScalarAsync();
+            Require(string.Equals(currentDb, "blocks_catalogservice_upgrade_test", StringComparison.Ordinal),
+                "Target database must be blocks_catalogservice_upgrade_test");
+
+            cmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();";
+            var tableCount = Convert.ToInt64(await cmd.ExecuteScalarAsync());
+            if (tableCount > 0)
             {
-                await conn.OpenAsync();
+                throw new InvalidOperationException($"Preexisting database objects rejected: found {tableCount} table(s) in database");
+            }
 
-                using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = "SELECT DATABASE();";
-                    var currentDb = (string?)await cmd.ExecuteScalarAsync();
-                    Require(string.Equals(currentDb, "blocks_catalogservice_upgrade_test", StringComparison.Ordinal),
-                        "Target database must be blocks_catalogservice_upgrade_test");
+            cmd.CommandText = "SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE();";
+            var viewCount = Convert.ToInt64(await cmd.ExecuteScalarAsync());
+            if (viewCount > 0)
+            {
+                throw new InvalidOperationException($"Preexisting database objects rejected: found {viewCount} view(s) in database");
+            }
 
-                    cmd.CommandText = "SELECT VERSION(), @@version_comment, @@session.time_zone, @@global.time_zone;";
-                    using (var reader = await cmd.ExecuteReaderAsync())
-                    {
-                        Require(await reader.ReadAsync(), "Server metadata query returned rows");
-                        var version = reader.GetString(0);
-                        var comment = reader.GetString(1);
-                        Require(!string.IsNullOrEmpty(version), "Server version is non-empty");
-                        Require(!string.IsNullOrEmpty(comment), "Server comment is non-empty");
-                    }
-
-                    cmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'faculty';";
-                    var tableCount = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Require(tableCount == 0, "Preexisting faculty table rejected before run");
-
-                    cmd.CommandText = "SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE() AND table_name = 'faculty';";
-                    var viewCount = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Require(viewCount == 0, "Preexisting faculty view rejected before run");
-
-                    cmd.CommandText = @"
+            if (takeOwnership)
+            {
+                cmd.CommandText = @"
 CREATE TABLE `faculty` (
   `id` char(36) NOT NULL DEFAULT (uuid()),
   `name` text NOT NULL,
@@ -201,32 +256,81 @@ CREATE TABLE `faculty` (
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;";
-                    await cmd.ExecuteNonQueryAsync();
-                    tableCreatedByThisRun = true;
-                }
+                await cmd.ExecuteNonQueryAsync();
+                return true;
             }
 
-            // Lifecycle assertions: probe refusal inside current owned fixture
+            return false;
+        }
+    }
+
+    internal static async Task RunAsync()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CATALOGSERVICE_UPGRADE_TEST_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("CATALOGSERVICE_UPGRADE_TEST_CONNECTION environment variable is not configured. Live database checks require an isolated test database.");
+        }
+
+        ValidateIsolatedConnection(connectionString);
+
+        bool tableCreatedByThisRun = false;
+        Exception? primaryException = null;
+
+        try
+        {
+            // Step 1: Ensure empty database and create owned faculty table
+            tableCreatedByThisRun = await TryEnsureEmptyDatabaseAndCreateFacultyAsync(connectionString, takeOwnership: true);
+
+            // Step 2: Server metadata and deterministic timezone inspection
+            using (var metaConn = new MySqlConnection(connectionString))
+            {
+                await metaConn.OpenAsync();
+                using var tzCmd = metaConn.CreateCommand();
+                tzCmd.CommandText = "SET time_zone = '+00:00';";
+                await tzCmd.ExecuteNonQueryAsync();
+
+                using var metaCmd = metaConn.CreateCommand();
+                metaCmd.CommandText = "SELECT VERSION(), @@version_comment, @@session.time_zone, @@global.time_zone, @@system_time_zone;";
+                using var reader = await metaCmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Server metadata query returned rows");
+                var version = reader.GetString(0);
+                var comment = reader.GetString(1);
+                var sessionTz = reader.GetString(2);
+                var globalTz = reader.GetString(3);
+                var systemTz = reader.GetString(4);
+                Require(!string.IsNullOrEmpty(version), "Server version is non-empty");
+                Require(!string.IsNullOrEmpty(comment), "Server comment is non-empty");
+                Require(!string.IsNullOrEmpty(sessionTz), "Session time_zone is non-empty");
+                Require(!string.IsNullOrEmpty(globalTz), "Global time_zone is non-empty");
+                Require(!string.IsNullOrEmpty(systemTz), "System time_zone is non-empty");
+            }
+
+            // Step 3: Lifecycle assertions - real refusal probe against populated database
             bool probeRefused = false;
+            bool probeTookOwnership = false;
             try
             {
-                using var probeConn = new MySqlConnection(connectionString);
-                await probeConn.OpenAsync();
-                using var probeCmd = probeConn.CreateCommand();
-                probeCmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'faculty';";
-                var count = Convert.ToInt64(await probeCmd.ExecuteScalarAsync());
-                if (count > 0)
-                {
-                    throw new InvalidOperationException("Probe refused: table already exists");
-                }
+                probeTookOwnership = await TryEnsureEmptyDatabaseAndCreateFacultyAsync(connectionString, takeOwnership: false);
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Preexisting database objects rejected"))
             {
                 probeRefused = true;
             }
-            Require(probeRefused, "Probe refused when faculty table already exists");
+            Require(probeRefused, "Probe refused when database is not empty");
+            Require(!probeTookOwnership, "Probe must not acquire ownership on refusal");
 
-            // WebApplication fixture with capturing audit invoker
+            // Verify faculty table and structure intact after probe refusal
+            using (var verifyConn = new MySqlConnection(connectionString))
+            {
+                await verifyConn.OpenAsync();
+                using var verifyCmd = verifyConn.CreateCommand();
+                verifyCmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'faculty';";
+                var count = Convert.ToInt64(await verifyCmd.ExecuteScalarAsync());
+                Require(count == 1, "Faculty table remains intact after probe refusal");
+            }
+
+            // Step 4: WebApplication fixture with capturing audit invoker
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
                 Args = Array.Empty<string>(),
@@ -252,10 +356,15 @@ CREATE TABLE `faculty` (
             var row2Id = Guid.Parse("00000000-0000-4000-8000-000000000002");
             var row3Id = Guid.Parse("00000000-0000-4000-8000-000000000003");
             var row4Id = Guid.NewGuid();
+            var row5Id = Guid.NewGuid(); // Omitted updated_at row
 
             using (var seedConn = new MySqlConnection(connectionString))
             {
                 await seedConn.OpenAsync();
+                using var tzCmd = seedConn.CreateCommand();
+                tzCmd.CommandText = "SET time_zone = '+00:00';";
+                await tzCmd.ExecuteNonQueryAsync();
+
                 using var seedCmd = seedConn.CreateCommand();
                 seedCmd.CommandText = @"
 INSERT INTO `faculty` (`id`, `name`, `created_at`, `created_by`, `updated_at`, `updated_by`, `is_actived`, `is_deleted`)
@@ -269,90 +378,56 @@ VALUES
                 seedCmd.Parameters.AddWithValue("@id3", row3Id.ToString());
                 seedCmd.Parameters.AddWithValue("@id4", row4Id.ToString());
                 await seedCmd.ExecuteNonQueryAsync();
+
+                // Test omitted updated_at column in SQL to observe DB default CURRENT_TIMESTAMP
+                using var omitCmd = seedConn.CreateCommand();
+                omitCmd.CommandText = @"
+INSERT INTO `faculty` (`id`, `name`, `created_at`, `created_by`, `is_actived`, `is_deleted`)
+VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
+                omitCmd.Parameters.AddWithValue("@id5", row5Id.ToString());
+                await omitCmd.ExecuteNonQueryAsync();
             }
 
-            // Test 1: uuid_sql_to_ef_and_service_to_sql
-            using (var scope = app.Services.CreateScope())
+            // Verify omitted updated_at got populated by DB default, while row 1 explicit NULL stayed NULL
+            using (var seedConn = new MySqlConnection(connectionString))
             {
-                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
-                var loaded = await context.Faculties.FindAsync(row1Id);
-                Require(loaded != null && loaded.Id == row1Id, "Raw char(36) UUID read unchanged");
-            }
+                await seedConn.OpenAsync();
+                using var tzCmd = seedConn.CreateCommand();
+                tzCmd.CommandText = "SET time_zone = '+00:00';";
+                await tzCmd.ExecuteNonQueryAsync();
 
-            var callerId = Guid.NewGuid();
-            using (var scope = app.Services.CreateScope())
-            {
-                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", "caller_user");
-                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
-                var inserted = await service.Insert(new FacultyRequest { Id = callerId, Name = "Phòng Khảo thí" });
-                Require(inserted.Id == callerId, "Caller UUID retained");
-                var createAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
-                Require(createAudit.Action == "CREATE" && createAudit.EntityId == callerId.ToString(), "CREATE audit captured");
-            }
-
-            Guid generatedId;
-            using (var scope = app.Services.CreateScope())
-            {
-                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", "generator_user");
-                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
-                var generated = await service.Insert(new FacultyRequest { Id = Guid.Empty, Name = "Phòng Thanh tra" });
-                Require(generated.Id != Guid.Empty, "Empty request ID generated");
-                generatedId = generated.Id;
-                var genAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
-                Require(genAudit.EntityId == generatedId.ToString(), "Generated ID audit captured");
-            }
-
-            // Test 2: flags_defaults_null_and_timestamp_roundtrip
-            var inactiveId = Guid.NewGuid();
-            using (var scope = app.Services.CreateScope())
-            {
-                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", "flags_user");
-                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
-                var inactive = await service.Insert(new FacultyRequest
+                using var checkCmd = seedConn.CreateCommand();
+                checkCmd.CommandText = "SELECT id, updated_at FROM `faculty` WHERE id IN (@id1, @id5);";
+                checkCmd.Parameters.AddWithValue("@id1", row1Id.ToString());
+                checkCmd.Parameters.AddWithValue("@id5", row5Id.ToString());
+                using var reader = await checkCmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
                 {
-                    Id = inactiveId,
-                    Name = "Phòng Tạm ngưng",
-                    IsActived = false
-                });
-                Require(inactive.IsActived == false, "Explicit false survives DB default true");
-                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                    var id = reader.GetString(0);
+                    if (id == row1Id.ToString())
+                    {
+                        Require(reader.IsDBNull(1), "Explicit NULL updated_at in row 1 remains NULL");
+                    }
+                    else if (id == row5Id.ToString())
+                    {
+                        Require(!reader.IsDBNull(1), "Omitted updated_at in row 5 populated by DB default CURRENT_TIMESTAMP");
+                    }
+                }
             }
 
-            using (var scope = app.Services.CreateScope())
+            // Raw stored flag check (tinyint(1) values 0/1)
+            using (var seedConn = new MySqlConnection(connectionString))
             {
-                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
-                var defaulted = await context.Faculties.FindAsync(row1Id);
-                Require(defaulted != null && defaulted.IsActived == true, "Omitted/default active retains baseline");
-
-                // Test entity IsActived = null directly
-                var nullActiveFaculty = new Faculty
-                {
-                    Id = Guid.NewGuid(),
-                    Name = "Phòng Chưa gán cờ",
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = "DirectContext",
-                    IsActived = null,
-                    IsDeleted = false
-                };
-                await context.Faculties.AddAsync(nullActiveFaculty);
-                await context.SaveChangesAsync();
-                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                await seedConn.OpenAsync();
+                using var flagCmd = seedConn.CreateCommand();
+                flagCmd.CommandText = "SELECT is_actived, is_deleted FROM `faculty` WHERE id = @id1;";
+                flagCmd.Parameters.AddWithValue("@id1", row1Id.ToString());
+                using var reader = await flagCmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Row 1 exists for raw flag check");
+                Require(Convert.ToInt32(reader["is_actived"]) == 1, "Raw is_actived tinyint(1) is 1");
+                Require(Convert.ToInt32(reader["is_deleted"]) == 0, "Raw is_deleted tinyint(1) is 0");
             }
-
-            // JsonOptions UTC+7 serialization
-            var jsonOptions = new JsonSerializerOptions();
-            jsonOptions.Converters.Add(new VietnamDateTimeConverter());
-            jsonOptions.Converters.Add(new VietnamNullableDateTimeConverter());
-            var sampleDto = new ModelFaculty
-            {
-                Id = Guid.NewGuid(),
-                Name = "Time Test",
-                CreatedAt = DateTime.SpecifyKind(new DateTime(2026, 10, 22, 0, 0, 0), DateTimeKind.Utc)
-            };
-            var serialized = JsonSerializer.Serialize(sampleDto, jsonOptions);
-            Require(serialized.Contains("\"CreatedAt\":\"2026-10-22T07:00:00\""), "Fixed 2026-10-22T00:00:00Z becomes 2026-10-22T07:00:00");
-
-            // Test 3: unicode_search_paging_and_duplicate_name
+            // Test 1: unicode_search_paging_and_duplicate_name (checked on seeded 3 'Phòng' rows)
             using (var scope = app.Services.CreateScope())
             {
                 var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
@@ -385,9 +460,79 @@ VALUES
                     dupThrew = true;
                 }
                 Require(dupThrew, "Duplicate name rejected by business validation");
+            }
 
-                // Update excluding own ID
-                SetScopedHttpContext(scope, "UPDATE", "/api/Faculty/update", "updater_user");
+            // Test 2: uuid_sql_to_ef_and_service_to_sql with fresh-context and actor checks
+            const string testUserId = "00000000-0000-0000-0000-00000000000a";
+            const string testUserName = "actor_test_user";
+
+            // char(36) UUID read unchanged in fresh context
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                var loaded = await context.Faculties.FindAsync(row1Id);
+                Require(loaded != null && loaded.Id == row1Id, "Raw char(36) UUID read unchanged");
+            }
+
+            // Caller-specified UUID and CREATE audit validation
+            var callerId = Guid.NewGuid();
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var inserted = await service.Insert(new FacultyRequest { Id = callerId, Name = "Ban Khảo thí" });
+                Require(inserted.Id == callerId, "Caller UUID retained");
+                var createAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(createAudit.Action == "CREATE", "CREATE audit action verified");
+                Require(createAudit.EntityId == callerId.ToString(), "CREATE audit EntityId matches callerId");
+                Require(createAudit.UserId == testUserId, "CREATE audit UserId matches actor");
+                Require(createAudit.UserName == testUserName, "CREATE audit UserName matches actor");
+                Require(string.IsNullOrEmpty(createAudit.OldValues), "CREATE audit OldValues is empty");
+                Require(!string.IsNullOrEmpty(createAudit.NewValues) && createAudit.NewValues.Contains(callerId.ToString()),
+                    "CREATE audit NewValues contains inserted entity ID");
+            }
+
+            // Fresh context reload check for caller insert & actor
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                var reloadedCaller = await context.Faculties.FindAsync(callerId);
+                Require(reloadedCaller != null, "Caller row reloaded from fresh context");
+                Require(reloadedCaller!.CreatedBy == testUserName, "CreatedBy persisted from actor identity");
+            }
+
+            // Raw SQL reload check for caller insert
+            using (var conn = new MySqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT created_by, is_actived, is_deleted FROM `faculty` WHERE id = @id;";
+                cmd.Parameters.AddWithValue("@id", callerId.ToString());
+                using var reader = await cmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Caller row found in raw SQL");
+                Require(reader.GetString(0) == testUserName, "Raw SQL created_by matches actor");
+                Require(Convert.ToInt32(reader["is_actived"]) == 1, "Raw SQL is_actived is 1");
+                Require(Convert.ToInt32(reader["is_deleted"]) == 0, "Raw SQL is_deleted is 0");
+            }
+
+            // Empty request ID generated
+            Guid generatedId;
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var generated = await service.Insert(new FacultyRequest { Id = Guid.Empty, Name = "Ban Thanh tra" });
+                Require(generated.Id != Guid.Empty, "Empty request ID generated");
+                generatedId = generated.Id;
+                var genAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(genAudit.EntityId == generatedId.ToString(), "Generated ID audit captured");
+            }
+
+            // Test 3: update excluding own ID and UPDATE audit payload validation
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "UPDATE", "/api/Faculty/update", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
                 var updatedSelf = await service.Update(new FacultyRequest
                 {
                     Id = row1Id,
@@ -395,19 +540,174 @@ VALUES
                     IsActived = true
                 });
                 Require(updatedSelf.Id == row1Id, "Updating self with same name succeeds");
-                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                var updateAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(updateAudit.Action == "UPDATE", "UPDATE audit action verified");
+                Require(updateAudit.EntityId == row1Id.ToString(), "UPDATE audit EntityId matches updated row");
+                Require(updateAudit.UserId == testUserId, "UPDATE audit UserId matches actor");
+                Require(updateAudit.UserName == testUserName, "UPDATE audit UserName matches actor");
+                Require(!string.IsNullOrEmpty(updateAudit.OldValues), "UPDATE audit OldValues populated");
+                Require(!string.IsNullOrEmpty(updateAudit.NewValues), "UPDATE audit NewValues populated");
+            }
 
-                // Combobox active-only & order
+            // Fresh context reload check for update
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                var reloadedUpdated = await context.Faculties.FindAsync(row1Id);
+                Require(reloadedUpdated != null && reloadedUpdated!.UpdatedBy == testUserName,
+                    "UpdatedBy persisted from actor identity in fresh context");
+            }
+            // Test 4: flags_defaults_null_and_timestamp_roundtrip
+            var inactiveId = Guid.NewGuid();
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var inactive = await service.Insert(new FacultyRequest
+                {
+                    Id = inactiveId,
+                    Name = "Ban Tạm ngưng",
+                    IsActived = false
+                });
+                Require(inactive.IsActived == false, "Explicit false survives DB default true");
+                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+            }
+
+            // Raw SQL check for inactive row
+            using (var conn = new MySqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT is_actived, is_deleted FROM `faculty` WHERE id = @id;";
+                cmd.Parameters.AddWithValue("@id", inactiveId.ToString());
+                using var reader = await cmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Inactive row found in raw SQL");
+                Require(Convert.ToInt32(reader["is_actived"]) == 0, "Raw is_actived is 0 for explicit false");
+                Require(Convert.ToInt32(reader["is_deleted"]) == 0, "Raw is_deleted is 0");
+            }
+
+            // Test entity IsActived = null directly and assert persisted default true on reload
+            var nullActiveId = Guid.NewGuid();
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                var nullActiveFaculty = new Faculty
+                {
+                    Id = nullActiveId,
+                    Name = "Ban Chưa gán cờ",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "DirectContext",
+                    IsActived = null,
+                    IsDeleted = false
+                };
+                await context.Faculties.AddAsync(nullActiveFaculty);
+                await context.SaveChangesAsync();
+                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+            }
+
+            // Fresh context reload check for IsActived = null
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                var reloadedNull = await context.Faculties.FindAsync(nullActiveId);
+                Require(reloadedNull != null && reloadedNull.IsActived == true,
+                    "Persisted default true for null IsActived in fresh context");
+            }
+
+            // Raw SQL reload check for IsActived = null
+            using (var conn = new MySqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT is_actived, is_deleted FROM `faculty` WHERE id = @id;";
+                cmd.Parameters.AddWithValue("@id", nullActiveId.ToString());
+                using var reader = await cmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Null active row found in raw SQL");
+                Require(Convert.ToInt32(reader["is_actived"]) == 1, "Raw is_actived tinyint(1) default is 1");
+                Require(Convert.ToInt32(reader["is_deleted"]) == 0, "Raw is_deleted tinyint(1) default is 0");
+            }
+
+            // DI-resolved MVC JsonOptions & DB timestamp round-trip
+            var mvcJsonOptions = app.Services.GetRequiredService<IOptions<Microsoft.AspNetCore.Mvc.JsonOptions>>().Value.JsonSerializerOptions;
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var row1Dto = await service.GetById(new GetByIdRequest { Id = row1Id });
+                var serializedRow1 = JsonSerializer.Serialize(row1Dto, mvcJsonOptions);
+                Require(serializedRow1.Contains("\"CreatedAt\":\"2026-10-22T07:00:01\""),
+                    "DB timestamp round-trip: 2026-10-22 00:00:01Z serialized through MVC JsonOptions as 2026-10-22T07:00:01");
+            }
+
+            var sampleDto = new ModelFaculty
+            {
+                Id = Guid.NewGuid(),
+                Name = "Time Test",
+                CreatedAt = DateTime.SpecifyKind(new DateTime(2026, 10, 22, 0, 0, 0), DateTimeKind.Utc)
+            };
+            var serializedSample = JsonSerializer.Serialize(sampleDto, mvcJsonOptions);
+            Require(serializedSample.Contains("\"CreatedAt\":\"2026-10-22T07:00:00\""),
+                "Fixed 2026-10-22T00:00:00Z becomes 2026-10-22T07:00:00");
+
+            // Test 5: successful soft-delete, raw row retention, excluded from GetList & GetAllForCombobox, and DELETE audit
+            var deleteTargetId = Guid.NewGuid();
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                await service.Insert(new FacultyRequest { Id = deleteTargetId, Name = "Ban Xóa mềm" });
+                await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+            }
+
+            using (var scope = app.Services.CreateScope())
+            {
+                SetScopedHttpContext(scope, "DELETE", "/api/Faculty/delete-list", testUserId, testUserName);
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var deleteResult = await service.DeleteList(new DeleteListRequest { Ids = new List<Guid> { deleteTargetId } });
+                Require(deleteResult.Contains(deleteTargetId.ToString()), "DeleteList returns deleted ID");
+                var deleteAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(deleteAudit.Action == "DELETE", "DELETE audit action verified");
+                Require(deleteAudit.EntityId == deleteTargetId.ToString(), "DELETE audit EntityId matches deleted ID");
+                Require(deleteAudit.UserId == testUserId, "DELETE audit UserId matches actor");
+                Require(deleteAudit.UserName == testUserName, "DELETE audit UserName matches actor");
+                Require(!string.IsNullOrEmpty(deleteAudit.OldValues), "DELETE audit OldValues is populated");
+            }
+
+            // Raw SQL check: soft-deleted row retained with is_deleted = 1
+            using (var conn = new MySqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT is_deleted, updated_by FROM `faculty` WHERE id = @id;";
+                cmd.Parameters.AddWithValue("@id", deleteTargetId.ToString());
+                using var reader = await cmd.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Soft-deleted row retained in raw SQL");
+                Require(Convert.ToInt32(reader["is_deleted"]) == 1, "Raw is_deleted is 1 for soft-deleted row");
+                Require(reader.GetString(1) == testUserName, "Raw updated_by matches deleter username");
+            }
+
+            // Paging & combobox exclude deleted row; combobox excludes inactive row and is sorted
+            using (var scope = app.Services.CreateScope())
+            {
+                var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
+                var pagingAfterDelete = await service.GetList(new GetListPagingRequest
+                {
+                    TextSearch = "Ban Xóa mềm",
+                    PageIndex = 1,
+                    PageSize = 10
+                });
+                Require(pagingAfterDelete.TotalRow == 0, "Soft-deleted row excluded from GetList");
+
                 var combobox = await service.GetAllForCombobox();
+                Require(combobox.All(c => c.Value != deleteTargetId.ToString()), "Combobox excludes soft-deleted row");
                 Require(combobox.All(c => c.Value != inactiveId.ToString()), "Combobox excludes inactive row");
                 Require(combobox.Select(c => c.Text).SequenceEqual(combobox.Select(c => c.Text).OrderBy(x => x)),
                     "Combobox ordered alphabetically");
             }
-
-            // Test 4: failed_batch_and_failed_save_never_succeed
+            // Test 6: failed_batch_and_failed_save_never_succeed
             using (var scope = app.Services.CreateScope())
             {
-                SetScopedHttpContext(scope, "DELETE", "/api/Faculty/delete-list", "deleter_user");
+                SetScopedHttpContext(scope, "DELETE", "/api/Faculty/delete-list", testUserId, testUserName);
                 var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
                 bool deleteThrew = false;
                 try
@@ -436,7 +736,7 @@ VALUES
             using (var scope = app.Services.CreateScope())
             {
                 var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
-                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", "failed_user");
+                SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, "failed_user");
                 context.Faculties.Add(new Faculty
                 {
                     Id = row1Id,
@@ -462,6 +762,11 @@ VALUES
             var failureAudits = await capturingInvoker.CollectObservationsAsync(TimeSpan.FromSeconds(1));
             Require(!failureAudits.Any(x => x.IsSuccess), "Failed DB save emitted no success audit");
         }
+        catch (Exception ex)
+        {
+            primaryException = ex;
+            throw;
+        }
         finally
         {
             if (tableCreatedByThisRun)
@@ -483,15 +788,23 @@ VALUES
                         throw new InvalidOperationException($"Target database changed to '{db}' during cleanup; aborting drop.");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception cleanupEx)
                 {
-                    throw new InvalidOperationException($"Leftover table report: failed to drop owned 'faculty' table: {ex.Message}", ex);
+                    var sanitizedCleanupMsg = SanitizeMessage(cleanupEx);
+                    if (primaryException != null)
+                    {
+                        Console.Error.WriteLine($"Leftover table report: failed to drop owned 'faculty' table: {sanitizedCleanupMsg}");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Leftover table report: failed to drop owned 'faculty' table: {sanitizedCleanupMsg}");
+                    }
                 }
             }
         }
     }
 
-    private static void SetScopedHttpContext(IServiceScope scope, string auditAction, string path, string userName)
+    private static void SetScopedHttpContext(IServiceScope scope, string auditAction, string path, string userId, string userName)
     {
         var httpAccessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
         var context = new DefaultHttpContext();
@@ -499,7 +812,7 @@ VALUES
         context.Items["AuditAction"] = auditAction;
         var claims = new[]
         {
-            new Claim("name", Guid.NewGuid().ToString()),
+            new Claim("name", userId),
             new Claim("unique_name", userName),
             new Claim("role", Guid.NewGuid().ToString())
         };

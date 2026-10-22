@@ -73,7 +73,7 @@ else if (mode == "provider")
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"provider check failed: {ex.Message}");
+        Console.Error.WriteLine($"provider check failed: {ProviderChecks.SanitizeMessage(ex)}");
         return 1;
     }
 }
@@ -331,9 +331,9 @@ static async Task RunRuntimeChecksAsync()
         }
 
                 // Test 3: Claims endpoint verification
-        var testUserId = Guid.NewGuid().ToString();
-        var testUserName = "test_user_principal";
-        var testRoleId = Guid.NewGuid().ToString();
+        const string testUserId = "00000000-0000-0000-0000-000000000099";
+        const string testUserName = "test_user_deterministic";
+        const string testRoleId = "00000000-0000-0000-0000-000000000088";
         var claimsJwt = CreateJwt(testJwtKey, testIssuer, testAudience, userId: testUserId, userName: testUserName, roleId: testRoleId);
         using (var claimsReq = new HttpRequestMessage(HttpMethod.Get, "/__checks/claims"))
         {
@@ -343,8 +343,12 @@ static async Task RunRuntimeChecksAsync()
             var claimsJson = await claimsResp.Content.ReadAsStringAsync();
             using var claimsDoc = JsonDocument.Parse(claimsJson);
             var claimsRoot = claimsDoc.RootElement;
-            Require(claimsRoot.TryGetProperty("identity_name", out _), "identity_name present in claims response");
+            Require(claimsRoot.TryGetProperty("identity_name", out var idNameProp) && idNameProp.GetString() == testUserName,
+                "identity_name matches testUserName");
             Require(claimsRoot.GetProperty("is_in_role").GetBoolean(), "IsInRole returns true for token role");
+            Require(claimsRoot.GetProperty("raw_name").GetString() == testUserId, "raw_name matches testUserId");
+            Require(claimsRoot.GetProperty("raw_unique_name").ValueKind == JsonValueKind.Null, "raw_unique_name is null in .NET 8 due to inbound mapping to Name");
+            Require(claimsRoot.GetProperty("raw_role").ValueKind == JsonValueKind.Null, "raw_role is null in .NET 8 due to inbound mapping to Role");
         }
 
         // Test 4: Swagger only contains six Faculty routes, no retired routes
