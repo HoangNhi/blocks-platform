@@ -14,7 +14,6 @@ if (!string.IsNullOrEmpty(port))
 }
 
 builder.AddServiceDefaults();
-builder.Services.AddMemoryCache();
 
 // Add services to the container.
 

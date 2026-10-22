@@ -1,8 +1,6 @@
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
-using Blocks.FileService.DTOs.Base;
 using Blocks.FileService.DTOs.Common;
-using Blocks.FileService.Services.CoreFeature.Watermark;
 using AutoDependencyRegistration.Attributes;
 using Microsoft.AspNetCore.StaticFiles;
 
@@ -12,23 +10,11 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
     [RegisterClassAsTransient]
     public class UploadFileService : IUploadFileService
     {
-        private static readonly HashSet<string> OfficeExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".doc",
-            ".docx",
-            ".xls",
-            ".xlsx"
-        };
-
         private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly IDynamicWatermarkingService _watermarkingService;
 
-        public UploadFileService(
-            IWebHostEnvironment webHostEnvironment,
-            IDynamicWatermarkingService watermarkingService)
+        public UploadFileService(IWebHostEnvironment webHostEnvironment)
         {
             _webHostEnvironment = webHostEnvironment;
-            _watermarkingService = watermarkingService;
         }
 
         public async Task Insert(List<IFormFile> files, string FolderName)
@@ -199,12 +185,7 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             return path;
         }
 
-        public async Task<ModelFilePreview> PreviewFileAsync(
-            string fileUrl,
-            Guid? fileId = null,
-            string? watermarkText = null,
-            int watermarkOpacity = 25,
-            int watermarkPosition = 0)
+        public async Task<ModelFilePreview> PreviewFileAsync(string fileUrl)
         {
             if (string.IsNullOrWhiteSpace(fileUrl))
             {
@@ -230,37 +211,16 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 throw new BusinessException("Tệp không tồn tại");
             }
 
-            var fileExtension = Path.GetExtension(absolutePath);
             var originalContentType = GetContentType(absolutePath);
-            if (OfficeExtensions.Contains(fileExtension) && (!fileId.HasValue || fileId == Guid.Empty))
-            {
-                throw new BusinessException("Tính năng xem trước Word/Excel bắt buộc cung cấp FileId để tối ưu bộ nhớ đệm.");
-            }
-
             var fileContent = await File.ReadAllBytesAsync(absolutePath);
             var fileName = Path.GetFileName(absolutePath);
-            var (outputContent, servedContentType, hasWatermark) = await _watermarkingService.ApplyAsync(
-                fileContent,
-                fileExtension,
-                fileId,
-                absolutePath,
-                new WatermarkConfig
-                {
-                    Text = watermarkText ?? string.Empty,
-                    Opacity = watermarkOpacity,
-                    Position = watermarkPosition
-                });
 
             return new ModelFilePreview
             {
-                FileContent = outputContent,
-                ContentType = servedContentType,
+                FileContent = fileContent,
+                ContentType = originalContentType,
                 FileName = fileName,
-                HasWatermark = hasWatermark,
-                OriginalContentType = originalContentType,
-                ConvertedContentType = !string.Equals(servedContentType, originalContentType, StringComparison.OrdinalIgnoreCase)
-                    ? servedContentType
-                    : null
+                OriginalContentType = originalContentType
             };
         }
 

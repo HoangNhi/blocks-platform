@@ -1,4 +1,3 @@
-using Blocks.FileService.Services.CoreFeature.Watermark;
 using Blocks.SystemService.Protos;
 using AutoDependencyRegistration;
 using Grpc.Net.Client.Web;
@@ -38,7 +37,6 @@ namespace Blocks.FileService.Configs
 
             //ALL SERVICE
             builder.Services.AutoRegisterDependencies();
-            builder.Services.AddHostedService<PdfCacheCleanupJob>();
 
             //CORS
             builder.Services.AddCors(options =>

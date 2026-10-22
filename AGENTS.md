@@ -53,7 +53,7 @@
 | `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
 | `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
 | `src/services/Blocks.CatalogService/` | Catalogs, standards, criteria; EF Core with MySQL; targets `net8.0`. |
-| `src/services/Blocks.FileService/` | Uploads, previews, conversion, watermarking; targets `net8.0`. |
+| `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net8.0`. |
 | `src/platform/Blocks.AppHost/` | Aspire orchestration; currently references missing services. |
 | `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults. |
 | `src/platform/Blocks.Shared/` | Shared DTOs, validation, exceptions, gRPC helpers. |
@@ -171,7 +171,14 @@ Existing SystemService source-level regression check:
 ```
 
 This checks source references and file existence, not authentication behavior.
-The cleanup harness targets `net10.0`. Its DB-free checks are:
+
+FileService DB-free checks (production DI and direct service/gRPC methods, not HTTP authorization):
+
+```powershell
+dotnet run --project test/FileService.RemovalChecks
+```
+
+The SystemService cleanup harness targets `net10.0`. Its DB-free checks are:
 
 ```powershell
 dotnet run --project test/SystemService.CleanupChecks -- contract

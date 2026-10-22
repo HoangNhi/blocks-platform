@@ -77,14 +77,13 @@ namespace Blocks.FileService.Services.Grpc
 
         public override async Task<PreviewFileResponse> PreviewFile(PreviewFileRequest request, ServerCallContext context)
         {
-            Guid.TryParse(request.FileId, out var fileId);
+            // Legacy clients must not receive an unmarked original when requesting a watermark.
+            if (!string.IsNullOrWhiteSpace(request.WatermarkText))
+            {
+                throw new RpcException(new Status(StatusCode.Unimplemented, "Watermarking is no longer supported."));
+            }
 
-            var result = await _uploadFileService.PreviewFileAsync(
-                request.FileUrl,
-                fileId == Guid.Empty ? null : fileId,
-                string.IsNullOrWhiteSpace(request.WatermarkText) ? null : request.WatermarkText,
-                request.WatermarkOpacity,
-                request.WatermarkPosition);
+            var result = await _uploadFileService.PreviewFileAsync(request.FileUrl);
 
             return new PreviewFileResponse
             {
