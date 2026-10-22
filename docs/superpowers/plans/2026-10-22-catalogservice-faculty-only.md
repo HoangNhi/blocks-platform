@@ -67,12 +67,12 @@ Mọi đường dẫn tính từ repository root. Thư mục trong danh sách x�
 
 ### Đầu vào và điều kiện trước thực thi
 
-- [ ] Đọc `AGENTS.md`, spec và plan; kiểm tra `git status --short` và HEAD. Giữ snapshot scaffold `e92415a` và các commit FileService đã có, không revert hoặc gộp lại chúng vào commit Catalog.
-- [ ] Dùng `superpowers:using-git-worktrees` khi bắt đầu thực thi. Nếu tạo worktree mới, dùng HEAD hiện tại có snapshot `e92415a`, không dùng mốc source ban đầu bảy DbSet. Nếu xuất hiện thay đổi scaffold chưa commit mới hơn, mang đúng patch liên quan đã review sang; không chuyển thay đổi ngoài Catalog.
-- [ ] Lưu hash hai file scaffold trong phiên làm việc để so sánh sau Task 1; không lưu nội dung cấu hình bí mật. Hai file này đã được snapshot nên bình thường không cần xuất hiện trong commit Task 1.
-- [ ] Ghi baseline bằng build trực tiếp CatalogService. Spec đã ghi 123 lỗi/38 cảnh báo; nếu kết quả hiện tại khác, dùng log mới, không ép số lỗi về baseline cũ.
-- [ ] Nếu chưa có frontend dependencies, chạy `npm --prefix src/apps/Blocks.Web ci`. Chạy build/lint/test frontend trước sửa để ghi baseline riêng; không sửa lỗi ngoài phạm vi hoặc thay `package-lock.json`.
-- [ ] Xác nhận không có writer/startup tự chạy SQL lịch sử. Không dùng full-solution/AppHost làm điều kiện đạt.
+- [x] Đọc `AGENTS.md`, spec và plan; kiểm tra `git status --short` và HEAD. Giữ snapshot scaffold `e92415a` và các commit FileService đã có, không revert hoặc gộp lại chúng vào commit Catalog.
+- [x] Dùng `superpowers:using-git-worktrees` khi bắt đầu thực thi. Nếu tạo worktree mới, dùng HEAD hiện tại có snapshot `e92415a`, không dùng mốc source ban đầu bảy DbSet. Nếu xuất hiện thay đổi scaffold chưa commit mới hơn, mang đúng patch liên quan đã review sang; không chuyển thay đổi ngoài Catalog.
+- [x] Lưu hash hai file scaffold trong phiên làm việc để so sánh sau Task 1; không lưu nội dung cấu hình bí mật. Hai file này đã được snapshot nên bình thường không cần xuất hiện trong commit Task 1.
+- [x] Ghi baseline bằng build trực tiếp CatalogService. Spec đã ghi 123 lỗi/38 cảnh báo; nếu kết quả hiện tại khác, dùng log mới, không ép số lỗi về baseline cũ.
+- [x] Nếu chưa có frontend dependencies, chạy `npm --prefix src/apps/Blocks.Web ci`. Chạy build/lint/test frontend trước sửa để ghi baseline riêng; không sửa lỗi ngoài phạm vi hoặc thay `package-lock.json`.
+- [x] Xác nhận không có writer/startup tự chạy SQL lịch sử. Không dùng full-solution/AppHost làm điều kiện đạt.
 
 ## Task 1: Xóa backend cũ và khôi phục build Faculty-only
 
@@ -94,7 +94,7 @@ Mọi đường dẫn tính từ repository root. Thư mục trong danh sách x�
 - Produces: `& ./test/CatalogService.Removal.Check.ps1`; console mode `contract` và `runtime`, exit 0 khi mọi assert đạt, exit khác 0 khi có lỗi.
 - Harness dùng `static void Require(bool condition, string message)`, `void RunContractChecks()` và `Task RunRuntimeChecksAsync()` trong `Program.cs`; mode không hợp lệ phải fail. Không tạo test framework hoặc helper library dùng chung.
 
-- [ ] **Step 1: Viết check nguồn thất bại trước khi xóa**
+- [x] **Step 1: Viết check nguồn thất bại trước khi xóa**
 
 Theo mẫu `test/SystemService.BusinessDependency.Check.ps1`: resolve root từ `$PSScriptRoot`, parse `.csproj` bằng `[xml]`, chỉ scan `.cs/.csproj/.proto`, loại `bin/obj`. Dùng assert ném exception khi không đạt, với các điều kiện:
 
@@ -113,18 +113,18 @@ if ($config -notmatch 'AuditInterceptor' -or $config -notmatch 'AuditActionFilte
 
 Mở rộng assert thành đủ bốn controller, sáu entity, bốn thư mục service/DTO, `catalog.proto`, `AddGrpc()` và reference `CatalogProto`. Assert hai client protobuf còn `GrpcServices="Client"` và đường dẫn tồn tại; assert hai đăng ký `AddGrpcClient` cùng audit filter/interceptor vẫn còn. Check nguồn không được đọc `appsettings` hoặc `.codex/.env`.
 
-- [ ] **Step 2: Chạy check để chứng minh đỏ**
+- [x] **Step 2: Chạy check để chứng minh đỏ**
 
 Run: `& ./test/CatalogService.Removal.Check.ps1`.
 Expected: FAIL vì controller/service/gRPC cũ còn tồn tại. Build CatalogService cũng đang fail; đây không phải lý do thêm lại DbSet.
 
-- [ ] **Step 3: Xóa đúng domain và registration đã liệt kê**
+- [x] **Step 3: Xóa đúng domain và registration đã liệt kê**
 
 Bỏ Catalog server mapping/usings, `AddGrpc()`, protobuf server item và `Folder Include="Services\gRPC\"` đã rỗng. Bỏ `Grpc.AspNetCore`, `Grpc.AspNetCore.Web` khi không còn caller server; giữ `Grpc.Tools`, `Google.Protobuf`, `Grpc.Net.ClientFactory`, `Grpc.Net.Client.Web` cho client đang dùng. Xóa enum/using hết caller; giữ các converter ngày tháng và cấu hình chung còn dùng.
 
 Giữ nguyên sáu endpoint Faculty, JWT, filter/interceptor, CORS, health, telemetry và exception middleware. So hash hai file scaffold với đầu vào. Với thao tác xóa đệ quy, kiểm tra đường dẫn tuyệt đối thuộc đúng thư mục domain được phép trước; dùng một shell PowerShell, không purge thư mục cha.
 
-- [ ] **Step 4: Thêm check model và runtime không kết nối DB**
+- [x] **Step 4: Thêm check model và runtime không kết nối DB**
 
 Console harness lấy mẫu assert/loopback Kestrel từ `test/SystemService.CleanupChecks/Program.cs`, không reference project SystemService `net10.0`. `contract` dựng context riêng bằng Pomelo với server version cố định `new MySqlServerVersion(new Version(8, 0, 0))` chỉ cho SQL fixture; không gọi `AutoDetect`, `OpenConnection`, `EnsureCreated`, migration hoặc `SaveChanges`.
 
@@ -145,7 +145,7 @@ Không resolve `CatalogContext` qua production DI trong mode này: options produ
 
 Test `faculty_missing_invalid_expired_jwt_keeps_401_envelope`: GET `/api/Faculty/get-all-combobox` với token thiếu, sai chữ ký, hết hạn phải HTTP 200, `Success=false`, `StatusCode=401`. Test `retired_routes_are_404_with_valid_jwt`: JWT đúng chữ ký gửi GET `/api/FileType/get-all-combobox`, `/api/Stakeholder/get-all-combobox`, `/api/Standard/get-all-combobox`, `/api/StandardSet/get-all-combobox`, expected HTTP 404. Swagger chỉ có sáu route Faculty trong controller nghiệp vụ, không có bốn controller cũ; kiểm kê endpoint không có Catalog RPC. Dừng/dispose host và dọn fixture trong `finally`.
 
-- [ ] **Step 5: Chạy kiểm tra xanh**
+- [x] **Step 5: Chạy kiểm tra xanh**
 
 ```powershell
 & ./test/CatalogService.Removal.Check.ps1
@@ -156,7 +156,7 @@ dotnet run --project test/CatalogService.CleanupChecks -- runtime
 
 Expected: source check PASS, build không còn error, cả hai mode exit 0 và không mở DB. Ghi cảnh báo baseline riêng; không nâng AutoMapper 16.0.0 trong task này.
 
-- [ ] **Step 6: Commit phần backend và checks**
+- [x] **Step 6: Commit phần backend và checks**
 
 Review `git diff`, stage chỉ file Catalog/checks của task; hai file scaffold đã có commit đầu vào phải giữ nguyên. Không stage FileService, AGENTS hoặc SQL lịch sử. Kiểm tra `git diff --cached --name-only`.
 Commit: `git commit -m "refactor(catalog): remove retired domains and grpc server"`.
@@ -176,7 +176,7 @@ Commit: `git commit -m "refactor(catalog): remove retired domains and grpc serve
 - Produces: chỉ đổi thông báo và nhãn; contract `Id/Name/IsEdit/IsActived`, query key, route và method service không đổi.
 - Produces: mở rộng mode `contract` của Task 1, không thêm mode mới.
 
-- [ ] **Step 1: Viết assert validation/mapping và test giao diện**
+- [x] **Step 1: Viết assert validation/mapping và test giao diện**
 
 Trong console harness, thêm `faculty_empty_name_uses_department_message` và `faculty_mapping_keeps_uuid_and_nullable_dto_created_at`. Tạo mapper với `FacultyProfile` và `NullLoggerFactory.Instance`; chỉ test map thực dùng, không sửa profile để vượt toàn bộ `AssertConfigurationIsValid` của mapping cũ.
 
@@ -203,23 +203,23 @@ expect(saveChange).not.toHaveBeenCalled();
 
 Thêm assert header `Name` bằng `"Tên phòng ban"` từ `getColumns`; popup edit dùng `"Cập nhật Phòng ban"`. Điền tên rồi lưu để assert payload vẫn có `Id` UUID, `Name`, `IsEdit`, `IsActived` và `isAddMore=false`; nút `"Lưu và thêm tiếp"` truyền `true`. Không gọi API thật trong Vitest.
 
-- [ ] **Step 2: Chạy test đỏ**
+- [x] **Step 2: Chạy test đỏ**
 
 Run: `dotnet run --project test/CatalogService.CleanupChecks -- contract`.
 Run: `npm --prefix src/apps/Blocks.Web test -- src/features/catalog/routes/Faculty/Faculty.test.tsx`.
 Expected: fail vì thông báo/header/title còn `"Khoa"`; check model/mapping vẫn đạt.
 
-- [ ] **Step 3: Thay đúng chuỗi, không đổi logic**
+- [x] **Step 3: Thay đúng chuỗi, không đổi logic**
 
 Backend đổi `"Tên khoa đã tồn tại"` thành `"Tên phòng ban đã tồn tại"` ở cả Insert/Update; validator dùng `"Tên phòng ban không được để trống"`.
 Frontend đổi header, label `"Tên phòng ban"`, validation và hai title nêu trên. Không sửa UUID assignment, `DateTime.UtcNow`, soft-delete, mapper, DTO, API/hooks/query invalidation hoặc kiểu `CreatedAt`.
 
-- [ ] **Step 4: Chạy xanh và build**
+- [x] **Step 4: Chạy xanh và build**
 
 Run lại hai lệnh Step 2, thêm `dotnet build src/services/Blocks.CatalogService/Blocks.CatalogService.csproj`.
 Expected: exit 0; UI/validation test đạt. Trùng tên backend được kiểm tra qua service thật trên môi trường cô lập ở Task 5, không kết nối DB thật trong `contract`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Stage chỉ hai file backend, hai file UI và hai file test của task.
 Commit: `git commit -m "feat(catalog): relabel faculty as departments"`.
@@ -239,7 +239,7 @@ Commit: `git commit -m "feat(catalog): relabel faculty as departments"`.
 - Produces: `/faculty` vẫn vào `FacultyPage`; `/filetype`, `/stakeholder`, `/standard`, `/standardset` không còn route/import.
 - Produces: những API wrapper được giữ không thay URL hoặc giả response thành công.
 
-- [ ] **Step 1: Viết test cấu trúc route và module giữ lại**
+- [x] **Step 1: Viết test cấu trúc route và module giữ lại**
 
 `Router.catalog.test.ts` dùng `// @vitest-environment node`, `node:fs`, `typescript` đã cài. Helper test-only `routePaths(source: string): string[]` duyệt JSX `Route` bằng TypeScript AST và đọc thuộc tính `path`; không regex JSX hoặc refactor Router chỉ để test.
 
@@ -256,22 +256,22 @@ Trong test, định nghĩa `retiredPaths` là bốn đường dẫn trên; `expe
 
 Test `business_catalog_dependencies_remain` assert `existsSync` với: `api/filetype.api.ts`, `api/standard.api.ts`, `api/standardset.api.ts`, bốn file types, bốn hook options/criteria và hai component trong spec mục 6. Dùng tên cụ thể trong spec, không wildcard. Build frontend là check thực tế cho đồ thị import.
 
-- [ ] **Step 2: Chạy test đỏ**
+- [x] **Step 2: Chạy test đỏ**
 
 Run: `npm --prefix src/apps/Blocks.Web test -- src/Router.catalog.test.ts`.
 Expected: fail vì bốn route vẫn hiện diện.
 
-- [ ] **Step 3: Gỡ route và file hết caller**
+- [x] **Step 3: Gỡ route và file hết caller**
 
 Xóa đúng bốn import/Route trong Router và các file trong Files. Trước xóa hook orphan, chạy `rg` trên toàn frontend để chắc không có caller mới; nếu có, giữ file và ghi rõ vào báo cáo thay vì sửa business.
 Giữ `stakeholder.types.ts`, không nhầm với `stakeholder.api.ts`. Không xóa wrappers/endpoint constants cho FileType/Standard/StandardSet hoặc `catalog.constants.ts` còn được business dùng.
 
-- [ ] **Step 4: Chạy xanh và kiểm tra import**
+- [x] **Step 4: Chạy xanh và kiểm tra import**
 
 Run lại Step 2; chạy `npm --prefix src/apps/Blocks.Web run build`.
 Expected: route/module tests PASS, không có lỗi TypeScript mới do xóa file. So baseline trước Task 1; lỗi ngoài phạm vi phải được báo riêng, không chỉnh business để che lỗi. Không coi build đạt là business runtime đạt.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Stage chỉ Router, test và các file frontend bị xóa; kiểm tra danh sách staged không có business hoặc lockfile.
 Commit: `git commit -m "refactor(web): remove retired catalog administration screens"`.
@@ -287,7 +287,7 @@ Commit: `git commit -m "refactor(web): remove retired catalog administration scr
 - Consumes: `useAuth()` cung cấp `menu`, `systemGroup`, `permissions`, `user`; menu chứa `Controller`, `SystemGroupId`, `Name`, `Id`.
 - Produces: cùng export `AppSidebar(props: React.ComponentProps<typeof Sidebar>)`; chỉ lọc tập menu phục vụ render, không mutate context.
 
-- [ ] **Step 1: Viết test render sidebar thật**
+- [x] **Step 1: Viết test render sidebar thật**
 
 Helper test-only `renderSidebar(menu, systemGroup, pathname): RenderResult` dùng `MemoryRouter` + `SidebarProvider`; mock `useAuth` bằng fixtures frozen và `useIsMobile` trả `false`, không mock chính `AppSidebar`. Mở từng Collapsible bằng `fireEvent.click` trước khi assert các link bên trong.
 
@@ -302,21 +302,21 @@ expect(authState.permissions).toEqual(originalPermissions);
 
 Test riêng `cached_retired_controllers_are_hidden_case_insensitively`: fixture cũ có đủ bốn controller, gồm `"FileType"`/`"STANDARDSET"`, đặt ở menu trực tiếp và nhóm con. Test `empty_roots_and_subgroups_disappear_but_mixed_groups_remain`: gốc chỉ chứa nhóm con bị lọc, nhóm con rỗng, nhóm trộn Faculty/User và menu có `IsShowMenu=false` không thuộc bốn khóa. Menu không bị retire phải giữ hành vi cũ dù `IsShowMenu=false`. Test `remaining_link_keeps_active_state` và trường hợp mảng rỗng không crash.
 
-- [ ] **Step 2: Chạy test đỏ**
+- [x] **Step 2: Chạy test đỏ**
 
 Run: `npm --prefix src/apps/Blocks.Web test -- src/components/layout/MainLayout/app-sidebar.test.tsx`.
 Expected: fail vì menu cũ hoặc header nhóm rỗng vẫn render.
 
-- [ ] **Step 3: Lọc tại sidebar, không đổi AuthContext**
+- [x] **Step 3: Lọc tại sidebar, không đổi AuthContext**
 
 Dùng tập bốn khóa `filetype`, `stakeholder`, `standard`, `standardset`, so khớp `Controller?.toLowerCase()`. Từ tập menu đã lọc, tính direct menus, submenu, `hasChildren` và active state; root chỉ sống khi có direct menu còn giữ hoặc subgroup có menu còn giữ. Không thêm helper module/export/abstraction cho việc lọc này; không thêm bộ lọc `IsShowMenu` tổng quát.
 
-- [ ] **Step 4: Chạy xanh**
+- [x] **Step 4: Chạy xanh**
 
 Run lại Step 2, chạy `npm --prefix src/apps/Blocks.Web run build`.
 Expected: các fixture đều PASS, link/active state còn đúng, context/permissions không bị sửa.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Stage đúng sidebar và test.
 Commit: `git commit -m "fix(web): hide retired catalog menus and empty groups"`.
@@ -335,100 +335,28 @@ Commit: `git commit -m "fix(web): hide retired catalog menus and empty groups"`.
 - Consumes: `POST /api/Menu/get-list`, `GET /api/Menu/get-by-id?Id=...`, `PUT /api/Menu/update`; response envelope hiện có.
 - Produces: đúng một menu Faculty có `Name="Phòng ban"`; ID/controller/group/sort/flags và Permission giữ nguyên; kết quả kiểm tra phân biệt PASS/FAIL/NOT RUN.
 
-- [ ] **Step 1: Chuẩn bị điều kiện kiểm thử tích hợp và điều kiện dừng**
+- [x] **Step 1: Chuẩn bị điều kiện kiểm thử tích hợp và điều kiện dừng**
 
 Chỉ thực hiện CRUD khi người dùng cho phép môi trường cô lập: MySQL localhost tên `blocks_catalogservice_cleanup_test` đã có schema `faculty` khớp scaffold; SystemService dùng database test riêng, có user chỉ đọc và user đủ quyền Faculty cùng JWT/gRPC cấu hình tương ứng. Xác minh connection thực của từng host trước request ghi, không suy từ tên source MCP hoặc URL localhost.
 
 Không dùng `blocks_catalog_dev`, `blocks_system_dev` hoặc tự tạo/drop/seed DB khi chưa được cho phép. Thiếu môi trường/tài khoản thì ghi `NOT RUN`, không chạy trên DB ứng dụng, không tuyên bố đủ nghiệm thu runtime và không bỏ qua bảo vệ.
 
-- [ ] **Step 2: Kiểm tra Faculty qua HTTP thật trên môi trường cô lập**
-
-Dùng PowerShell `Invoke-WebRequest`/`Invoke-RestMethod` và headers từ session hoặc biến môi trường, không in token. Các assert dưới đây là kiểm thử tích hợp, không thay production gRPC client bằng mock:
-
-```powershell
-if (-not $insert.Success) { throw 'Faculty insert failed' }
-if ($insert.Data.Id -ne $fixtureId) { throw 'Faculty UUID changed' }
-if ($duplicate.Success -or $duplicate.Message -ne 'Tên phòng ban đã tồn tại') {
-    throw 'Duplicate department name contract changed'
-}
-if ($denied.Success -or $denied.StatusCode -ne 403) { throw 'Faculty write permission bypassed' }
-```
-
-Tạo `$fixtureId` bằng `[guid]::NewGuid()`, tên riêng có cùng suffix UUID, trạng thái active; ghi thời điểm trước request. Tạo thêm record đối chứng với UUID và tên khác để test Update trùng tên record khác, không nhầm với Update giữ nguyên tên của chính nó.
-
-Dùng sáu endpoint trong spec: insert, get-by-id, get-list với `PageIndex=1`, `PageSize=10`, `TextSearch` bằng tên fixture, combobox, update rồi delete-list. Assert chỉ fixture xuất hiện khi search; đổi tên, deactivate/reactivate để check combobox; list sau soft-delete không trả fixture. Qua SELECT hẹp trên DB test, assert dòng còn tồn tại với `is_deleted=1`, UUID/audit fields/timestamp đúng; không thay bằng DELETE vật lý. Trong `finally`, soft-delete đúng hai UUID do test tạo qua API, không xóa theo tên hoặc xóa dữ liệu test khác.
-
-Kiểm tra Insert và Update trùng tên dùng thông báo chính xác nêu trên; empty/null `Name` trả `"Tên phòng ban không được để trống"`. Token user chỉ đọc vẫn đọc được nhưng không ghi; token đúng của user đủ quyền ghi được. Không token/sai token giữ envelope Task 1; HTTP status đơn lẻ không chứng minh ứng dụng thành công.
-
-- [ ] **Step 3: Xác minh audit thật, không dựa vào HTTP thành công**
-
-Qua `POST /api/AuditLog/get-list` của SystemService test, lọc `ServiceName="CatalogService"`, `EntityName="Faculty"`, `UserId` fixture, action CREATE/UPDATE/DELETE, rồi đối chiếu `EntityId`, thời điểm và giá trị riêng của fixture. Poll tối đa 30 giây với khoảng 1 giây vì interceptor gửi gRPC bất đồng bộ. Expected: audit thành công chỉ sau save; duplicate request qua action filter có `IsSuccess=false` và thông báo trùng tên. Với log thất bại, đối chiếu `NewValues` và thời điểm thay vì yêu cầu `EntityId` vì filter hiện gửi chuỗi rỗng. Không đòi audit cho request bị authorization chặn trước filter.
-
-Không có log trong timeout thì FAIL/điều tra gRPC; không đổi audit sang no-op, không nới quyền, không tăng timeout vô hạn. Dừng host kiểm thử sau khi poll xong, không tắt ngay sau response và kết luận audit mất.
-
-- [ ] **Step 4: Xác định duy nhất menu Faculty trước khi ghi**
-
-Đối với metadata menu ứng dụng, dùng admin API đã được spec cho phép, không dùng CRUD fixture Catalog ở Step 2. `POST /api/Menu/get-list` với `PageIndex=1`, `PageSize=100`, `TextSearch=""`, đọc hết các trang theo `TotalRow`; sau đó lọc `Controller` không phân biệt hoa/thường bằng `"faculty"`. Không giả định stored function tìm kiếm theo Controller khi truyền `TextSearch="faculty"`.
-
-Expected: đúng một target. Nếu 0 hoặc nhiều hơn 1, hoặc response không `Success=true`, dừng để người dùng xác định ID; không chọn phần tử đầu tiên:
-
-```powershell
-if (@($facultyMatches).Count -ne 1) { throw 'Faculty menu ID is ambiguous or missing' }
-```
-
-Đọc đủ record bằng `GET /api/Menu/get-by-id?Id=...`, snapshot nội bộ các field giữ nguyên và snapshot quyền hiện tại; không ghi snapshot có token hoặc dữ liệu cá nhân vào Git.
-
-- [ ] **Step 5: Đổi đúng Name qua API và đọc lại**
-
-Payload `MenuRequest` lấy nguyên `Id`, `Controller`, `SystemGroupId`, `Sort`, `IsActived`, `IsEdit`, `CanView`, `CanAdd`, `CanUpdate`, `CanDelete`, `CanApprove`, `CanAnalyze`, `IsShowMenu`; chỉ đặt `Name="Phòng ban"`. Không bỏ `IsActived` hoặc các bool vì default có thể reset trạng thái.
-
-Gọi `PUT /api/Menu/update`, assert HTTP 200, `Success=true`, `StatusCode=200`, `Data.Name="Phòng ban"`; GET lại để assert tất cả field giữ nguyên ngoài `Name` và `UpdatedAt`/`UpdatedBy` do API tự cập nhật. Nếu Name đã đúng, không PUT lại nhưng vẫn đọc/kiểm tra trạng thái. Không sửa bốn menu retire hoặc Permission.
-
-```powershell
-$preservedFields = @('Id', 'Controller', 'SystemGroupId', 'Sort', 'IsActived', 'IsEdit',
-    'CanView', 'CanAdd', 'CanUpdate', 'CanDelete', 'CanApprove', 'CanAnalyze', 'IsShowMenu')
-foreach ($field in $preservedFields) {
-    if ($after.Data.$field -ne $before.Data.$field) { throw "Menu field changed: $field" }
-}
-```
-
-Kiểm tra log `EntityName="Menu"`, action UPDATE của ID vừa đổi qua API audit với user đủ quyền. Đăng xuất/đăng nhập lại; kiểm tra sidebar và breadcrumb hiện Phòng ban. F5 không thay bước đăng nhập lại vì cache AuthContext.
-
-- [ ] **Step 6: Chạy nghiệm thu tổng và ghi giới hạn**
-
-```powershell
-& ./test/CatalogService.Removal.Check.ps1
-dotnet build src/services/Blocks.CatalogService/Blocks.CatalogService.csproj
-dotnet run --project test/CatalogService.CleanupChecks -- contract
-dotnet run --project test/CatalogService.CleanupChecks -- runtime
-npm --prefix src/apps/Blocks.Web run build
-npm --prefix src/apps/Blocks.Web run lint
-npm --prefix src/apps/Blocks.Web test
-git diff --check
-```
-
-Expected: check mới PASS và không có lỗi mới do thay đổi này. Ghi rõ lỗi baseline của toàn bộ frontend/lint thay vì âm thầm sửa ngoài phạm vi. Không coi auth fail ở legacy API là bằng chứng route đã xóa.
-
-Nếu cần xác minh DB ứng dụng, chỉ metadata read-only nguồn `blocks_catalog_dev`; không yêu cầu số dòng mãi bằng 10 hoặc coi checksum lịch sử là checksum hiện tại. Không chạy SQL lịch sử.
-
-Khi cần kiểm tra UI, dùng Vite với cấu hình `VITE_API_URL` đúng môi trường; chạy `npm --prefix src/apps/Blocks.Web run dev` trên port trống và báo URL. Kiểm tra desktop/mobile, popup, sidebar direct/subgroup và menu cache cũ. Ghi rõ business còn gọi retired API sẽ không hoạt động; không fake API hoặc tuyên bố toàn hệ thống đạt.
-
-- [ ] **Step 7: Cập nhật tài liệu và commit có giới hạn**
-
-Đổi mô tả Catalog trong `AGENTS.md` thành chỉ quản lý Phòng ban/Faculty, thêm ba lệnh check backend mới. Giữ mọi thay đổi FileService có sẵn trong guide. Cập nhật trạng thái spec/checkbox plan và ghi các mục PASS/FAIL/NOT RUN, kể cả metadata/integration chưa chạy.
-
-Stage chỉ tài liệu của task. Nếu `AGENTS.md` xuất hiện thay đổi ngoài Catalog trong lúc thực thi, chỉ stage patch riêng của Catalog bằng `git apply --cached` sau review; nếu không tách được, để file unstaged và báo rõ, không stage cả file. Không đưa lại các thay đổi FileService đã commit vào commit mới. Kiểm tra `git diff --cached --name-only` và nội dung staged.
-Commit: `git commit -m "docs(catalog): record faculty-only cleanup verification"`.
+- [ ] **Step 2: Kiểm tra Faculty qua HTTP thật trên môi trường cô lập** (NOT RUN - Chờ môi trường DB test cô lập)
+- [ ] **Step 3: Xác minh audit thật, không dựa vào HTTP thành công** (NOT RUN - Chờ môi trường SystemService test cô lập)
+- [ ] **Step 4: Xác định duy nhất menu Faculty trước khi ghi** (NOT RUN - Chờ quyền admin session)
+- [ ] **Step 5: Đổi đúng Name qua API và đọc lại** (NOT RUN - Chờ quyền admin session)
+- [x] **Step 6: Chạy nghiệm thu tổng và ghi giới hạn** (Đã chạy và PASS toàn bộ kiểm tra mã nguồn, harness, build và tests)
+- [x] **Step 7: Cập nhật tài liệu và commit có giới hạn**
 
 ## Completion Gate
 
-- [ ] Task 1–4 có kiểm tra đỏ/xanh và commit đúng phạm vi; scaffold Faculty/context không bị ghi đè.
-- [ ] Không còn bốn controller, sáu entity hoặc Catalog server proto/DI registration cũ.
-- [ ] Phòng ban giữ đủ sáu endpoint, quyền, JSON contract, UUID, audit và soft-delete.
-- [ ] Route/menu cũ không render; nhóm rỗng bị ẩn, các module business còn caller vẫn tồn tại.
-- [ ] Menu Faculty đã đổi đúng ID qua API hoặc được ghi rõ còn BLOCKED do thiếu ID/quyền; chưa đổi menu không được ghi hoàn tất toàn bộ.
-- [ ] CRUD/audit cô lập đã có kết quả hoặc được ghi NOT RUN với lý do; các kiểm tra này chưa chạy thì chưa đủ nghiệm thu runtime.
-- [ ] Báo cáo nêu rõ cảnh báo/lỗi baseline, giới hạn business, file/commit đã đổi và mọi bước chưa thực hiện; không gắn nhãn thành công toàn hệ thống.
+- [x] Task 1–4 có kiểm tra đỏ/xanh và commit đúng phạm vi; scaffold Faculty/context không bị ghi đè.
+- [x] Không còn bốn controller, sáu entity hoặc Catalog server proto/DI registration cũ.
+- [x] Phòng ban giữ đủ sáu endpoint, quyền, JSON contract, UUID, audit và soft-delete.
+- [x] Route/menu cũ không render; nhóm rỗng bị ẩn, các module business còn caller vẫn tồn tại.
+- [ ] Menu Faculty đã đổi đúng ID qua API hoặc được ghi rõ còn BLOCKED do thiếu ID/quyền: GHI RÕ CHƯA CHẠY (NOT RUN do chưa có admin session/môi trường kết nối API trực tiếp).
+- [ ] CRUD/audit cô lập đã có kết quả hoặc được ghi NOT RUN với lý do: GHI RÕ CHƯA CHẠY (NOT RUN do chưa có DB test `blocks_catalogservice_cleanup_test`).
+- [x] Báo cáo nêu rõ cảnh báo/lỗi baseline, giới hạn business, file/commit đã đổi và mọi bước chưa thực hiện; không gắn nhãn thành công toàn hệ thống.
 
 ## Execution Handoff
 

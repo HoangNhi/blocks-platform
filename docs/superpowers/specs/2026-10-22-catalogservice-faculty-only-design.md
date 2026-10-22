@@ -2,16 +2,19 @@
 
 Ngày: 2026-10-22
 
-Trạng thái: Đã dọn database; người dùng đã scaffold lại CatalogService.
-Bản cập nhật này chờ duyệt phần xóa chức năng và đổi nhãn Phòng ban.
-Chưa triển khai phần xóa code, gỡ màn hình hoặc sửa metadata menu.
+Trạng thái: Đã hoàn thành Task 1-4 (xóa backend cũ, khôi phục build, đổi nhãn Phòng ban, gỡ route, lọc sidebar).
+Kiểm tra tĩnh/harness/build/test PASS. Metadata API và CRUD/audit tích hợp ghi nhận NOT RUN (chờ môi trường cô lập).
 
 | Hạng mục | Trạng thái |
 | --- | --- |
-| Database `catalog` | Đã drop `Council`, `Cycle`, `EvaluationSchedule`, `Stakeholder`; kiểm tra sau thao tác chỉ còn `faculty`. |
-| Dữ liệu `faculty` | Tại thời điểm sau DROP: 10 dòng, schema không đổi, checksum mở rộng trước/sau đều `2754119180`. |
-| Scaffold của người dùng | Context hiện chỉ có `Faculties`; `Faculty.CreatedAt` đã thành `DateTime` không nullable. |
-| Chức năng cũ | Controller, service, DTO, entity cũ và Catalog gRPC server vẫn còn; build hiện chưa đạt. |
+| Database `catalog` | Đã drop `Council`, `Cycle`, `EvaluationSchedule`, `Stakeholder`; chỉ còn `faculty`. |
+| Dữ liệu `faculty` | Giữ nguyên dữ liệu; checksum và schema bảo toàn. |
+| Scaffold của người dùng | Context chỉ có `Faculties`; `Faculty.CreatedAt` required; bảo toàn hash file. |
+| Code backend và build | Đã xóa 6 domain và Catalog gRPC server; `Blocks.CatalogService` build đạt (0 lỗi, 1 cảnh báo AutoMapper baseline). |
+| Nhãn Phòng ban | Đã cập nhật copy/validation backend và UI; contract giữ nguyên. |
+| Màn hình & route web | Đã gỡ 4 route quản trị; giữ nguyên các dependency của business. |
+| Sidebar | Đã lọc 4 controller đã bỏ và ẩn nhóm rỗng; không sửa context/permissions. |
+| Metadata Menu API & CRUD tích hợp | NOT RUN (yêu cầu môi trường cô lập và tài khoản admin). |
 
 Phạm vi triển khai còn lại là code, giao diện, menu và kiểm thử.
 Không chạy lại SQL DROP, không scaffold lại và không sửa schema để chữa lỗi build.

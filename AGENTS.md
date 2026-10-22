@@ -52,7 +52,7 @@
 | `src/apps/Blocks.Web/` | React 19, TypeScript, Vite, Tailwind CSS, Radix UI, TanStack Query. |
 | `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
 | `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
-| `src/services/Blocks.CatalogService/` | Catalogs, standards, criteria; EF Core with MySQL; targets `net8.0`. |
+| `src/services/Blocks.CatalogService/` | Departments (Faculty); EF Core with MySQL; targets `net8.0`. |
 | `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net8.0`. |
 | `src/platform/Blocks.AppHost/` | Aspire orchestration; currently references missing services. |
 | `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults. |
@@ -177,6 +177,21 @@ FileService DB-free checks (production DI and direct service/gRPC methods, not H
 ```powershell
 dotnet run --project test/FileService.RemovalChecks
 ```
+
+Existing CatalogService source-level regression check:
+
+```powershell
+& ./test/CatalogService.Removal.Check.ps1
+```
+
+The CatalogService cleanup harness targets `net8.0`. Its DB-free checks are:
+
+```powershell
+dotnet run --project test/CatalogService.CleanupChecks -- contract
+dotnet run --project test/CatalogService.CleanupChecks -- runtime
+```
+
+The `contract` mode checks the single Faculty entity mapping, snake_case columns, and validation/mapping without opening a database connection. The `runtime` mode checks startup, unauthorized 401 application envelope, 404 for retired routes with valid JWT, and Swagger.
 
 The SystemService cleanup harness targets `net10.0`. Its DB-free checks are:
 
