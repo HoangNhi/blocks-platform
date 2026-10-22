@@ -1,6 +1,5 @@
 import { fileService } from "@/features/file/api/uploadfile.api";
 import type { Attachment } from "@/features/file/types/uploadfile.types";
-import { getFileUrl } from "@/lib/utils";
 import FileViewerDialog from "@/components/ui/file-viewer-dialog";
 import {
   Paperclip,
@@ -121,7 +120,7 @@ const UploadFile = forwardRef<UploadFileRef, UploadFileProps>(
         } else {
           throw new Error(response.Message);
         }
-      } catch (error) {
+      } catch {
         return false; // Crucial: Stop the process here
       }
     };
@@ -137,23 +136,32 @@ const UploadFile = forwardRef<UploadFileRef, UploadFileProps>(
       setViewerFile(file);
     };
 
+    const previewFile =
+      previewContext === "taskAttachment"
+        ? fileService.previewTaskAttachment
+        : previewContext === "ActionPlan"
+          ? fileService.previewActionPlanAttachment
+          : fileService.previewFile;
+
     const handleDownload = async (file: Attachment) => {
-      const url = getFileUrl(file.FileUrl);
-      if (!url) return;
+      // ponytail: download routes through domain preview endpoints by object id. Add chunked streaming when requested.
+      if (!file?.Id) {
+        toast.error("Không thể tải tệp xuống.");
+        return;
+      }
+
       try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
+        const preview = await previewFile(file.Id, viewerMode);
+        const downloadUrl = window.URL.createObjectURL(preview.blob);
         const link = document.createElement("a");
         link.href = downloadUrl;
-        link.download =
-          file.FullFileName || file.FileUrl.split("/").pop() || "download";
+        link.download = file.FullFileName || "download";
         document.body.appendChild(link);
         link.click();
         link.remove();
         window.URL.revokeObjectURL(downloadUrl);
-      } catch (error) {
-        window.open(url, "_blank");
+      } catch {
+        toast.error("Không thể tải tệp xuống.");
       }
     };
 

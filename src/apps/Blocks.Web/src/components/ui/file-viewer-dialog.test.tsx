@@ -339,7 +339,7 @@ describe("FileViewerDialog layout", () => {
     expect(container).not.toHaveClass("overflow-y-auto");
   });
 
-  it("renders video wrapper with viewport-safe max height", () => {
+  it("renders video wrapper with viewport-safe max height", async () => {
     render(
       <FileViewerDialog
         isOpen
@@ -355,9 +355,8 @@ describe("FileViewerDialog layout", () => {
       />,
     );
 
-    expect(screen.getByTestId("video-preview-wrapper")).toHaveClass(
-      "max-h-full",
-    );
+    const videoWrapper = await screen.findByTestId("video-preview-wrapper");
+    expect(videoWrapper).toHaveClass("max-h-full");
   });
 
   it("renders image preview with viewport-safe max height", async () => {
@@ -449,5 +448,93 @@ describe("FileViewerDialog layout", () => {
 
     expect(await screen.findByTestId("pdf-canvas-viewer")).toBeInTheDocument();
     expect(screen.getAllByText("BaoCao.docx")).toHaveLength(2);
+  });
+
+  it("video_does_not_use_direct_file_url", async () => {
+    vi.mocked(fileService.previewFile).mockResolvedValueOnce({
+      blob: new Blob(["video-bytes"], { type: "video/mp4" }),
+      contentType: "video/mp4",
+    });
+
+    const createObjectURLSpy = vi
+      .spyOn(window.URL, "createObjectURL")
+      .mockReturnValue("blob:http://localhost/video-stream-blob");
+
+    render(
+      <FileViewerDialog
+        isOpen
+        onClose={() => {}}
+        file={
+          {
+            Id: 30,
+            FullFileName: "training-video.mp4",
+            FileExtension: "mp4",
+            FileUrl: "/File/System/Attachments/training-video.mp4",
+          } as any
+        }
+      />,
+    );
+
+    await vi.waitFor(() => {
+      const video = document.querySelector("video");
+      expect(video).toBeInTheDocument();
+      expect(video?.getAttribute("src")).not.toContain(
+        "/File/System/Attachments/training-video.mp4",
+      );
+      expect(video?.getAttribute("src")).toBe("blob:http://localhost/video-stream-blob");
+    });
+    expect(fileService.previewFile).toHaveBeenCalledWith(30, "internal");
+    createObjectURLSpy.mockRestore();
+  });
+
+  it("missing_file_id_shows_explicit_error_and_skips_preview_request", async () => {
+    render(
+      <FileViewerDialog
+        isOpen
+        onClose={() => {}}
+        file={
+          {
+            FullFileName: "corrupt-file.pdf",
+            FileExtension: "pdf",
+          } as any
+        }
+      />,
+    );
+
+    expect(await screen.findByText("Tệp không có mã định danh hợp lệ.")).toBeInTheDocument();
+    expect(fileService.previewFile).not.toHaveBeenCalled();
+
+    const downloadBtn = screen.getByRole("button", { name: /Tải xuống/i });
+    fireEvent.click(downloadBtn);
+
+    expect(fileService.previewFile).not.toHaveBeenCalled();
+    expect(screen.getByText("Tệp không có mã định danh hợp lệ.")).toBeInTheDocument();
+  });
+
+  it("preview_rejection_shows_explicit_error_without_fallback", async () => {
+    vi.mocked(fileService.previewFile).mockRejectedValueOnce(
+      new Error("Storage unavailable"),
+    );
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null as any);
+
+    render(
+      <FileViewerDialog
+        isOpen
+        onClose={() => {}}
+        file={
+          {
+            Id: 42,
+            FullFileName: "unavailable.pdf",
+            FileExtension: "pdf",
+            FileUrl: "/File/System/Attachments/unavailable.pdf",
+          } as any
+        }
+      />,
+    );
+
+    expect(await screen.findByText("Không thể tải dữ liệu xem trước.")).toBeInTheDocument();
+    expect(fileService.previewFile).toHaveBeenCalledWith(42, "internal");
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 });

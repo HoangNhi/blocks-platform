@@ -4,7 +4,7 @@ import { Download, Loader2, XIcon } from "lucide-react";
 import { fileService } from "@/features/file/api/uploadfile.api";
 import type { Attachment } from "@/features/file/types/uploadfile.types";
 import { getFileViewerType, type FileViewerType } from "@/lib/file-utils";
-import { cn, getFileUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -181,16 +181,13 @@ const FileViewerDialog = ({
       setBlobUrl(null);
 
       try {
-        if (defaultViewerType === "video") {
-          const directUrl = getFileUrl(file.FileUrl);
-          if (!directUrl) {
-            throw new Error("Invalid file url");
-          }
-
-          if (isCancelled) return;
-          setBlobUrl(directUrl);
+        if (!file?.Id) {
+          setIsLoading(false);
+          setErrorMessage("Tệp không có mã định danh hợp lệ.");
           return;
         }
+
+// ponytail: video preview routes through domain preview endpoints by object id. Add streaming range player when requested.
 
         const preview = await previewFile(file.Id, mode);
         if (isCancelled) return;
@@ -357,20 +354,13 @@ const FileViewerDialog = ({
 
   const handleDownload = async () => {
     if (!file) return;
+    if (!file.Id) {
+      setErrorMessage("Tệp không có mã định danh hợp lệ.");
+      return;
+    }
 
     try {
-      if (viewerType === "video") {
-        const directUrl = getFileUrl(file.FileUrl);
-        if (!directUrl) throw new Error("Invalid file url");
 
-        const link = document.createElement("a");
-        link.href = directUrl;
-        link.download = file.FullFileName || "download";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        return;
-      }
 
       // If we already fetched the blob, use the blob url
       if (blobUrl) {
@@ -564,6 +554,9 @@ const FileViewerDialog = ({
           <DialogPrimitive.Title className="sr-only">
             {file?.FullFileName ?? "Xem trước tệp"}
           </DialogPrimitive.Title>
+          <DialogPrimitive.Description className="sr-only">
+            Xem trước tệp
+          </DialogPrimitive.Description>
 
           {/* Sleek Header */}
           <div className="flex items-center justify-between px-4 h-16 bg-gradient-to-b from-black/50 to-transparent shrink-0 relative z-10 w-full">

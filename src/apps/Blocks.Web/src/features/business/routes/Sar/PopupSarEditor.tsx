@@ -37,14 +37,14 @@ import {
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/useAuth";
-import { cn, getFileUrl } from "@/lib/utils";
-import { fileService } from "@/features/file/api/uploadfile.api";
+import { cn } from "@/lib/utils";
+import { useAvatarUrl } from "@/features/file/hooks/useAvatarUrl";
 import { sarService } from "@/features/business/api/sar.api";
 import { useInternalReviewComments } from "@/features/business/hooks/useInternalReviewComments";
 import { useSarWatermark } from "@/features/business/hooks/useSarWatermark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type {
   SarDraft,
   SarGetListItem,
@@ -271,6 +271,29 @@ interface CollaboratorState {
   initials: string;
   color: string;
   avatar: string | null;
+}
+
+export function CollaboratorAvatarItem({ collab }: { collab: CollaboratorState }) {
+  const avatarUrl = useAvatarUrl(collab.avatar);
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        className="w-7 h-7 rounded-full border-2 border-white object-cover"
+        title={collab.name}
+        alt={collab.name}
+      />
+    );
+  }
+  return (
+    <div
+      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-white"
+      style={{ background: collab.color }}
+      title={collab.name}
+    >
+      {collab.initials}
+    </div>
+  );
 }
 
 interface ToolbarButtonProps {
@@ -838,7 +861,7 @@ export default function PopupSarEditor({
         .slice(0, 2)
         .toUpperCase(),
       color: userColorRef.current,
-      avatar: getFileUrl(user?.Avatar) ?? null,
+      avatar: user?.Avatar ?? null,
     });
   }, [editor, user]);
 
@@ -953,39 +976,15 @@ export default function PopupSarEditor({
 
     const dom = editor.view.dom;
 
-    const handlePaste = async (event: ClipboardEvent) => {
+    // ponytail: SAR image embed retired until private block storage embed service implemented
+    const handlePaste = (event: ClipboardEvent) => {
       const items = Array.from(event.clipboardData?.items ?? []);
-      const imageItem = items.find((item) => item.type.startsWith("image/"));
-      if (!imageItem) return;
+      const hasImage = items.some((item) => item.type.startsWith("image/"));
+      if (!hasImage) return;
 
-      const file = imageItem.getAsFile();
-      if (!file) return;
-
-      // Prevent Tiptap's default paste handling for this image
+      event.preventDefault();
       event.stopPropagation();
-
-      const toastId = toast.loading("Đang tải ảnh lên...");
-      try {
-        const response = await fileService.uploadFileEmbed({
-          files: [file],
-          folderUpload: "sar",
-        });
-
-        if (response.Success && response.Data?.[0]) {
-          const url = getFileUrl(response.Data[0].FileUrl);
-          if (url) {
-            editor.commands.setImage({ src: url });
-            toast.dismiss(toastId);
-          }
-        } else {
-          toast.error(
-            response.Message || "Tải ảnh thất bại",
-            { id: toastId },
-          );
-        }
-      } catch {
-        toast.error("Đã xảy ra lỗi khi tải ảnh", { id: toastId });
-      }
+      toast.error("Tính năng chèn ảnh hiện không được hỗ trợ.");
     };
 
     dom.addEventListener("paste", handlePaste);
@@ -1176,6 +1175,7 @@ export default function PopupSarEditor({
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">Soạn thảo SAR</DialogTitle>
+          <DialogDescription className="sr-only">Trình soạn thảo báo cáo tự đánh giá SAR</DialogDescription>
           {/* HEADER */}
           <header className="min-h-[70px] flex items-center px-5 py-2.5 gap-3 border-b bg-white shrink-0 justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -1216,26 +1216,9 @@ export default function PopupSarEditor({
             <div className="flex items-center gap-4 shrink-0">
               {collaborators.length > 0 && (
                 <div className="flex -space-x-2">
-                  {collaborators.map((collab, i) =>
-                    collab.avatar ? (
-                      <img
-                        key={i}
-                        src={collab.avatar}
-                        className="w-7 h-7 rounded-full border-2 border-white object-cover"
-                        title={collab.name}
-                        alt={collab.name}
-                      />
-                    ) : (
-                      <div
-                        key={i}
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-white"
-                        style={{ background: collab.color }}
-                        title={collab.name}
-                      >
-                        {collab.initials}
-                      </div>
-                    ),
-                  )}
+                  {collaborators.map((collab, i) => (
+                    <CollaboratorAvatarItem key={i} collab={collab} />
+                  ))}
                 </div>
               )}
 
