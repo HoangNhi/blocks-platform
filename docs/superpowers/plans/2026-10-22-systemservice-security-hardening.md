@@ -551,3 +551,64 @@ Người dùng duyệt plan và chọn method trước khi triển khai. Handoff
 từng check PASS/FAIL/NOT RUN, residual advisory và prerequisite còn thiếu.
 Rollout chỉ sau khi đủ mandatory checks, consumer biết combobox cần JWT và client
 GetUsersByIds xử lý InvalidArgument. Không tuyên bố vô hiệu hóa JWT đã phát hành.
+
+## Bàn Giao Sau Review Ngày 2026-10-22
+
+Mục này ghi trạng thái thực tế sau triển khai; các checkbox và hướng dẫn execution
+ở trên là nội dung kế hoạch ban đầu, không thay thế bằng chứng kiểm chứng dưới đây.
+
+### Mốc Code Và Review
+
+- Commit security hardening: `6fbb733247238cfaf712febb2a50ce952df058f1`.
+- Commit sửa ba finding của review: `462230d70604c802a01719f2f9fe0596cf25cd89`.
+- Review lại phạm vi `6fbb733..462230d`, có reviewer độc lập: không phát hiện lỗi
+  mới cần sửa. Ba finding cũ đã được xử lý trong code: gọi trực tiếp
+  `TracerProviderExtensions.ForceFlush`, kiểm tra endpoint OTLP có port tường minh
+  và nhận IPv6 loopback, kiểm tra JSON audit OldValues/NewValues.
+- Có thể chấp nhận commit về mặt code; chưa đóng nghiệm thu integration hoặc
+  tuyên bố sẵn sàng rollout khi các gate bên dưới còn mở.
+
+### Kết Quả Kiểm Chứng
+
+Các lệnh chạy từ repository root. Lượt review lại dùng build Release mới, rồi chạy
+các mode với `--no-build`.
+
+| Check | Trạng thái trong review lại | Bằng chứng / giới hạn |
+| --- | --- | --- |
+| `dotnet build test/SystemService.CleanupChecks/SystemService.CleanupChecks.csproj -c Release --verbosity quiet` | PASS | 0 warning, 0 error. |
+| `dotnet run --project test/SystemService.CleanupChecks -c Release --no-build -- contract` | PASS | Contract checks đạt. |
+| `dotnet run --project test/SystemService.CleanupChecks -c Release --no-build -- runtime` | PASS | DB-free; gồm chín assertion endpoint OTLP mới. |
+| `& ./test/SystemService.BusinessDependency.Check.ps1` | PASS | Kiểm tra source dependency, không chứng minh hành vi auth. |
+| `git diff --check 6fbb733..462230d` | PASS | Không lỗi whitespace trong diff. |
+| `dotnet run --project test/SystemService.CleanupChecks -c Release --no-build -- auth` | BLOCKED | Lệnh exit 1 trước khi chạy case: `Failed to connect to [::1]:5432`; không có listener PostgreSQL tại port 5432. Đây là thiếu prerequisite, chưa phải lỗi hành vi được tái hiện. |
+| Telemetry tới collector cô lập | NOT RUN | Chưa đặt `SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT`; chưa xác nhận trace được nhận. |
+| `grpc_permission_valid_allow` / `grpc_permission_valid_deny` | NOT RUN | Thiếu function `fn_user_checkpermission` và fixture quyền cô lập. |
+| Docker build/startup và consumer startup smoke | NOT RUN trong các lượt review | Chưa có bằng chứng nghiệm thu được xác nhận trong review. |
+
+Lịch sử auth cần giữ riêng: review trước tại `6fbb733` đã chạy độc lập 29/29 case
+thành công và dọn schema test. Sau commit `462230d`, người dùng báo auth 29/29 PASS;
+lượt review độc lập mới nhất bị chặn bởi kết nối DB, nên chưa xác nhận lại kết quả
+đó tại commit mới. Không ghi BLOCKED thành PASS hoặc ghi đè kết quả lịch sử.
+
+Review trước cũng đã restore/build Shared, ServiceDefaults, SystemService,
+CleanupChecks, ApiGateway, CatalogService và FileService thành công. Audit sau
+restore không báo advisory cho SystemService, Shared, ServiceDefaults và ApiGateway.
+Catalog còn AutoMapper `16.0.0`; FileService còn ImageSharp `3.1.7` và Pkcs `8.0.1`.
+Đây là dependency riêng ngoài phạm vi; không tuyên bố toàn repo hết lỗ hổng.
+
+### Tiếp Tục Ở Phiên Sau
+
+1. Kiểm tra HEAD và working tree trước khi tiếp tục; không sửa lại ba finding đã
+   được review nếu không có bằng chứng hồi quy mới.
+2. Khôi phục PostgreSQL kiểm thử cô lập và chạy lại mode `auth`. Chỉ dùng
+   `SYSTEMSERVICE_CLEANUP_TEST_CONNECTION` với localhost database
+   `blocks_systemservice_cleanup_test`; không dùng DB thật, không ghi connection
+   hoặc token vào tài liệu/log.
+3. Cấu hình collector OTLP HTTP cô lập, đặt
+   `SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT`, chạy mode `telemetry` và đối chiếu
+   trace ID cùng activity `systemservice-security-check` tại collector. Build đạt,
+   exit 0 hoặc `ForceFlush=true` không tự chứng minh delivery.
+4. Giữ gate permission allow/deny mở cho đến khi có function và fixture thật trong
+   môi trường kiểm thử; không thay bằng stub luôn true/false.
+5. Hoàn tất Docker/consumer smoke theo Task 5 Step 6-7 với DB/storage/cache cô lập,
+   rồi cập nhật từng gate bằng kết quả thực tế trước khi đóng plan.
