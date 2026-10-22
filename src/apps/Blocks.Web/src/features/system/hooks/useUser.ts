@@ -126,24 +126,30 @@ export const useUser = () => {
     if (!open) setUser(null);
   }, []);
 
-  const saveChange = async (saveUser: User, isAddMore: boolean) => {
-    const result = await saveMutation.mutateAsync(saveUser);
-    if (result.Success) {
-      if (isAddMore) {
-        setUser({
-          Id: uuidv4(),
-          Username: "",
-          Fullname: "",
-          Email: "",
-          Password: "",
-          RoleId: "",
-          IsEdit: false,
-          IsActived: true,
-        });
-      } else {
-        setIsOpen(false);
-        setUser(null);
+  const saveChange = async (saveUser: User, isAddMore: boolean): Promise<boolean> => {
+    try {
+      const result = await saveMutation.mutateAsync(saveUser);
+      if (result.Success) {
+        if (isAddMore) {
+          setUser({
+            Id: uuidv4(),
+            Username: "",
+            Fullname: "",
+            Email: "",
+            Password: "",
+            RoleId: "",
+            IsEdit: false,
+            IsActived: true,
+          });
+        } else {
+          setIsOpen(false);
+          setUser(null);
+        }
+        return true;
       }
+      return false;
+    } catch {
+      return false;
     }
   };
 

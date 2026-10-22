@@ -44,6 +44,7 @@ export function NavUser({ user }: { user: User }) {
         Fullname: updatedUser.Fullname,
         Email: updatedUser.Email,
         Avatar: updatedUser.Avatar,
+        AvatarAction: updatedUser.AvatarAction,
         FolderUpload: updatedUser.FolderUpload,
       } as EditProfileRequest);
 

@@ -1,4 +1,5 @@
 import { fileService } from "@/features/file/api/uploadfile.api";
+import type { AvatarUploadResult } from "@/features/file/types/avatar.types";
 import { Camera, User as UserIcon, X } from "lucide-react";
 import React, {
   forwardRef,
@@ -6,69 +7,67 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { cn, getFileUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { v4 as uuidv4 } from "uuid";
 
 export interface UploadAvatarProps {
   defaultImage?: string;
-  folderUpload?: string;
   className?: string;
   onChange?: (file: File | null) => void;
 }
 
 export interface UploadAvatarRef {
-  upload: () => Promise<string | null>;
+  upload: () => Promise<AvatarUploadResult>;
   reset: () => void;
 }
 
 const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
-  (
-    {
-      defaultImage = getFileUrl("Files/Commons/NoPicture.png"),
-      folderUpload = "Avatars",
-      className,
-      onChange,
-    },
-    ref
-  ) => {
+  ({ defaultImage, className, onChange }, ref) => {
     const [preview, setPreview] = useState<string | null>(defaultImage || null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isRemoved, setIsRemoved] = useState<boolean>(false);
+
+    const stagedSessionRef = useRef<{
+      file: File;
+      folderUpload: string;
+    } | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useImperativeHandle(ref, () => ({
-      upload: async () => {
-        // Case 1: New file selected -> Upload
+      upload: async (): Promise<AvatarUploadResult> => {
         if (selectedFile) {
-          try {
-            const response = await fileService.uploadFile({
-              files: [selectedFile],
-              folderUpload: folderUpload,
-            });
-
-            if (response.Success && response.Data && response.Data.length > 0) {
-              return response.Data[0].FileUrl;
-            }
-            return null; // Upload failed
-          } catch (error) {
-            return null;
+          if (
+            stagedSessionRef.current &&
+            stagedSessionRef.current.file === selectedFile
+          ) {
+            return {
+              kind: "staged",
+              folderUpload: stagedSessionRef.current.folderUpload,
+            };
           }
+
+          const folderUpload = uuidv4();
+          await fileService.uploadFile({
+            files: [selectedFile],
+            folderUpload,
+          });
+
+          stagedSessionRef.current = { file: selectedFile, folderUpload };
+          return { kind: "staged", folderUpload };
         }
 
-        // Case 2: Image removed (preview is null, but we had a default or just cleared it)
-        // If preview is null, it means user removed it.
-        // But we need to distinguish between "initially null" and "manually removed".
-        // Actually, if preview is null, we should probably set Avatar to empty.
-        // However, if defaultImage was null, and preview is null, it's "no change".
-        // If defaultImage was "url", and preview is null, it's "removed".
-        if (preview === null) {
-          return defaultImage ? "" : null;
+        if (isRemoved) {
+          return { kind: "remove" };
         }
 
-        // Case 3: No change (preview exists and equals defaultImage - or just no selectedFile)
-        return null;
+        return { kind: "unchanged" };
       },
       reset: () => {
         setPreview(defaultImage || null);
         setSelectedFile(null);
+        setIsRemoved(false);
+        stagedSessionRef.current = null;
         if (fileInputRef.current) fileInputRef.current.value = "";
       },
     }));
@@ -78,18 +77,18 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
       if (!files || files.length === 0) return;
 
       const file = files[0];
-      // Basic validation
-      if (!file.type.startsWith("image/")) {
-        alert("Vui lòng chọn tệp hình ảnh.");
+      const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+      if (!validTypes.includes(file.type.toLowerCase())) {
+        alert("Vui lòng chọn tệp hình ảnh PNG, JPEG hoặc WebP.");
         return;
       }
 
       const objectUrl = URL.createObjectURL(file);
       setPreview(objectUrl);
       setSelectedFile(file);
+      setIsRemoved(false);
+      stagedSessionRef.current = null;
       onChange?.(file);
-
-      // Cleanup old object URL to avoid memory leaks (optional, but good practice if we were tracking history)
     };
 
     const handleRemove = (e: React.MouseEvent) => {
@@ -97,6 +96,8 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
       e.stopPropagation();
       setPreview(null);
       setSelectedFile(null);
+      setIsRemoved(true);
+      stagedSessionRef.current = null;
       onChange?.(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -106,9 +107,7 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
     };
 
     return (
-      <div
-        className={cn("relative flex flex-col items-center gap-2", className)}
-      >
+      <div className={cn("relative flex flex-col items-center gap-2", className)}>
         <div
           onClick={triggerSelect}
           className="group relative h-32 w-32 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-gray-300 bg-gray-50 hover:border-blue-500 hover:bg-gray-100 transition-colors"
@@ -125,13 +124,11 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
             </div>
           )}
 
-          {/* Overlay on Hover */}
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <Camera className="text-white" size={24} />
             <span className="text-xs text-white p-1">Thay đổi</span>
           </div>
 
-          {/* Remove Button (Only if has image) */}
           {preview && (
             <button
               type="button"
@@ -149,7 +146,7 @@ const UploadAvatar = forwardRef<UploadAvatarRef, UploadAvatarProps>(
           ref={fileInputRef}
           onChange={handleFileSelect}
           className="hidden"
-          accept="image/png, image/jpeg, image/jpg, image/gif"
+          accept="image/png, image/jpeg, image/webp"
         />
       </div>
     );

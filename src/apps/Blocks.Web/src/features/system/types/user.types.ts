@@ -1,4 +1,5 @@
 import type { BaseRequest } from "@/types/base/base.types";
+import type { AvatarAction } from "@/features/file/types/avatar.types";
 
 export interface User extends BaseRequest {
   Id: string;
@@ -8,6 +9,7 @@ export interface User extends BaseRequest {
   RoleName?: string;
   Email: string;
   Avatar?: string;
+  AvatarAction?: AvatarAction;
   Password?: string;
 }
 
@@ -19,6 +21,7 @@ export interface EditProfileRequest extends BaseRequest {
   Fullname: string;
   Email: string;
   Avatar?: string;
+  AvatarAction?: AvatarAction;
 }
 
 export interface ChangePasswordRequest {

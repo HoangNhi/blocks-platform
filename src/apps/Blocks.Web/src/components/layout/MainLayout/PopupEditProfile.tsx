@@ -16,6 +16,7 @@ import UploadAvatar, {
   type UploadAvatarRef,
 } from "@/components/ui/upload-avatar";
 import { getFileUrl } from "@/lib/utils";
+import { toast } from "sonner";
 
 const PopupEditProfile = ({
   user,
@@ -26,29 +27,56 @@ const PopupEditProfile = ({
   user: User | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  saveChange: (user: User, isAddMore: boolean) => void;
+  saveChange: (user: User, isAddMore?: boolean) => Promise<boolean> | Promise<void> | void;
 }) => {
   const [id] = useState<string | null>(user?.Id || uuidv4());
   const [fullName, setFullName] = useState(user?.Fullname || "");
   const [email, setEmail] = useState(user?.Email || "");
   const [folderUpload] = useState<string>(user?.FolderUpload || uuidv4());
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const avatarRef = useRef<UploadAvatarRef>(null);
 
   const onSubmit = async (isAddMore: boolean) => {
-    const avatarUrl = await avatarRef.current?.upload();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    saveChange(
-      {
-        ...user,
-        Id: id ?? uuidv4(),
-        Fullname: fullName,
-        Email: email,
-        Avatar: avatarUrl === null ? user?.Avatar : avatarUrl,
-        FolderUpload: folderUpload,
-      } as User,
-      isAddMore
-    );
+    try {
+      let uploadResult;
+      try {
+        uploadResult = await avatarRef.current?.upload();
+      } catch {
+        toast.error("Tải ảnh đại diện lên máy chủ thất bại");
+        return;
+      }
+
+      let avatarAction: "keep" | "replace" | "remove" = "keep";
+      let uploadFolder = folderUpload;
+
+      if (uploadResult?.kind === "staged") {
+        avatarAction = "replace";
+        uploadFolder = uploadResult.folderUpload;
+      } else if (uploadResult?.kind === "remove") {
+        avatarAction = "remove";
+      } else {
+        avatarAction = "keep";
+      }
+
+      await saveChange(
+        {
+          ...user,
+          Id: id ?? uuidv4(),
+          Fullname: fullName,
+          Email: email,
+          Avatar: user?.Avatar,
+          AvatarAction: avatarAction,
+          FolderUpload: uploadFolder,
+        } as User,
+        isAddMore
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -66,7 +94,7 @@ const PopupEditProfile = ({
         >
           <DialogHeader>
             <DialogTitle>
-              {user?.IsEdit ? "Cập nhật Tài khoán" : "Thêm mới Tài khoản"}
+              {user?.IsEdit ? "Cập nhật Tài khoản" : "Thêm mới Tài khoản"}
             </DialogTitle>
           </DialogHeader>
 
@@ -74,7 +102,6 @@ const PopupEditProfile = ({
             <UploadAvatar
               ref={avatarRef}
               defaultImage={getFileUrl(user?.Avatar)}
-              folderUpload={folderUpload}
             />
           </div>
 
@@ -93,9 +120,9 @@ const PopupEditProfile = ({
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Hủy</Button>
+              <Button variant="outline" disabled={isSubmitting}>Hủy</Button>
             </DialogClose>
-            <Button type="submit">Lưu</Button>
+            <Button type="submit" disabled={isSubmitting}>Lưu</Button>
           </DialogFooter>
         </form>
       </DialogContent>

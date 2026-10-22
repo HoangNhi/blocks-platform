@@ -36,6 +36,7 @@ import { getFileUrl } from "@/lib/utils";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 
 const formSchema = z.object({
   username: z.string().min(1, "Vui lòng nhập tên đăng nhập"),
@@ -55,11 +56,12 @@ const PopupDetail = ({
   user: User | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  saveChange: (user: User, isAddMore: boolean) => void;
+  saveChange: (user: User, isAddMore: boolean) => Promise<boolean>;
 }) => {
   const [id] = useState<string | null>(user?.Id || uuidv4());
   const [roles, setRoles] = useState<ModelCombobox[]>([]);
   const [folderUpload] = useState<string>(user?.FolderUpload || uuidv4());
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const avatarRef = useRef<UploadAvatarRef>(null);
 
@@ -79,23 +81,54 @@ const PopupDetail = ({
     values: z.infer<typeof formSchema>,
     isAddMore: boolean
   ) => {
-    const avatarUrl = await avatarRef.current?.upload();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    saveChange(
-      {
-        Id: id ?? uuidv4(),
-        Username: values.username,
-        Password: values.password,
-        Fullname: values.fullName,
-        RoleId: values.roleId,
-        IsEdit: user?.IsEdit || false,
-        IsActived: values.isActived,
-        Email: values.email,
-        Avatar: avatarUrl === null ? user?.Avatar : avatarUrl,
-        FolderUpload: folderUpload,
-      },
-      isAddMore
-    );
+    try {
+      let uploadResult;
+      try {
+        uploadResult = await avatarRef.current?.upload();
+      } catch {
+        toast.error("Tải ảnh đại diện lên máy chủ thất bại");
+        return;
+      }
+
+      let avatarAction: "keep" | "replace" | "remove" = "keep";
+      let uploadFolder = folderUpload;
+
+      if (uploadResult?.kind === "staged") {
+        avatarAction = "replace";
+        uploadFolder = uploadResult.folderUpload;
+      } else if (uploadResult?.kind === "remove") {
+        avatarAction = "remove";
+      } else {
+        avatarAction = "keep";
+      }
+
+      const success = await saveChange(
+        {
+          Id: id ?? uuidv4(),
+          Username: values.username,
+          Password: values.password,
+          Fullname: values.fullName,
+          RoleId: values.roleId,
+          IsEdit: user?.IsEdit || false,
+          IsActived: values.isActived,
+          Email: values.email,
+          Avatar: user?.Avatar,
+          AvatarAction: avatarAction,
+          FolderUpload: uploadFolder,
+        },
+        isAddMore
+      );
+
+      if (success && isAddMore) {
+        form.reset();
+        avatarRef.current?.reset();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -129,7 +162,6 @@ const PopupDetail = ({
               <UploadAvatar
                 ref={avatarRef}
                 defaultImage={getFileUrl(user?.Avatar)}
-                folderUpload={folderUpload}
               />
             </div>
 
@@ -255,12 +287,13 @@ const PopupDetail = ({
 
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Hủy</Button>
+                <Button variant="outline" disabled={isSubmitting}>Hủy</Button>
               </DialogClose>
-              <Button type="submit">Lưu</Button>
+              <Button type="submit" disabled={isSubmitting}>Lưu</Button>
               {!user?.IsEdit && (
                 <Button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={form.handleSubmit((data) => onSubmit(data, true))}
                 >
                   Lưu và thêm tiếp

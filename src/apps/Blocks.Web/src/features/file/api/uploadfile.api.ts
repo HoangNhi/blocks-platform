@@ -9,7 +9,7 @@ import type {
 export const fileService = {
   uploadFile: async (
     request: UploadFileRequest,
-  ): Promise<ApiResponse<Attachment[]>> => {
+  ): Promise<ApiResponse<void>> => {
     const formData = new FormData();
 
     request.files.forEach((file) => {
@@ -18,7 +18,7 @@ export const fileService = {
 
     formData.append("FolderName", request.folderUpload);
 
-    return api.post<Attachment[]>(
+    return api.post<void>(
       API_ENDPOINTS.File.UploadFile.POST,
       formData,
       {
