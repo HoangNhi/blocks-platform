@@ -176,10 +176,14 @@ The cleanup harness targets `net10.0`. Its DB-free checks are:
 ```powershell
 dotnet run --project test/SystemService.CleanupChecks -- contract
 dotnet run --project test/SystemService.CleanupChecks -- runtime
+dotnet run --project test/SystemService.CleanupChecks -- telemetry
 ```
 
 The `runtime` mode checks EF/Npgsql SQL generation, startup, the unauthorized
 HTTP response envelope, and Swagger without opening a database connection.
+The `telemetry` mode checks OpenTelemetry trace export and flush against an isolated
+collector receiver; it requires `SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT` pointing
+to an absolute http localhost URI with an explicit port and no credentials.
 The `auth` mode also checks audit persistence through production DI. It requires
 `SYSTEMSERVICE_CLEANUP_TEST_CONNECTION` pointing to an isolated localhost database
 named `blocks_systemservice_cleanup_test`; it creates and drops a unique test

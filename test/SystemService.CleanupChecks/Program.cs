@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using AutoMapper;
+using Blocks.ServiceDefaults;
 using Blocks.Shared.Exceptions;
 using Blocks.SystemService.Configs;
 using Blocks.SystemService.Controllers;
@@ -39,7 +40,7 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/SystemService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: auth, contract, runtime");
+    Console.Error.WriteLine("Supported modes: auth, contract, runtime, telemetry");
     return 1;
 }
 
@@ -58,14 +59,16 @@ if (mode == "auth")
         return 1;
     }
 }
-else if (mode == "contract" || mode == "runtime")
+else if (mode == "contract" || mode == "runtime" || mode == "telemetry")
 {
     try
     {
         if (mode == "contract")
             RunContractChecks();
-        else
+        else if (mode == "runtime")
             await RunRuntimeChecksAsync();
+        else
+            await RunTelemetryChecksAsync();
         return 0;
     }
     catch (Exception ex)
@@ -171,6 +174,10 @@ async Task<WebApplication> StartTestAppAsync(IConfiguration configuration, bool 
     builder.Configuration.Sources.Clear();
     builder.Configuration.AddConfiguration(configuration);
 
+    builder.AddServiceDefaults();
+    builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "";
+    builder.Configuration["OTEL_EXPORTER_OTLP_PROTOCOL"] = configuration["OTEL_EXPORTER_OTLP_PROTOCOL"] ?? "";
+
     builder.Services.AddControllers(options =>
     {
         options.Filters.AddService<Blocks.SystemService.Infrastructure.Filters.AuditActionFilter>();
@@ -194,6 +201,7 @@ async Task<WebApplication> StartTestAppAsync(IConfiguration configuration, bool 
 
     var app = builder.Build();
     app.UseMiddleware<Blocks.SystemService.Middlewares.GlobalExceptionHandler>();
+    app.MapDefaultEndpoints();
     app.UseSwagger();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -210,6 +218,26 @@ async Task RunRuntimeChecksAsync()
     Assert(typeof(DbContext).Assembly.GetName().Version!.Major == 10, "EF Core 10 loaded");
     Assert(typeof(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder)
         .Assembly.GetName().Version!.Major == 10, "Npgsql EF Core provider 10 loaded");
+
+    var depsPath = Path.Combine(AppContext.BaseDirectory, "SystemService.CleanupChecks.deps.json");
+    Assert(File.Exists(depsPath), "deps.json exists");
+    using var depsDoc = JsonDocument.Parse(File.ReadAllText(depsPath));
+    var librariesObj = depsDoc.RootElement.GetProperty("libraries");
+    var libraries = new HashSet<string>(librariesObj.EnumerateObject().Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
+
+    var otelApiEntry = libraries.FirstOrDefault(n => n.StartsWith("OpenTelemetry.Api/", StringComparison.OrdinalIgnoreCase));
+    Assert(otelApiEntry != null, "OpenTelemetry.Api present in deps");
+    var otelApiVersionStr = otelApiEntry!.Split('/')[1];
+    var apiVersion = Version.Parse(otelApiVersionStr.Split('-')[0]);
+
+    Assert(libraries.Contains("AutoMapper/16.1.1"), "patched AutoMapper");
+    Assert(libraries.Contains("OpenTelemetry.Exporter.OpenTelemetryProtocol/1.15.3"),
+        "patched OTLP exporter");
+    Assert(libraries.Contains("OpenTelemetry.Extensions.Hosting/1.15.3"), "patched hosting");
+    Assert(apiVersion >= new Version(1, 15, 3), "patched OpenTelemetry.Api floor");
+    Assert(!libraries.Any(n => n.StartsWith("Microsoft.AspNetCore.Mvc.Core/", StringComparison.OrdinalIgnoreCase) ||
+        n.StartsWith("Microsoft.AspNetCore.HttpOverrides/", StringComparison.OrdinalIgnoreCase) ||
+        n.StartsWith("Microsoft.AspNetCore.Http.Abstractions/", StringComparison.OrdinalIgnoreCase)), "no legacy ASP.NET packages");
 
     var runtimeConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
@@ -251,6 +279,11 @@ async Task RunRuntimeChecksAsync()
         using var document = JsonDocument.Parse(await swagger.Content.ReadAsStringAsync());
         Assert(document.RootElement.GetProperty("paths").TryGetProperty("/api/User/get-current-user", out _),
             "Swagger contains SystemService routes");
+
+        using var aliveResp = await client.GetAsync("/alive");
+        Assert(aliveResp.IsSuccessStatusCode, "health check /alive succeeds");
+        using var healthResp = await client.GetAsync("/health");
+        Assert(healthResp.IsSuccessStatusCode, "health check /health succeeds");
 
         var wrongSigJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('y', 64));
         var expiredJwt = CreateTestJwt(Guid.NewGuid(), "test_user", Guid.NewGuid(), new string('x', 64),
@@ -338,6 +371,63 @@ async Task RunRuntimeChecksAsync()
     }
 
     Console.WriteLine("All runtime checks passed (no database connection).");
+}
+
+async Task RunTelemetryChecksAsync()
+{
+    var endpoint = Environment.GetEnvironmentVariable("SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT");
+    if (string.IsNullOrWhiteSpace(endpoint))
+    {
+        throw new InvalidOperationException("Missing SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT environment variable. Prerequisite required for telemetry check.");
+    }
+
+    if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ||
+        uri.Scheme != Uri.UriSchemeHttp ||
+        (uri.Host != "localhost" && uri.Host != "127.0.0.1" && uri.Host != "::1") ||
+        uri.Port <= 0 ||
+        !string.IsNullOrEmpty(uri.UserInfo))
+    {
+        throw new InvalidOperationException("SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT must be an absolute http URI pointing to localhost/127.0.0.1/::1 with an explicit port and no credentials.");
+    }
+
+    var telemetryConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["ConnectionStrings:System"] = "Host=127.0.0.1;Port=1;Database=unused;Username=unused",
+        ["Jwt:Key"] = new string('x', 64),
+        ["Jwt:Issuer"] = "systemservice-cleanup-checks",
+        ["Jwt:Audience"] = "systemservice-cleanup-checks",
+        ["Jwt:Expiry"] = "1",
+        ["Jwt:ExpireRefreshToken"] = "2",
+        ["GrpcClients:FileService"] = "http://127.0.0.1:1",
+        ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
+    }).Build();
+
+    await using var app = await StartTestAppAsync(telemetryConfig, http2: false);
+    try
+    {
+        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        using var source = new System.Diagnostics.ActivitySource(app.Environment.ApplicationName);
+        using (var activity = source.StartActivity("systemservice-security-check"))
+        {
+            Assert(activity != null, "activity created");
+            var traceId = activity!.TraceId.ToString();
+            Console.WriteLine($"Generated trace id: {traceId}");
+            using var resp = await client.GetAsync("/health");
+            Assert(resp.IsSuccessStatusCode, "health check succeeded");
+        }
+
+        var tracerProvider = app.Services.GetRequiredService<OpenTelemetry.Trace.TracerProvider>();
+        var forceFlushMethod = tracerProvider.GetType().GetMethod("ForceFlush", new[] { typeof(int) });
+        Assert(forceFlushMethod != null, "TracerProvider has ForceFlush method");
+        var flushed = (bool)forceFlushMethod!.Invoke(tracerProvider, new object[] { 10000 })!;
+        Assert(flushed, "TracerProvider ForceFlush succeeded");
+        Console.WriteLine("Telemetry exported and flushed.");
+    }
+    finally
+    {
+        await app.StopAsync();
+    }
 }
 
 async Task ExpectBusinessExceptionAsync(Func<Task> action, string expectedMessage)
