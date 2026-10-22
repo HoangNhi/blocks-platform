@@ -19,6 +19,7 @@ namespace Blocks.FileService.Configs
             builder.Services.AddSingleton(builder.Configuration);
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+            builder.Services.AddSingleton<Blocks.FileService.Infrastructure.Storage.FileStorage>();
 
             // Audit action filter
             builder.Services.AddScoped<Blocks.FileService.Infrastructure.Filters.AuditActionFilter>();

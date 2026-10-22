@@ -1,87 +1,154 @@
+using AutoDependencyRegistration.Attributes;
+using Blocks.FileService.DTOs.Common;
+using Blocks.FileService.Infrastructure.Storage;
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
-using Blocks.FileService.DTOs.Common;
-using AutoDependencyRegistration.Attributes;
 using Microsoft.AspNetCore.StaticFiles;
-
+using System.Security.Claims;
 
 namespace Blocks.FileService.Services.CoreFeature.UploadFile
 {
     [RegisterClassAsTransient]
     public class UploadFileService : IUploadFileService
     {
-        private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly FileStorage _storage;
+        private readonly IHttpContextAccessor _contextAccessor;
 
-        public UploadFileService(IWebHostEnvironment webHostEnvironment)
+        public UploadFileService(FileStorage storage, IHttpContextAccessor contextAccessor)
         {
-            _webHostEnvironment = webHostEnvironment;
+            _storage = storage;
+            _contextAccessor = contextAccessor;
+        }
+
+        private Guid GetActorId()
+        {
+            var user = _contextAccessor.HttpContext?.User;
+            if (user == null)
+            {
+                throw new BusinessException("Xác thực không thành công: thiếu ngữ cảnh người dùng", 401);
+            }
+
+            var claimValue = user.FindFirst("name")?.Value ??
+                             user.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                             user.FindFirst("unique_name")?.Value;
+
+            if (string.IsNullOrWhiteSpace(claimValue) || !Guid.TryParseExact(claimValue, "D", out var actorId) || actorId == Guid.Empty)
+            {
+                throw new BusinessException("Xác thực không thành công: định danh người dùng không hợp lệ", 401);
+            }
+
+            return actorId;
         }
 
         public async Task Insert(List<IFormFile> files, string FolderName)
         {
-            if (string.IsNullOrWhiteSpace(FolderName) || FolderName.Contains("..") || FolderName.Contains("/") || FolderName.Contains("\\"))
+            if (files == null || files.Count == 0)
             {
-                throw new BusinessException("Thư mục lưu trữ không hợp lệ");
+                throw new BusinessException("Danh sách tệp rỗng", 400);
             }
 
-            var folderPath = Path.Combine(_webHostEnvironment.WebRootPath, "Files/Temp/" + FolderName);
-            if (Directory.Exists(folderPath))
+            if (string.IsNullOrWhiteSpace(FolderName) ||
+                !Guid.TryParseExact(FolderName, "D", out var folderGuid) ||
+                folderGuid == Guid.Empty)
             {
-                Directory.Delete(folderPath, recursive: true);
+                throw new BusinessException("Thư mục lưu trữ không hợp lệ", 400);
             }
 
-            Directory.CreateDirectory(folderPath);
+            var actorId = GetActorId();
+            var sessionPath = _storage.ResolveSession(actorId, folderGuid);
+            Directory.CreateDirectory(sessionPath);
 
-            string[] _fileValid = CommonConst._fileHinhAnhValid
-                .Concat(CommonConst._fileVideoValid)
-                .Concat(CommonConst._fileAudioValid)
-                .Concat(CommonConst._fileTaiLieuValid)
-                .ToArray();
-
+            long totalBytes = 0;
             foreach (var file in files)
             {
-                if (file.Length > 0 && _fileValid.Contains(Path.GetExtension(file.FileName).ToLower()))
+                if (file == null || file.Length == 0)
                 {
-                    using (var stream = new FileStream(folderPath + "/" + file.FileName, FileMode.Create))
-                    {
-                        await file.CopyToAsync(stream);
-                    }
+                    throw new BusinessException("Tệp tải lên không được rỗng", 400);
                 }
-                else
+
+                totalBytes += file.Length;
+                if (totalBytes > FileStorage.MaxFileBytes)
                 {
-                    throw new BusinessException("Upload file không thành công");
+                    throw new BusinessException("Tổng dung lượng tệp vượt quá giới hạn", 413);
+                }
+
+                ValidateUploadFileName(file.FileName);
+
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                if (!IsValidExtension(ext))
+                {
+                    throw new BusinessException("Định dạng tệp không được hỗ trợ", 400);
+                }
+
+                var physicalFileName = $"{Guid.NewGuid():D}{ext}";
+                var targetPath = Path.Combine(sessionPath, physicalFileName);
+
+                using (var stream = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write))
+                {
+                    await file.CopyToAsync(stream);
                 }
             }
         }
 
         public async Task<List<ModelAttachment>> InsertAndReturn(List<IFormFile> files, string folderName)
         {
-            // Step 1: Upload to temp folder (reuses existing validation + saving logic)
             await Insert(files, folderName);
-
-            // Step 2: Move from temp to permanent and return file metadata
             var embedId = Guid.NewGuid();
-            var servicePath = "sar-embeds";
-            return UploadData(embedId, servicePath, "sar-embeds", folderName);
+            return UploadData(embedId, "System", "Attachments", folderName);
         }
 
         public List<ModelAttachment> UploadData(object lienKetId, string servicePath, string folderName, string tempFolder)
         {
-            if (string.IsNullOrWhiteSpace(tempFolder) || tempFolder.Contains("..") || tempFolder.Contains("/") || tempFolder.Contains("\\"))
+            if (!string.Equals(servicePath, "System", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(folderName, "Attachments", StringComparison.OrdinalIgnoreCase))
             {
-                throw new BusinessException("Thư mục lưu trữ tạm không hợp lệ");
-            }
-            if (string.IsNullOrWhiteSpace(folderName) || folderName.Contains("..") || folderName.Contains("/") || folderName.Contains("\\"))
-            {
-                throw new BusinessException("Thư mục lưu trữ chính không hợp lệ");
+                throw new BusinessException("Mục tiêu lưu trữ không hợp lệ hoặc chưa được đăng ký", 400);
             }
 
-            List<ModelAttachment> result = new List<ModelAttachment>();
-            string sourceDirPath = Path.Combine(_webHostEnvironment.WebRootPath, "Files", "Temp", tempFolder);
-            string destinationDirPath = Path.Combine(_webHostEnvironment.WebRootPath, servicePath, folderName, lienKetId.ToString());
-            string relativeDirPath = servicePath + "/" + folderName + "/" + lienKetId.ToString();
+            if (lienKetId == null || !Guid.TryParse(lienKetId.ToString(), out var relatedGuid) || relatedGuid == Guid.Empty)
+            {
+                throw new BusinessException("Mã liên kết không hợp lệ", 400);
+            }
 
-            result = SyncUploadFile(sourceDirPath, destinationDirPath, relativeDirPath);
+            if (string.IsNullOrWhiteSpace(tempFolder) ||
+                !Guid.TryParseExact(tempFolder, "D", out var folderGuid) ||
+                folderGuid == Guid.Empty)
+            {
+                throw new BusinessException("Thư mục lưu trữ tạm không hợp lệ", 400);
+            }
+
+            var actorId = GetActorId();
+            var sourceDir = _storage.ResolveSession(actorId, folderGuid);
+            if (!Directory.Exists(sourceDir))
+            {
+                throw new BusinessException("Thư mục tạm không tồn tại", 404);
+            }
+
+            var result = new List<ModelAttachment>();
+            var files = Directory.GetFiles(sourceDir);
+
+            foreach (var f in files)
+            {
+                var fileInfo = new FileInfo(f);
+                var fileLength = fileInfo.Length;
+                var fileExt = fileInfo.Extension.ToLowerInvariant();
+                var fileGuid = Guid.NewGuid();
+                var destFileName = $"{fileGuid:D}{fileExt}";
+                var destPath = _storage.Resolve(StorageArea.Files, "System", "Attachments", relatedGuid.ToString("D"), destFileName);
+
+                var destDir = Path.GetDirectoryName(destPath)!;
+                Directory.CreateDirectory(destDir);
+                File.Move(f, destPath, overwrite: true);
+
+                result.Add(new ModelAttachment
+                {
+                    Id = fileGuid,
+                    FileName = destFileName,
+                    FileUrl = $"System/Attachments/{relatedGuid:D}/{destFileName}",
+                    FileExtension = fileExt,
+                    FileSize = (int)fileLength
+                });
+            }
 
             return result;
         }
@@ -98,47 +165,21 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             {
                 try
                 {
-                    // Construct absolute source path
-                    string sourcePath = Path.Combine(_webHostEnvironment.WebRootPath, filePath);
-
-                    // Check if source file exists
+                    var sourcePath = _storage.ResolveActiveKey(filePath);
                     if (!File.Exists(sourcePath))
                     {
                         allSuccess = false;
                         continue;
                     }
 
-                    var pathSegments = filePath.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-                    string serviceName = pathSegments.FirstOrDefault() ?? "Common";
+                    var deletionId = Guid.NewGuid().ToString("D");
+                    var fileName = Path.GetFileName(sourcePath);
+                    var destPath = _storage.Resolve(StorageArea.Deleted, deletionId, fileName);
 
-                    // Assumes filePath format like "Service/Module/Id/File.ext"
-                    string relateId = pathSegments.Length >= 2 ? pathSegments[pathSegments.Length - 2] : "Common";
+                    var destDir = Path.GetDirectoryName(destPath)!;
+                    Directory.CreateDirectory(destDir);
 
-                    // Construct absolute destination path
-                    string destinationDirPath = Path.Combine(_webHostEnvironment.WebRootPath, "Deleted", serviceName, relateId);
-
-                    // Create destination directory if it doesn't exist
-                    if (!Directory.Exists(destinationDirPath))
-                    {
-                        Directory.CreateDirectory(destinationDirPath);
-                    }
-
-                    // Get file info
-                    FileInfo info = new FileInfo(sourcePath);
-                    string fileName = Path.GetFileNameWithoutExtension(sourcePath);
-                    string extension = info.Extension;
-
-                    // Handle file name collisions
-                    string destFilePath = Path.Combine(destinationDirPath, fileName + extension);
-                    int counter = 1;
-                    while (File.Exists(destFilePath))
-                    {
-                        destFilePath = Path.Combine(destinationDirPath, $"{fileName}({counter}){extension}");
-                        counter++;
-                    }
-
-                    // Move file
-                    File.Move(sourcePath, destFilePath);
+                    File.Move(sourcePath, destPath);
                 }
                 catch (Exception)
                 {
@@ -151,64 +192,64 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 
         public string UploadAvatar(string folderUploadId, string oldImage)
         {
-            string path = oldImage;
-            string folderUploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "Files", "Temp", folderUploadId);
-            if (Directory.Exists(folderUploadPath))
+            if (string.IsNullOrWhiteSpace(folderUploadId) ||
+                !Guid.TryParseExact(folderUploadId, "D", out var folderGuid) ||
+                folderGuid == Guid.Empty)
             {
-                string[] arrFiles = Directory.GetFiles(folderUploadPath);
-                if (arrFiles.Count() > 0) //có đính kèm
-                {
-                    FileInfo info = new FileInfo(arrFiles[0]);
-                    string fileName = Guid.NewGuid().ToString() + info.Extension;
-                    string avataPath = Path.Combine(_webHostEnvironment.WebRootPath, "System", "Avatar");
-                    //Kiểm tra nếu thư mục chưa tồn tại thì tạo mới.
-                    if (!Directory.Exists(avataPath))
-                    {
-                        Directory.CreateDirectory(avataPath);
-                    }
-
-                    //Xóa ảnh cũ nếu tồn tại
-                    if (File.Exists(Path.Combine(avataPath, oldImage)))
-                    {
-                        File.Delete(Path.Combine(avataPath, oldImage));
-                    }
-
-                    //Copy ảnh mới
-                    File.Move(arrFiles[0], Path.Combine(avataPath, fileName), true);
-                    path = "System/Avatar/" + fileName;
-                }
-
-                //Xóa thư mục tạm.
-                Directory.Delete(folderUploadPath, true);
+                throw new BusinessException("Thư mục tải lên không hợp lệ", 400);
             }
 
-            return path;
+            var actorId = GetActorId();
+            var sourceDir = _storage.ResolveSession(actorId, folderGuid);
+            if (!Directory.Exists(sourceDir))
+            {
+                return oldImage ?? string.Empty;
+            }
+
+            var files = Directory.GetFiles(sourceDir);
+            if (files.Length == 0)
+            {
+                return oldImage ?? string.Empty;
+            }
+
+            var firstFile = files[0];
+            var ext = Path.GetExtension(firstFile).ToLowerInvariant();
+            var avatarGuid = Guid.NewGuid();
+            var avatarFileName = $"{avatarGuid:D}{ext}";
+            var avatarPath = _storage.ResolveAvatar(avatarFileName);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(avatarPath)!);
+            File.Move(firstFile, avatarPath, overwrite: true);
+
+            try
+            {
+                Directory.Delete(sourceDir, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+
+            return $"System/Avatar/{avatarFileName}";
         }
 
         public async Task<ModelFilePreview> PreviewFileAsync(string fileUrl)
         {
             if (string.IsNullOrWhiteSpace(fileUrl))
             {
-                throw new BusinessException("Đường dẫn tệp không hợp lệ");
+                throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
             }
 
-            var normalizedRelativePath = fileUrl
-                .Replace("\\", Path.DirectorySeparatorChar.ToString())
-                .Replace("/", Path.DirectorySeparatorChar.ToString())
-                .TrimStart(Path.DirectorySeparatorChar);
-
-            var webRootPath = _webHostEnvironment.WebRootPath;
-            var absolutePath = Path.GetFullPath(Path.Combine(webRootPath, normalizedRelativePath));
-            var fullWebRootPath = Path.GetFullPath(webRootPath);
-
-            if (!absolutePath.StartsWith(fullWebRootPath, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new BusinessException("Đường dẫn tệp không hợp lệ");
-            }
-
+            var absolutePath = _storage.ResolveActiveKey(fileUrl);
             if (!File.Exists(absolutePath))
             {
-                throw new BusinessException("Tệp không tồn tại");
+                throw new BusinessException("Tệp không tồn tại", 404);
+            }
+
+            var fileInfo = new FileInfo(absolutePath);
+            if (fileInfo.Length > FileStorage.MaxFileBytes)
+            {
+                throw new BusinessException("Kích thước tệp vượt quá giới hạn", 413);
             }
 
             var originalContentType = GetContentType(absolutePath);
@@ -224,8 +265,32 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             };
         }
 
-        #region Private methods
-        private string GetContentType(string filePath)
+        private static void ValidateUploadFileName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new BusinessException("Tên tệp không được rỗng", 400);
+            }
+
+            if (fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(':') ||
+                fileName.Contains("..") || fileName.Any(char.IsControl))
+            {
+                throw new BusinessException("Tên tệp chứa ký tự không hợp lệ", 400);
+            }
+        }
+
+        private static bool IsValidExtension(string ext)
+        {
+            string[] valid = CommonConst._fileHinhAnhValid
+                .Concat(CommonConst._fileVideoValid)
+                .Concat(CommonConst._fileAudioValid)
+                .Concat(CommonConst._fileTaiLieuValid)
+                .ToArray();
+
+            return valid.Contains(ext);
+        }
+
+        private static string GetContentType(string filePath)
         {
             var provider = new FileExtensionContentTypeProvider();
             if (provider.TryGetContentType(filePath, out var contentType))
@@ -235,63 +300,5 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 
             return "application/octet-stream";
         }
-
-        List<ModelAttachment> SyncUploadFile(string sourceDirPath, string destinationDirPath, string relativeDirPath = "")
-        {
-            try
-            {
-                List<ModelAttachment> lstAttachment = new List<ModelAttachment>();
-
-                //copy file
-                if (Directory.Exists(sourceDirPath))
-                {
-                    string[] arrFiles = Directory.GetFiles(sourceDirPath);
-                    if (arrFiles.Count() > 0) //có đính kèm
-                    {
-                        //Kiểm tra nếu thư mục chưa tồn tại thì tạo mới.
-                        if (!Directory.Exists(destinationDirPath))
-                        {
-                            Directory.CreateDirectory(destinationDirPath);
-                        }
-                        //Copy file qua thư mục mới
-                        foreach (string f in arrFiles)
-                        {
-                            FileInfo info = new FileInfo(f);
-                            string tempFileName = Path.GetFileNameWithoutExtension(f); // Tên gốc để lưu vào DB (Original name)
-                            
-                            // Sử dụng UUID làm tên file vật lý tĩnh trên đĩa để chống bypass đuôi và chống ghi đè
-                            string uuidFileName = Guid.NewGuid().ToString() + info.Extension;
-                            string destDirPath = Path.Combine(destinationDirPath, uuidFileName);
-
-                            //Copy file tới đường dẫn mới (mang tên UUID)
-                            if (File.Exists(f))
-                            {
-                                File.Copy(f, destDirPath, true);
-                                // Lưu thông tin Tên Gốc (FileName) và URL mới cho database lưu trữ
-                                ModelAttachment tepDinhKem = new ModelAttachment();
-                                tepDinhKem.FileName = tempFileName;
-                                tepDinhKem.FileSize = info.Length;
-                                tepDinhKem.FileExtension = info.Extension;
-                                tepDinhKem.FileUrl = relativeDirPath + "/" + uuidFileName; // Logical Path chứa UUID
-
-                                lstAttachment.Add(tepDinhKem);
-                            }
-                        }
-                    }
-                    //Xóa thư mục tạm.
-                    Directory.Delete(sourceDirPath, true);
-                }
-
-                return lstAttachment;
-            }
-            catch (Exception)
-            {
-                throw;
-            }
-        }
-
-
-
-        #endregion
     }
 }
