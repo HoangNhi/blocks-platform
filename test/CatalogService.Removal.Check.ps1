@@ -155,4 +155,25 @@ foreach ($efPkgName in @('Microsoft.EntityFrameworkCore', 'Microsoft.EntityFrame
     }
 }
 
+$dockerfile = Get-Content -Raw (Join-Path $catalogDir 'Dockerfile')
+foreach ($image in @('aspnet', 'sdk')) {
+    if ($dockerfile -notmatch "(?m)^FROM mcr\.microsoft\.com/dotnet/${image}:10\.0 AS ") {
+        throw "catalog_container_targets_net10: $image must use official 10.0 image"
+    }
+}
+foreach ($line in @(
+    'USER $APP_UID',
+    'EXPOSE 8080',
+    'EXPOSE 8081',
+    'COPY ["src/platform/Blocks.ServiceDefaults/Blocks.ServiceDefaults.csproj", "platform/Blocks.ServiceDefaults/"]',
+    'COPY ["src/platform/Blocks.Shared/Blocks.Shared.csproj", "platform/Blocks.Shared/"]',
+    'COPY ["src/services/Blocks.CatalogService/Blocks.CatalogService.csproj", "services/Blocks.CatalogService/"]',
+    'COPY src .',
+    'ENTRYPOINT ["dotnet", "Blocks.CatalogService.dll"]'
+)) {
+    if (-not ($dockerfile -split '\r?\n' -contains $line)) {
+        throw "Catalog container contract changed: $line"
+    }
+}
+
 Write-Output 'PASS CatalogService removal checks'

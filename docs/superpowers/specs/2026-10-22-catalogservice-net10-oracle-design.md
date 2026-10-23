@@ -2,9 +2,10 @@
 
 Ngày: 2026-10-22
 
-Trạng thái: Bản nháp chờ người dùng duyệt. Người dùng đã chọn hướng đánh giá
-Oracle provider thay Pomelo và yêu cầu viết spec, chưa yêu cầu triển khai.
-Tài liệu này không cho phép sửa code, đổi package, scaffold hoặc ghi DB thật.
+Trạng thái: Người dùng đã duyệt spec và yêu cầu triển khai plan bằng subagent ngày
+2026-10-22, làm trên checkout hiện tại, không tạo worktree. Quyền triển khai code
+không cấp quyền tạo fixture hoặc ghi DB; các điều kiện môi trường, E2E và license
+bên dưới vẫn giữ nguyên.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -97,6 +98,7 @@ feature flag hoặc cơ chế tự fallback sang Pomelo.
 | Catalog và CleanupChecks | `net10.0`. |
 | Oracle provider | `MySql.EntityFrameworkCore` `10.0.12`, stable phát hành 2026-10-21. |
 | ADO.NET driver | `MySql.Data`, dependency của Oracle provider; metadata hiện yêu cầu ít nhất `26.10.0`. Không giữ MySqlConnector chỉ để tương thích API Pomelo. |
+| Google.Protobuf của Catalog | `3.35.0`, nâng tối thiểu từ `3.33.2` do dependency group net10.0 của `MySql.Data` `26.10.0` yêu cầu >= `3.35.0`; không đổi protobuf contract hoặc package service khác. |
 | Microsoft EF Core, Relational, Design và Tools đang khai báo | Đồng bộ `10.0.13`; runtime graph không lẫn EF 8/9. |
 | JwtBearer của Catalog | `10.0.13`, đồng bộ dòng ASP.NET Core 10 đang dùng ở SystemService. |
 | Docker SDK/runtime | Image chính thức `sdk:10.0` / `aspnet:10.0`. |
@@ -116,6 +118,11 @@ Oracle package công bố license `GPL-2.0-only WITH Universal-FOSS-exception-1.
 Chủ dự án phải xác nhận điều kiện sử dụng/phân phối phù hợp trước phát hành.
 Lựa chọn kỹ thuật không thay thế rà soát license; không tự kết luận dự án
 closed-source được hoặc không được dùng.
+
+Làm rõ khi triển khai ngày 2026-10-22: dependency group `net10.0` trong
+`https://api.nuget.org/v3-flatcontainer/mysql.data/26.10.0/mysql.data.nuspec`
+xác nhận yêu cầu Google.Protobuf `3.35.0`. Đây là nâng dependency bắt buộc để tránh
+NU1605, thuộc ngoại lệ tương thích bên trên, không phải đợt nâng package diện rộng.
 
 ## 4. Thiết kế chuyển provider
 
@@ -147,6 +154,11 @@ Giữ `OnModelCreatingPartial`, đúng một DbSet Faculty và tám thuộc tín
 - Thay `.HasCharSet` và annotation/getter Pomelo bằng API/metadata Oracle
   tương ứng. Oracle có `ForMySQLHasCharset` / `ForMySQLHasCollation`; xác nhận
   overload/namespace trong đúng package đã pin, không đoán từ casing trong docs.
+- Xác minh triển khai: model `HasCharSet` ghi `MySQL:Charset`; model `UseCollation`
+  gọi EF relational `SetCollation`, đọc bằng public `GetCollation()`, không đòi
+  model annotation `MySQL:Collation`. `ToQueryString()` của Oracle nội suy giá trị
+  chuỗi/phân trang để hiển thị; kiểm tra binding bằng public `CreateDbCommand()`
+  không mở kết nối, thay vì suy command thực từ chuỗi chẩn đoán.
 - Giữ `ToTable("faculty")`, primary key và tám tên cột snake_case.
   Giữ `text`, `varchar(255)`, `timestamp`, charset/collation ở đúng table/column;
   không xóa kiểm tra charset chỉ vì API cũ không còn.
@@ -370,7 +382,7 @@ ghi dữ liệu mà bản cũ đọc khác; không coi rollback code là cách c
 ## 8. Quyết định còn lại và điều kiện dừng
 
 Đã chọn: hướng Oracle + EF Core 10, giữ kiến trúc EF và phạm vi Catalog.
-Đề xuất kỹ thuật cần duyệt cùng spec: package matrix, claim mapping tường minh,
+Đã duyệt cùng spec: package matrix, claim mapping tường minh,
 test mode/provider fixture, không scaffold và không đổi schema.
 
 Chưa có quyền tạo fixture/ghi DB test; cần xác nhận môi trường trước khi chạy.
@@ -381,8 +393,8 @@ tuyên bố nghiệm thu đầy đủ hoặc phát hành.
 Dừng và cập nhật spec nếu cần đổi schema, đổi ORM/provider khác, sửa thư viện
 dùng chung, viết lại audit, hạ TLS hoặc bỏ auth để tương thích.
 
-Spec chưa được duyệt. Sau khi người dùng duyệt mới viết implementation plan;
-không triển khai chỉ vì người dùng đã đồng ý hướng kỹ thuật.
+Spec và plan đã được người dùng cho phép triển khai bằng subagent; không suy quyền
+ghi DB từ việc duyệt tài liệu hoặc yêu cầu triển khai code.
 
 ## 9. Nguồn đối chiếu
 

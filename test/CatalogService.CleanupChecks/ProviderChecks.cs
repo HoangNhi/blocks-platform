@@ -129,6 +129,26 @@ internal static class ProviderChecks
         connection_guard_rejects_unsafe_target_before_open();
         connection_guard_accepts_only_isolated_tcp_target();
         exception_sanitization_masks_driver_and_credentials();
+        server_metadata_rejects_wrong_engine_or_unsupported_version();
+    }
+
+    private static void server_metadata_rejects_wrong_engine_or_unsupported_version()
+    {
+        foreach (var metadata in new[]
+        {
+            ("5.7.44", "MySQL Community Server"),
+            ("8.0.12", "MySQL Community Server"),
+            ("10.11.0-MariaDB", "MariaDB Server"),
+            ("not-a-version", "MySQL Community Server")
+        })
+        {
+            bool refused = false;
+            try { ValidateServerMetadata(metadata.Item1, metadata.Item2); }
+            catch (InvalidOperationException) { refused = true; }
+            Require(refused, "Wrong engine or unsupported default-expression version rejected before DDL");
+        }
+        ValidateServerMetadata("8.4.0", "MySQL Community Server - GPL");
+        ValidateServerMetadata("26.10.0", "MySQL Community Server - GPL");
     }
     private static void connection_guard_rejects_unsafe_target_before_open()
     {
@@ -210,6 +230,15 @@ internal static class ProviderChecks
         var safeEnvEx = new InvalidOperationException("CATALOGSERVICE_UPGRADE_TEST_CONNECTION environment variable is not configured. Live database checks require an isolated test database.");
         Require(SanitizeMessage(safeEnvEx) == safeEnvEx.Message, "Safe env refusal message preserved");
     }
+
+    private static void ValidateServerMetadata(string version, string comment)
+    {
+        Require(!version.Contains("MariaDB", StringComparison.OrdinalIgnoreCase) &&
+            comment.Contains("MySQL", StringComparison.OrdinalIgnoreCase) &&
+            Version.TryParse(version.Split('-')[0], out var parsed) && parsed >= new Version(8, 0, 13),
+            "Fixture requires MySQL with expression defaults (8.0.13 or newer); no automatic server repair");
+    }
+
     private static async Task<bool> TryEnsureEmptyDatabaseAndCreateFacultyAsync(string connectionString, bool takeOwnership)
     {
         ValidateIsolatedConnection(connectionString);
@@ -228,6 +257,23 @@ internal static class ProviderChecks
             var currentDb = (string?)await cmd.ExecuteScalarAsync();
             Require(string.Equals(currentDb, "blocks_catalogservice_upgrade_test", StringComparison.Ordinal),
                 "Target database must be blocks_catalogservice_upgrade_test");
+
+            using (var metadata = conn.CreateCommand())
+            {
+                metadata.CommandText = "SELECT VERSION(), @@version_comment, @@session.time_zone, @@global.time_zone, @@system_time_zone;";
+                using var reader = await metadata.ExecuteReaderAsync();
+                Require(await reader.ReadAsync(), "Server metadata query returned rows before DDL");
+                ValidateServerMetadata(reader.GetString(0), reader.GetString(1));
+                Require(reader.GetString(2) == "+00:00", "Fixture DDL session uses UTC");
+                Console.WriteLine("Fixture server metadata: " + JsonSerializer.Serialize(new
+                {
+                    version = reader.GetString(0),
+                    engine = reader.GetString(1),
+                    session_time_zone = reader.GetString(2),
+                    global_time_zone = reader.GetString(3),
+                    system_time_zone = reader.GetString(4)
+                }));
+            }
 
             cmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();";
             var tableCount = Convert.ToInt64(await cmd.ExecuteScalarAsync());
@@ -283,30 +329,6 @@ CREATE TABLE `faculty` (
             // Step 1: Ensure empty database and create owned faculty table
             tableCreatedByThisRun = await TryEnsureEmptyDatabaseAndCreateFacultyAsync(connectionString, takeOwnership: true);
 
-            // Step 2: Server metadata and deterministic timezone inspection
-            using (var metaConn = new MySqlConnection(connectionString))
-            {
-                await metaConn.OpenAsync();
-                using var tzCmd = metaConn.CreateCommand();
-                tzCmd.CommandText = "SET time_zone = '+00:00';";
-                await tzCmd.ExecuteNonQueryAsync();
-
-                using var metaCmd = metaConn.CreateCommand();
-                metaCmd.CommandText = "SELECT VERSION(), @@version_comment, @@session.time_zone, @@global.time_zone, @@system_time_zone;";
-                using var reader = await metaCmd.ExecuteReaderAsync();
-                Require(await reader.ReadAsync(), "Server metadata query returned rows");
-                var version = reader.GetString(0);
-                var comment = reader.GetString(1);
-                var sessionTz = reader.GetString(2);
-                var globalTz = reader.GetString(3);
-                var systemTz = reader.GetString(4);
-                Require(!string.IsNullOrEmpty(version), "Server version is non-empty");
-                Require(!string.IsNullOrEmpty(comment), "Server comment is non-empty");
-                Require(!string.IsNullOrEmpty(sessionTz), "Session time_zone is non-empty");
-                Require(!string.IsNullOrEmpty(globalTz), "Global time_zone is non-empty");
-                Require(!string.IsNullOrEmpty(systemTz), "System time_zone is non-empty");
-            }
-
             // Step 3: Lifecycle assertions - real refusal probe against populated database
             bool probeRefused = false;
             bool probeTookOwnership = false;
@@ -358,6 +380,7 @@ CREATE TABLE `faculty` (
             var row3Id = Guid.Parse("00000000-0000-4000-8000-000000000003");
             var row4Id = Guid.NewGuid();
             var row5Id = Guid.NewGuid(); // Omitted updated_at row
+            var wildcardDistractorId = Guid.NewGuid();
 
             using (var seedConn = new MySqlConnection(connectionString))
             {
@@ -373,11 +396,15 @@ VALUES
   (@id1, 'Phòng Công nghệ', '2026-10-22 00:00:01', 'SeedActor', NULL, NULL, 1, 0),
   (@id2, 'Phòng Đào tạo', '2026-10-22 00:00:02', 'SeedActor', '2026-10-22 00:00:02', 'SeedActor', 1, 0),
   (@id3, 'Phòng Kế toán', '2026-10-22 00:00:03', 'SeedActor', NULL, NULL, 1, 0),
-  (@id4, '100%_O\'Reilly', '2026-10-22 00:00:04', 'SeedActor', NULL, NULL, 1, 0);";
+  (@id4, @literalName, '2026-10-22 00:00:04', 'SeedActor', NULL, NULL, 1, 0),
+  (@distractorId, @distractorName, '2026-10-22 00:00:06', 'SeedActor', NULL, NULL, 1, 0);";
                 seedCmd.Parameters.AddWithValue("@id1", row1Id.ToString());
                 seedCmd.Parameters.AddWithValue("@id2", row2Id.ToString());
                 seedCmd.Parameters.AddWithValue("@id3", row3Id.ToString());
                 seedCmd.Parameters.AddWithValue("@id4", row4Id.ToString());
+                seedCmd.Parameters.AddWithValue("@literalName", "100%_O'Reilly");
+                seedCmd.Parameters.AddWithValue("@distractorId", wildcardDistractorId.ToString());
+                seedCmd.Parameters.AddWithValue("@distractorName", "100abcXO'Reilly");
                 await seedCmd.ExecuteNonQueryAsync();
 
                 // Test omitted updated_at column in SQL to observe DB default CURRENT_TIMESTAMP
@@ -449,6 +476,15 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                     PageSize = 10
                 });
                 Require(literalPage.TotalRow == 1 && literalPage.Data[0].Id == row4Id, "Literal special characters matched");
+                foreach (var search in new[] { "%", "_", "'" })
+                {
+                    var special = await service.GetList(new GetListPagingRequest
+                    {
+                        TextSearch = search, PageIndex = 1, PageSize = 10
+                    });
+                    Require(special.TotalRow == (search == "'" ? 2 : 1) &&
+                        special.Data.Any(x => x.Id == row4Id), "Special character treated literally, not as wildcard");
+                }
 
                 // Duplicate name rejection
                 bool dupThrew = false;
@@ -461,6 +497,13 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                     dupThrew = true;
                 }
                 Require(dupThrew, "Duplicate name rejected by business validation");
+                bool collationDuplicateRefused = false;
+                try { await service.Insert(new FacultyRequest { Name = "phong cong nghe" }); }
+                catch (BusinessException ex) when (ex.Message == "Tên phòng ban đã tồn tại")
+                {
+                    collationDuplicateRefused = true;
+                }
+                Require(collationDuplicateRefused, "Case/accent-equivalent name rejected under utf8mb4_0900_ai_ci");
             }
 
             // Test 2: uuid_sql_to_ef_and_service_to_sql with fresh-context and actor checks
@@ -480,10 +523,13 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
             using (var scope = app.Services.CreateScope())
             {
                 SetScopedHttpContext(scope, "CREATE", "/api/Faculty/insert", testUserId, testUserName);
+                await SetSessionTimeZoneAsync(scope.ServiceProvider.GetRequiredService<CatalogContext>(), "+00:00");
                 var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
                 var inserted = await service.Insert(new FacultyRequest { Id = callerId, Name = "Ban Khảo thí" });
                 Require(inserted.Id == callerId, "Caller UUID retained");
+                await RequireRawTimestampsAsync(connectionString, callerId, inserted.CreatedAt!.Value, inserted.UpdatedAt);
                 var createAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(createAudit.IsSuccess, "CREATE capture is successful");
                 Require(createAudit.Action == "CREATE", "CREATE audit action verified");
                 Require(createAudit.EntityId == callerId.ToString(), "CREATE audit EntityId matches callerId");
                 Require(createAudit.UserId == testUserId, "CREATE audit UserId matches actor");
@@ -491,6 +537,11 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                 Require(string.IsNullOrEmpty(createAudit.OldValues), "CREATE audit OldValues is empty");
                 Require(!string.IsNullOrEmpty(createAudit.NewValues) && createAudit.NewValues.Contains(callerId.ToString()),
                     "CREATE audit NewValues contains inserted entity ID");
+                using var values = JsonDocument.Parse(createAudit.NewValues);
+                var created = values.RootElement.GetProperty("Faculty")[0];
+                Require(created.GetProperty("Name").GetString() == "Ban Khảo thí" &&
+                    created.GetProperty("CreatedBy").GetString() == testUserName &&
+                    created.GetProperty("Id").GetGuid() == callerId, "CREATE audit contains exact persisted entity fields");
             }
 
             // Fresh context reload check for caller insert & actor
@@ -526,6 +577,7 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                 Require(generated.Id != Guid.Empty, "Empty request ID generated");
                 generatedId = generated.Id;
                 var genAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(genAudit.IsSuccess, "Generated ID capture is successful");
                 Require(genAudit.EntityId == generatedId.ToString(), "Generated ID audit captured");
             }
 
@@ -533,21 +585,34 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
             using (var scope = app.Services.CreateScope())
             {
                 SetScopedHttpContext(scope, "UPDATE", "/api/Faculty/update", testUserId, testUserName);
+                await SetSessionTimeZoneAsync(scope.ServiceProvider.GetRequiredService<CatalogContext>(), "+00:00");
                 var service = scope.ServiceProvider.GetRequiredService<IFacultyService>();
                 var updatedSelf = await service.Update(new FacultyRequest
                 {
                     Id = row1Id,
                     Name = "Phòng Công nghệ",
-                    IsActived = true
+                    IsActived = false
                 });
                 Require(updatedSelf.Id == row1Id, "Updating self with same name succeeds");
+                await RequireRawTimestampsAsync(connectionString, row1Id,
+                    new DateTime(2026, 10, 22, 0, 0, 1, DateTimeKind.Utc), updatedSelf.UpdatedAt);
                 var updateAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(updateAudit.IsSuccess, "UPDATE capture is successful");
                 Require(updateAudit.Action == "UPDATE", "UPDATE audit action verified");
                 Require(updateAudit.EntityId == row1Id.ToString(), "UPDATE audit EntityId matches updated row");
                 Require(updateAudit.UserId == testUserId, "UPDATE audit UserId matches actor");
                 Require(updateAudit.UserName == testUserName, "UPDATE audit UserName matches actor");
                 Require(!string.IsNullOrEmpty(updateAudit.OldValues), "UPDATE audit OldValues populated");
                 Require(!string.IsNullOrEmpty(updateAudit.NewValues), "UPDATE audit NewValues populated");
+                using var oldValues = JsonDocument.Parse(updateAudit.OldValues);
+                using var newValues = JsonDocument.Parse(updateAudit.NewValues);
+                var before = oldValues.RootElement.GetProperty("Faculty")[0];
+                var after = newValues.RootElement.GetProperty("Faculty")[0];
+                Require(before.GetProperty("IsActived").GetBoolean() && !after.GetProperty("IsActived").GetBoolean() &&
+                    before.GetProperty("Name").GetString() == "Phòng Công nghệ" &&
+                    after.GetProperty("Name").GetString() == "Phòng Công nghệ" &&
+                    after.GetProperty("UpdatedBy").GetString() == testUserName,
+                    "UPDATE audit retains exact before/after fields");
             }
 
             // Fresh context reload check for update
@@ -667,11 +732,17 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                 var deleteResult = await service.DeleteList(new DeleteListRequest { Ids = new List<Guid> { deleteTargetId } });
                 Require(deleteResult.Contains(deleteTargetId.ToString()), "DeleteList returns deleted ID");
                 var deleteAudit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(deleteAudit.IsSuccess, "DELETE capture is successful");
                 Require(deleteAudit.Action == "DELETE", "DELETE audit action verified");
                 Require(deleteAudit.EntityId == deleteTargetId.ToString(), "DELETE audit EntityId matches deleted ID");
                 Require(deleteAudit.UserId == testUserId, "DELETE audit UserId matches actor");
                 Require(deleteAudit.UserName == testUserName, "DELETE audit UserName matches actor");
                 Require(!string.IsNullOrEmpty(deleteAudit.OldValues), "DELETE audit OldValues is populated");
+                using var oldValues = JsonDocument.Parse(deleteAudit.OldValues);
+                using var newValues = JsonDocument.Parse(deleteAudit.NewValues);
+                Require(!oldValues.RootElement.GetProperty("Faculty")[0].GetProperty("IsDeleted").GetBoolean() &&
+                    newValues.RootElement.GetProperty("Faculty")[0].GetProperty("IsDeleted").GetBoolean(),
+                    "DELETE audit records false-to-true soft-delete transition");
             }
 
             // Raw SQL check: soft-deleted row retained with is_deleted = 1
@@ -731,9 +802,10 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
                 var reloaded = await context.Faculties.FindAsync(row1Id);
                 Require(reloaded != null && !reloaded.IsDeleted, "Missing second ID persisted no first-row delete");
             }
+            var batchAudits = await capturingInvoker.CollectObservationsAsync(TimeSpan.FromSeconds(1));
+            Require(!batchAudits.Any(x => x.IsSuccess), "Failed batch emitted no success audit");
 
             // Duplicate PK DbUpdateException check - verify no success audit emitted
-            capturingInvoker.Drain();
             using (var scope = app.Services.CreateScope())
             {
                 var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
@@ -762,6 +834,28 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
 
             var failureAudits = await capturingInvoker.CollectObservationsAsync(TimeSpan.FromSeconds(1));
             Require(!failureAudits.Any(x => x.IsSuccess), "Failed DB save emitted no success audit");
+
+            // Same wall-clock values in non-UTC TIMESTAMP sessions represent different instants.
+            foreach (var (zone, offsetHours) in new[] { ("+00:00", 0), ("+07:00", 7) })
+            {
+                using var scope = app.Services.CreateScope();
+                SetScopedHttpContext(scope, "CREATE", "/__checks/timestamp", testUserId, testUserName);
+                var context = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+                await SetSessionTimeZoneAsync(context, zone);
+                var fixedTime = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc);
+                var fixedRow = new Faculty
+                {
+                    Id = Guid.NewGuid(), Name = "Timestamp " + zone,
+                    CreatedAt = fixedTime, UpdatedAt = fixedTime.AddSeconds(1),
+                    CreatedBy = testUserName, IsActived = true, IsDeleted = false
+                };
+                context.Faculties.Add(fixedRow);
+                await context.SaveChangesAsync();
+                var audit = await capturingInvoker.WaitForCaptureAsync(TimeSpan.FromSeconds(5));
+                Require(audit.IsSuccess && audit.EntityId == fixedRow.Id.ToString(), "Timestamp fixture audit consumed");
+                await RequireRawTimestampsAsync(connectionString, fixedRow.Id,
+                    fixedTime.AddHours(-offsetHours), fixedTime.AddSeconds(1).AddHours(-offsetHours));
+            }
         }
         catch (Exception ex)
         {
@@ -805,6 +899,42 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
         }
     }
 
+    private static async Task SetSessionTimeZoneAsync(CatalogContext context, string zone)
+    {
+        await context.Database.OpenConnectionAsync();
+        using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SET time_zone = @zone;";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@zone";
+        parameter.Value = zone;
+        command.Parameters.Add(parameter);
+        await command.ExecuteNonQueryAsync();
+        command.Parameters.Clear();
+        command.CommandText = "SELECT @@session.time_zone;";
+        Require(Equals(await command.ExecuteScalarAsync(), zone), "EF session timezone observed explicitly");
+        Console.WriteLine("Fixture EF session_time_zone=" + zone);
+    }
+
+    private static async Task RequireRawTimestampsAsync(string connectionString, Guid id, DateTime created, DateTime? updated)
+    {
+        using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SET time_zone = '+00:00';";
+        await command.ExecuteNonQueryAsync();
+        command.CommandText = "SELECT UNIX_TIMESTAMP(created_at), UNIX_TIMESTAMP(updated_at), @@session.time_zone FROM faculty WHERE id = @id;";
+        command.Parameters.AddWithValue("@id", id.ToString());
+        using var reader = await command.ExecuteReaderAsync();
+        Require(await reader.ReadAsync() && reader.GetString(2) == "+00:00", "UTC raw timestamp session observed");
+        Require(Convert.ToInt64(reader.GetValue(0)) ==
+            new DateTimeOffset(DateTime.SpecifyKind(created, DateTimeKind.Utc)).ToUnixTimeSeconds(),
+            "EF/service CreatedAt equals raw stored instant at timestamp precision");
+        Require(updated.HasValue
+            ? !reader.IsDBNull(1) && Convert.ToInt64(reader.GetValue(1)) ==
+                new DateTimeOffset(DateTime.SpecifyKind(updated.Value, DateTimeKind.Utc)).ToUnixTimeSeconds()
+            : reader.IsDBNull(1), "EF/service UpdatedAt equals raw stored instant/null");
+    }
+
     private static void SetScopedHttpContext(IServiceScope scope, string auditAction, string path, string userId, string userName)
     {
         var httpAccessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
@@ -825,11 +955,6 @@ VALUES (@id5, 'Ban Khảo sát', '2026-10-22 00:00:05', 'SeedActor', 1, 0);";
     private sealed class CapturingAuditInvoker : CallInvoker
     {
         private readonly Channel<WriteAuditLogRequest> _channel = Channel.CreateUnbounded<WriteAuditLogRequest>();
-
-        public void Drain()
-        {
-            while (_channel.Reader.TryRead(out _)) { }
-        }
 
         public async Task<WriteAuditLogRequest> WaitForCaptureAsync(TimeSpan timeout)
         {

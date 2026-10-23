@@ -1,0 +1,11 @@
+**
+!src/platform/Blocks.Shared/**
+!src/platform/Blocks.ServiceDefaults/**
+!src/services/Blocks.CatalogService/**
+!src/services/Blocks.SystemService/Protos/system.proto
+!src/services/Blocks.SystemService/Protos/audit.proto
+**/bin/**
+**/obj/**
+**/.env
+**/.env.*
+**/*.user

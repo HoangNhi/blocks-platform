@@ -52,7 +52,7 @@
 | `src/apps/Blocks.Web/` | React 19, TypeScript, Vite, Tailwind CSS, Radix UI, TanStack Query. |
 | `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
 | `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
-| `src/services/Blocks.CatalogService/` | Departments (Faculty); EF Core with MySQL; targets `net8.0`. |
+| `src/services/Blocks.CatalogService/` | Departments (Faculty); EF Core 10 with Oracle MySQL provider; targets `net10.0`. |
 | `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net8.0`. |
 | `src/platform/Blocks.AppHost/` | Aspire orchestration; currently references missing services. |
 | `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults. |
@@ -184,14 +184,29 @@ Existing CatalogService source-level regression check:
 & ./test/CatalogService.Removal.Check.ps1
 ```
 
-The CatalogService cleanup harness targets `net8.0`. Its DB-free checks are:
+The CatalogService cleanup harness targets `net10.0`. Its DB-free checks are:
 
 ```powershell
 dotnet run --project test/CatalogService.CleanupChecks -- contract
 dotnet run --project test/CatalogService.CleanupChecks -- runtime
 ```
 
-The `contract` mode checks the single Faculty entity mapping, snake_case columns, and validation/mapping without opening a database connection. The `runtime` mode checks startup, unauthorized 401 application envelope, 404 for retired routes with valid JWT, and Swagger.
+The `contract` mode checks Oracle Faculty mapping, SQL translation/parameters,
+connection guards and validation without opening a database connection. The
+`runtime` mode checks production DI/model resolution, health, JWT raw claims,
+401/403 application envelopes, retired routes and six-route Swagger.
+
+Catalog provider integration requires separate authorization for an empty,
+isolated localhost MySQL database named `blocks_catalogservice_upgrade_test`:
+
+```powershell
+dotnet run --project test/CatalogService.CleanupChecks -- provider
+```
+
+Only `CATALOGSERVICE_UPGRADE_TEST_CONNECTION` supplies its connection. No fallback
+to application config. The fixture creates/drops only its owned `faculty` table;
+preexisting objects are refused. Never run it against application data. Provider
+comparison, real permission/audit E2E and owner license approval remain rollout gates.
 
 The SystemService cleanup harness targets `net10.0`. Its DB-free checks are:
 
