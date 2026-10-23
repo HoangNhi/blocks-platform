@@ -49,7 +49,8 @@ internal static class ValidationChecks
         await single_error_keeps_vietnamese_envelope();
         await binding_errors_keep_baseline();
         await multiple_errors_keep_first_message();
-        await child_collection_validation();
+        await nested_permissions_keep_baseline();
+        await unregistered_shared_validator_stays_inactive();
         await permission_precedes_validation();
         await valid_request_reaches_action_once();
         await probe_mvc_annotations_and_prefixes();
@@ -168,7 +169,7 @@ internal static class ValidationChecks
 
     private static async Task single_error_keeps_vietnamese_envelope()
     {
-        var (app, fakeRoleService, _, fakeAuditWriter) = await CreateTestHostAsync();
+        var (app, fakeRoleService, fakeUserService, fakeAuditWriter) = await CreateTestHostAsync();
 
         try
         {
@@ -176,15 +177,38 @@ internal static class ValidationChecks
             var jwt = CreateJwt(Guid.NewGuid());
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-            var req = new RoleRequest { Name = "" };
-            using var resp = await client.PostAsJsonAsync("/api/Role/insert", req);
+            // User insert with only Username empty
+            var reqUser = new UserRequest
+            {
+                Username = "",
+                Fullname = "Nguyen Van A",
+                Password = "Password123!",
+                RoleId = Guid.NewGuid(),
+                Email = "valid@example.com",
+                AvatarAction = "keep"
+            };
+            using var respUser = await client.PostAsJsonAsync("/api/User/insert", reqUser);
 
-            Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
-            using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            var body = bodyDoc.RootElement;
-            Require(!body.GetProperty("Success").GetBoolean(), "invalid request rejected");
-            Require(body.GetProperty("StatusCode").GetInt32() == 400, "application 400");
-            Require(body.GetProperty("Message").GetString() == "Tên gọi không được để trống",
+            Require(respUser.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+            using var bodyDocUser = JsonDocument.Parse(await respUser.Content.ReadAsStringAsync());
+            var bodyUser = bodyDocUser.RootElement;
+            Require(!bodyUser.GetProperty("Success").GetBoolean(), "invalid user request rejected");
+            Require(bodyUser.GetProperty("StatusCode").GetInt32() == 400, "application 400");
+            Require(bodyUser.GetProperty("Message").GetString() == "Tên tài khoản không được để trống",
+                "User single error retained");
+            Require(fakeUserService.InsertCalls == 0 && fakeAuditWriter.WriteCalls == 0,
+                "invalid user input has no action side effects or audit");
+
+            // Role insert Name empty
+            var reqRole = new RoleRequest { Name = "" };
+            using var respRole = await client.PostAsJsonAsync("/api/Role/insert", reqRole);
+
+            Require(respRole.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+            using var bodyDocRole = JsonDocument.Parse(await respRole.Content.ReadAsStringAsync());
+            var bodyRole = bodyDocRole.RootElement;
+            Require(!bodyRole.GetProperty("Success").GetBoolean(), "invalid request rejected");
+            Require(bodyRole.GetProperty("StatusCode").GetInt32() == 400, "application 400");
+            Require(bodyRole.GetProperty("Message").GetString() == "Tên gọi không được để trống",
                 "Role single error retained");
             Require(fakeRoleService.InsertCalls == 0 && fakeAuditWriter.WriteCalls == 0,
                 "invalid input has no action side effects or audit");
@@ -269,7 +293,7 @@ internal static class ValidationChecks
         }
     }
 
-    private static async Task child_collection_validation()
+    private static async Task nested_permissions_keep_baseline()
     {
         var (app, fakeRoleService, _, _) = await CreateTestHostAsync();
 
@@ -279,23 +303,94 @@ internal static class ValidationChecks
             var jwt = CreateJwt(Guid.NewGuid());
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-            var reqPayload = new
+            // Scenario a: Permissions: [] (rejected by root validator)
             {
-                Permissions = new[]
+                var reqPayload = new
                 {
-                    new { RoleId = Guid.Empty, MenuId = Guid.NewGuid() }
-                }
-            };
-            using var resp = await client.PutAsJsonAsync("/api/Role/update-permissions", reqPayload);
+                    Permissions = Array.Empty<object>()
+                };
+                using var resp = await client.PutAsJsonAsync("/api/Role/update-permissions", reqPayload);
 
-            Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+                Require(resp.StatusCode == HttpStatusCode.OK, "empty permissions: HTTP envelope retained");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(!body.GetProperty("Success").GetBoolean(), "empty permissions rejected");
+                Require(body.GetProperty("StatusCode").GetInt32() == 400, "empty permissions: application 400");
+                Require(body.GetProperty("Message").GetString() == "Danh sách phân quyền không được rỗng",
+                    "Root validator message retained");
+                Require(fakeRoleService.UpdatePermissionsCalls == 0, "no action mutation on root validation failure");
+            }
+
+            // Scenario b: One permission with empty RoleId (rejected by child validator)
+            {
+                var reqPayload = new
+                {
+                    Permissions = new[]
+                    {
+                        new { RoleId = Guid.Empty, MenuId = Guid.NewGuid() }
+                    }
+                };
+                using var resp = await client.PutAsJsonAsync("/api/Role/update-permissions", reqPayload);
+
+                Require(resp.StatusCode == HttpStatusCode.OK, "invalid child: HTTP envelope retained");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(!body.GetProperty("Success").GetBoolean(), "invalid child rejected");
+                Require(body.GetProperty("StatusCode").GetInt32() == 400, "invalid child: application 400");
+                Require(body.GetProperty("Message").GetString() == "Vai trò không được để trống",
+                    "Child validator message retained via ImplicitlyValidateChildProperties");
+                Require(fakeRoleService.UpdatePermissionsCalls == 0, "no action mutation on child validation failure");
+            }
+
+            // Scenario c: Valid Permissions list (passes validation, action called once)
+            {
+                var reqPayload = new
+                {
+                    Permissions = new[]
+                    {
+                        new { RoleId = Guid.NewGuid(), MenuId = Guid.NewGuid() }
+                    }
+                };
+                using var resp = await client.PutAsJsonAsync("/api/Role/update-permissions", reqPayload);
+
+                Require(resp.StatusCode == HttpStatusCode.OK, "valid permissions: HTTP envelope retained");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(body.GetProperty("Success").GetBoolean(), "valid permissions succeeded");
+                Require(body.GetProperty("StatusCode").GetInt32() == 200, "valid permissions: application 200");
+                Require(fakeRoleService.UpdatePermissionsCalls == 1, "action called exactly once");
+            }
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task unregistered_shared_validator_stays_inactive()
+    {
+        var (app, _, fakeUserService, _) = await CreateTestHostAsync();
+
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            var jwt = CreateJwt(Guid.NewGuid());
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+            using var req = new HttpRequestMessage(HttpMethod.Delete, "/api/User/delete-list")
+            {
+                Content = new StringContent("{\"Ids\": []}", Encoding.UTF8, "application/json")
+            };
+            using var resp = await client.SendAsync(req);
+
+            Require(resp.StatusCode == HttpStatusCode.OK, "delete-list HTTP envelope retained");
             using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var body = bodyDoc.RootElement;
-            Require(!body.GetProperty("Success").GetBoolean(), "invalid child rejected");
-            Require(body.GetProperty("StatusCode").GetInt32() == 400, "application 400");
-            Require(body.GetProperty("Message").GetString() == "Vai trò không được để trống",
-                "Child validator message retained via ImplicitlyValidateChildProperties");
-            Require(fakeRoleService.UpdatePermissionsCalls == 0, "no action mutation on child validation failure");
+            Require(body.GetProperty("Success").GetBoolean(),
+                "DeleteListRequestValidator from Shared is inactive in SystemService, request succeeds");
+            Require(body.GetProperty("StatusCode").GetInt32() == 200, "application 200");
+            Require(fakeUserService.DeleteListCalls == 1, "action reaches service exactly once");
         }
         finally
         {
@@ -546,6 +641,10 @@ internal static class ValidationChecks
     {
         private int _checkPermissionCalls;
         public int CheckPermissionCalls => Volatile.Read(ref _checkPermissionCalls);
+        private int _insertCalls;
+        public int InsertCalls => Volatile.Read(ref _insertCalls);
+        private int _deleteListCalls;
+        public int DeleteListCalls => Volatile.Read(ref _deleteListCalls);
         public bool AllowPermission { get; set; } = true;
 
         public Task<CheckPermissionReponse> CheckPermission(CheckPermissionRequest request)
@@ -558,9 +657,30 @@ internal static class ValidationChecks
         public Task<List<ModelUser>> GetByIds(List<Guid> ids) => throw new NotImplementedException();
         public Task<List<ModelUser>> GetByUsernames(List<string> usernames) => throw new NotImplementedException();
         public Task<GetListPagingResponse<ModelUser>> GetByIdsPaged(List<Guid> ids, string? textSearch, int pageIndex, int pageSize) => throw new NotImplementedException();
-        public Task<ModelUser> Insert(UserRequest request) => throw new NotImplementedException();
+
+        public Task<ModelUser> Insert(UserRequest request)
+        {
+            Interlocked.Increment(ref _insertCalls);
+            return Task.FromResult(new ModelUser
+            {
+                Id = Guid.NewGuid(),
+                Username = request.Username,
+                Fullname = request.Fullname,
+                Email = request.Email,
+                RoleId = request.RoleId,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "test"
+            });
+        }
+
         public Task<ModelUser> Update(UserRequest request) => throw new NotImplementedException();
-        public Task<string> DeleteList(DeleteListRequest request) => throw new NotImplementedException();
+
+        public Task<string> DeleteList(DeleteListRequest request)
+        {
+            Interlocked.Increment(ref _deleteListCalls);
+            return Task.FromResult("Deleted");
+        }
+
         public Task<GetListPagingResponse<ModelUserGetListPaging>> GetList(GetListPagingRequest request) => throw new NotImplementedException();
         public Task<ModelUser> GetCurrentUser() => throw new NotImplementedException();
         public Task<List<ModelCombobox>> GetAllForCombobox() => throw new NotImplementedException();

@@ -4,7 +4,7 @@ Tài liệu này ghi lại kết quả thu thập baseline (Task 1) trước khi
 
 ---
 
-## 1. Kết Quả Thu Thập Baseline (11 Lệnh Trước Nâng Cấp)
+## 1. Kết Quả Thu Thập Baseline (16 Lệnh Trước Nâng Cấp)
 
 Các lệnh kiểm tra được thực thi trên nhánh sạch trước bất kỳ thay đổi nào về package hay target framework:
 
@@ -21,6 +21,11 @@ Các lệnh kiểm tra được thực thi trên nhánh sạch trước bất k�
 | 9 | `powershell -File test/SystemService.BusinessDependency.Check.ps1` | **PASS (Exit 0)** | Xác nhận không còn mã nguồn hay tham chiếu trực tiếp đến `BusinessService` trong `SystemService` |
 | 10 | `powershell -File test/CatalogService.Removal.Check.ps1` | **PASS (Exit 0)** | Xác nhận các controller / DTO đã dọn dẹp không còn hiện diện trong `CatalogService` |
 | 11 | `dotnet list package --vulnerable --include-transitive` | **COMPLETED** | Phát hiện 1 lỗ hổng bảo mật mức High: `AutoMapper` 16.0.0 (GHSA-rvv3-g6hj-g44x) trong `CatalogService` |
+| 12 | `dotnet run --project test/FileService.RemovalChecks -- all` | **PASS (Exit 0)** | 0 failure(s), 0 NOT RUN (kiểm tra toàn diện paths, sessions, lifecycle, transport, gateway, boundary, migration) |
+| 13 | `dotnet run --project test/SystemService.CleanupChecks -- contract` | **PASS (Exit 0)** | System contract checks pass, 0 error |
+| 14 | `dotnet run --project test/SystemService.CleanupChecks -- runtime` | **PASS (Exit 0)** | System runtime checks pass (EF/Npgsql SQL gen, startup, unauthorized envelope, Swagger) |
+| 15 | `dotnet run --project test/CatalogService.CleanupChecks -- contract` | **PASS (Exit 0)** | Catalog contract checks pass (Oracle Faculty mapping, SQL translation, validation guards) |
+| 16 | `dotnet run --project test/CatalogService.CleanupChecks -- runtime` | **PASS (Exit 0)** | Catalog runtime checks pass (DI resolution, health, JWT raw claims, 401/403 envelopes, Swagger) |
 
 ---
 
@@ -48,13 +53,14 @@ Kết quả thu thập và khóa hành vi qua các bài kiểm tra characterizat
 | Trường Hợp Kiểm Thử | Trạng Thái Baseline | Expected (Khóa) | Actual (Ghi Nhận Thực Tế) |
 |---|---|---|---|
 | Single Error Envelope (Catalog) | Pass | HTTP 200, `Success = false`, `StatusCode = 400`, `Message = "Tên phòng ban không được để trống"` | HTTP 200, `Success: false`, `StatusCode: 400`, `Message: "Tên phòng ban không được để trống"` |
-| Single Error Envelope (System) | Pass | HTTP 200, `Success = false`, `StatusCode = 400`, `Message = "Tên gọi không được để trống"` | HTTP 200, `Success: false`, `StatusCode: 400`, `Message: "Tên gọi không được để trống"` |
+| Single Error Envelope (System) | Pass | HTTP 200, `Success = false`, `StatusCode = 400`, `Message` tiếng Việt chính xác ("Tên tài khoản không được để trống" với User, "Tên gọi không được để trống" với Role) | HTTP 200, `Success: false`, `StatusCode: 400`, message chính xác, 0 side effect, 0 audit |
 | Malformed JSON (`{"`) | Pass | HTTP 200, `Success = false`, `StatusCode = 400`, `Message` có giá trị | HTTP 200, `Success: false`, `StatusCode: 400`, `Message` thông báo lỗi parse |
 | Empty Request Body (`""`) | Pass | HTTP 200, `Success = false`, `StatusCode = 400` | HTTP 200, `Success: false`, `StatusCode: 400` |
 | Null Body (`null`) | Pass | HTTP 200, `Success = false`, `StatusCode = 400` | HTTP 200, `Success: false`, `StatusCode: 400` |
 | Invalid GUID String Binding | Pass | HTTP 200, `Success = false`, `StatusCode = 400` | HTTP 200, `Success: false`, `StatusCode: 400` |
 | Multiple Validation Errors (System) | Pass | Lấy đúng thông báo lỗi đầu tiên theo metadata/thứ tự thuộc tính (`Email không được để trống`) | HTTP 200, `Success: false`, `StatusCode: 400`, `Message = "Email không được để trống"` |
-| Child Collection Validation (System) | Pass | Tự động validate phần tử con `Permissions[0].RoleId` thông qua `ImplicitlyValidateChildProperties = true` | HTTP 200, `Success: false`, `StatusCode: 400`, `Message = "Vai trò không được để trống"` |
+| Nested Permissions Scenarios (System) | Pass | Khóa 3 scenario: (a) `Permissions=[]` -> từ chối cấp root ("Danh sách phân quyền không được rỗng"); (b) `RoleId=empty` -> từ chối cấp con ("Vai trò không được để trống"); (c) list hợp lệ -> vượt qua validation, gọi action 1 lần | HTTP 200, `Success: false` cho (a) và (b) với message chính xác; `Success: true` cho (c) với 1 action call |
+| Unregistered Shared Validator (System) | Pass | `DELETE /api/User/delete-list` với `Ids=[]`: `DeleteListRequestValidator` từ `Blocks.Shared` không được đăng ký trong SystemService nên không từ chối, request đi tiếp vào service | HTTP 200, `Success: true`, `StatusCode: 200`, service gọi đúng 1 lần |
 | Permission Filter Ordering | Pass | Thứ tự bộ lọc ưu tiên: 401 khi thiếu/hết hạn/sai token JWT, 403 khi bị từ chối quyền, không lọt vào action | HTTP 200, `Success: false`, `StatusCode: 401/403`, 0 action mutation, 0 audit log |
 | Valid Request Execution | Pass | Payload hợp lệ vượt qua validation và model binding, gọi action service chính xác 1 lần | HTTP 200, `Success: true`, `StatusCode: 200`, service gọi 1 lần duy nhất |
 | DataAnnotations `[Required]` Inactive | Pass | `DisableDataAnnotationsValidation = true` khiến thuộc tính có `[Required]` không bị DataAnnotations tự động từ chối nếu thiếu FluentValidation rule | HTTP 200, `Success: true` |
