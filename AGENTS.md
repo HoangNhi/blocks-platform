@@ -15,10 +15,15 @@
 - Proactively delegate substantial, self-contained work: code exploration, focused
   review, test execution, and log analysis. Keep trivial changes and tightly
   coupled steps in the main agent.
-- Optimize for a small main-agent context and low overall cost, not maximum
-  parallelism. Start with one subagent; normally use at most two concurrently
-  unless more clearly benefits the task. Delegation does not guarantee fewer
-  total tokens.
+- Schedule subagents by ready work, with no repository-defined concurrency cap
+  or requirement to start with one subagent. Proactively dispatch all useful,
+  independent tasks that have enough context and resolved dependencies; dispatch
+  newly ready tasks as their prerequisites complete.
+- Prioritize delivery speed and quality over minimizing subagent token use.
+  Keep the main-agent context focused, but do not reduce useful parallelism
+  solely to save tokens. Do not create duplicate or artificial tasks just to
+  increase agent count. Respect actual tool and runtime limits; this policy
+  does not override them.
 - Give each worker a narrow objective, relevant paths, constraints, and expected
   output. Prefer fresh context with a concise brief over inheriting the full
   conversation when supported. Restate essential safety and scope constraints.
@@ -27,14 +32,15 @@
 - Do not duplicate delegated work. Inspect relevant evidence and changed code
   rather than repeating the entire investigation. Reuse workers for follow-up
   when supported.
-- Keep parallel edits in non-overlapping files. The main agent owns integration,
-  final verification, and the user-facing response. Avoid nested delegation.
+- Keep parallel edits in non-overlapping files. Coordinate checks that share
+  build outputs, databases, ports, or other mutable resources to avoid contention.
+  The main agent owns scheduling, integration, conflict resolution, final
+  verification, and the user-facing response. Avoid nested delegation.
 - Prefer native subagent tools when available and compatible with the configured
   model. Discover available tools and supported models; do not assume every
   configured model alias works with native spawning.
-- When model selection is permitted, prefer a configured lower-cost supported
-  model adequate for the task. Do not silently switch models or providers to
-  work around failures, or change machine configuration.
+- Preserve configured model and provider choices. Do not silently switch models
+  or providers to work around failures, or change machine configuration.
 - If native delegation fails, report the exact blocker and do not repeat the
   same failing request. A documented non-interactive CLI worker may be used as
   a fallback when permitted by the runtime. Treat it as a separate process,
@@ -172,11 +178,28 @@ Existing SystemService source-level regression check:
 
 This checks source references and file existence, not authentication behavior.
 
-FileService DB-free checks (production DI and direct service/gRPC methods, not HTTP authorization):
+FileService DB-free checks use a `net10.0` harness; production FileService remains
+`net8.0`. The harness covers production DI, filesystem fixtures, real local
+HTTP/gRPC listeners and Gateway boundaries:
 
 ```powershell
 dotnet run --project test/FileService.RemovalChecks
+dotnet run --project test/FileService.RemovalChecks -- paths
+dotnet run --project test/FileService.RemovalChecks -- sessions
+dotnet run --project test/FileService.RemovalChecks -- lifecycle
+dotnet run --project test/FileService.RemovalChecks -- transport
+dotnet run --project test/FileService.RemovalChecks -- gateway
+dotnet run --project test/FileService.RemovalChecks -- boundary
+dotnet run --project test/FileService.RemovalChecks -- migration
 ```
+
+These isolated checks do not prove deployment firewall rules, real domain object
+permissions, external consumer compatibility, or production data migration.
+FileService requires an absolute private `FileStorage:RootPath`; never point a
+test at application storage. Gateway deployment must inventory its actual
+`FileProxy:ClusterId`, destinations, aliases and transforms. Use
+`docs/operations/fileservice-storage-cutover.md` for rollout gates, not as
+authorization to migrate or delete real data.
 
 Existing CatalogService source-level regression check:
 
