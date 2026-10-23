@@ -307,7 +307,120 @@ function Run-PackagesChecks {
         Assert-Condition ($include -notmatch 'Blocks\.ServiceDefaults') "Blocks.ApiGateway.csproj must NOT reference Blocks.ServiceDefaults, found '$include'"
     }
 
+    # 8. Blocks.AppHost
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/platform/Blocks.AppHost/Blocks.AppHost.csproj" `
+        -ExpectedPins @{
+            'Aspire.Hosting.AppHost'    = '13.6.3'
+            'Aspire.Hosting.JavaScript' = '13.6.3'
+        } `
+        -ForbiddenPackages @('Aspire.Hosting.NodeJs', 'Aspire.Hosting.PostgreSQL')
+
     Write-Host "All package pin checks passed."
+}
+
+function Run-AppHostChecks {
+    Write-Host "Running AppHost structural assertions..."
+
+    $appHostProjRel = "src/platform/Blocks.AppHost/Blocks.AppHost.csproj"
+    $appHostProjPath = Join-Path $repoRoot $appHostProjRel
+    Assert-Condition (Test-Path $appHostProjPath) "Project file must exist: $appHostProjRel"
+
+    [xml]$xml = Get-Content $appHostProjPath -Raw
+
+    # TargetFramework == net10.0
+    $tfm = $xml.Project.PropertyGroup.TargetFramework | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -First 1
+    Assert-Condition ($tfm -eq 'net10.0') "$appHostProjRel TargetFramework must be 'net10.0', found '$tfm'"
+
+    # SDK: Aspire.AppHost.Sdk == 13.6.3
+    $sdkNodes = $xml.SelectNodes('//Sdk')
+    $aspireSdkNode = $sdkNodes | Where-Object { $_.GetAttribute('Name') -eq 'Aspire.AppHost.Sdk' } | Select-Object -First 1
+    $sdkVersion = if ($null -ne $aspireSdkNode) {
+        $aspireSdkNode.GetAttribute('Version')
+    } else {
+        $projectSdk = $xml.Project.GetAttribute('Sdk')
+        if ($projectSdk -match 'Aspire\.AppHost\.Sdk/([0-9\.]+)') {
+            $Matches[1]
+        } else {
+            $null
+        }
+    }
+    Assert-Condition ($sdkVersion -eq '13.6.3') "$appHostProjRel Aspire.AppHost.Sdk version must be '13.6.3', found '$sdkVersion'"
+
+    # UserSecretsId must exist
+    $userSecretsId = $xml.Project.PropertyGroup.UserSecretsId | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -First 1
+    Assert-Condition (-not [string]::IsNullOrWhiteSpace($userSecretsId)) "$appHostProjRel must keep non-empty UserSecretsId"
+
+    # Package references: Aspire.Hosting.AppHost 13.6.3, Aspire.Hosting.JavaScript 13.6.3; no NodeJs, no PostgreSQL
+    Assert-ProjectPackages `
+        -ProjectRelPath $appHostProjRel `
+        -ExpectedPins @{
+            'Aspire.Hosting.AppHost'    = '13.6.3'
+            'Aspire.Hosting.JavaScript' = '13.6.3'
+        } `
+        -ForbiddenPackages @('Aspire.Hosting.NodeJs', 'Aspire.Hosting.PostgreSQL')
+
+    # Project references: exactly 4, all paths must exist, no BusinessService
+    $projRefNodes = $xml.SelectNodes('//ProjectReference')
+    Assert-Condition ($projRefNodes.Count -eq 4) "$appHostProjRel must contain exactly 4 ProjectReference elements, found $($projRefNodes.Count)"
+
+    $appHostDir = Split-Path -Parent $appHostProjPath
+    $expectedServices = @('Blocks.FileService.csproj', 'Blocks.SystemService.csproj', 'Blocks.CatalogService.csproj', 'Blocks.ApiGateway.csproj')
+    $foundServices = @()
+
+    foreach ($pRef in $projRefNodes) {
+        $include = $pRef.GetAttribute('Include')
+        Assert-Condition ($include -notmatch 'Blocks\.BusinessService') "$appHostProjRel must NOT reference Blocks.BusinessService, found '$include'"
+        $resolvedPath = [System.IO.Path]::GetFullPath((Join-Path $appHostDir $include))
+        Assert-Condition (Test-Path $resolvedPath) "$appHostProjRel ProjectReference target must exist on disk: '$include' ($resolvedPath)"
+        $fileName = [System.IO.Path]::GetFileName($resolvedPath)
+        $foundServices += $fileName
+    }
+
+    foreach ($svc in $expectedServices) {
+        Assert-Condition ($foundServices -contains $svc) "$appHostProjRel ProjectReferences must include '$svc'"
+    }
+
+    # Source checks on src/platform/Blocks.AppHost/AppHost.cs
+    $csRel = "src/platform/Blocks.AppHost/AppHost.cs"
+    $csPath = Join-Path $repoRoot $csRel
+    Assert-Condition (Test-Path $csPath) "AppHost source file must exist: $csRel"
+    $csContent = Get-Content $csPath -Raw
+
+    # Exactly 4 AddProject calls
+    $addProjectMatches = [regex]::Matches($csContent, 'AddProject<Projects\.([A-Za-z0-9_]+)>\("([A-Za-z0-9_]+)"\)')
+    Assert-Condition ($addProjectMatches.Count -eq 4) "$csRel must contain exactly 4 AddProject calls, found $($addProjectMatches.Count)"
+    $addProjectNames = $addProjectMatches | ForEach-Object { $_.Groups[2].Value }
+    foreach ($svcName in @('FileService', 'SystemService', 'CatalogService', 'ApiGateway')) {
+        Assert-Condition ($addProjectNames -contains $svcName) "$csRel AddProject calls must include '$svcName'"
+    }
+
+    # Web resource uses AddJavaScriptApp("Web", "../../apps/Blocks.Web", "dev")
+    Assert-Condition ($csContent -match 'AddJavaScriptApp\(\s*"Web"\s*,\s*"\.\./\.\./apps/Blocks\.Web"\s*,\s*"dev"\s*\)') `
+        "$csRel Web resource must use AddJavaScriptApp(`"Web`", `"../../apps/Blocks.Web`", `"dev`")"
+
+    # Endpoint port 5173 (e.g. VITE_DEV_PORT)
+    Assert-Condition ($csContent -match '5173') "$csRel must configure endpoint port 5173"
+    Assert-Condition ($csContent -match 'VITE_DEV_PORT') "$csRel must reference env var VITE_DEV_PORT"
+
+    # Forbidden strings / patterns
+    Assert-Condition ($csContent -notmatch 'Collab') "$csRel must NOT reference Collab"
+    Assert-Condition ($csContent -notmatch 'Business') "$csRel must NOT reference Business"
+    Assert-Condition ($csContent -notmatch 'AddNpmApp') "$csRel must NOT use AddNpmApp"
+    Assert-Condition ($csContent -notmatch 'AddViteApp') "$csRel must NOT use AddViteApp"
+    Assert-Condition ($csContent -notmatch 'WaitFor') "$csRel must NOT use WaitFor"
+
+    # Keeps mutual discovery references between FileService and SystemService without WaitFor
+    Assert-Condition ($csContent -match 'systemService.*WithReference\(\s*fileService\s*\)' -or $csContent -match 'WithReference\(\s*fileService\s*\)') `
+        "$csRel must keep reference from systemService to fileService"
+    Assert-Condition ($csContent -match 'fileService\.WithReference\(\s*systemService\s*\)') `
+        "$csRel must keep reference from fileService to systemService"
+
+    # Keeps Web WithReference(gateway) / external endpoint
+    Assert-Condition ($csContent -match 'WithReference\(\s*gateway\s*\)') "$csRel Web must include WithReference(gateway)"
+    Assert-Condition ($csContent -match 'WithExternalHttpEndpoints\(\s*\)') "$csRel Web must include WithExternalHttpEndpoints()"
+
+    Write-Host "All AppHost checks passed."
 }
 
 if ($Check -eq 'runtime') {
@@ -322,14 +435,19 @@ elseif ($Check -eq 'packages') {
     Run-PackagesChecks
     exit 0
 }
+elseif ($Check -eq 'apphost') {
+    Run-AppHostChecks
+    exit 0
+}
 elseif ($Check -eq 'all') {
     Run-RuntimeChecks
     Run-ContainersChecks
     Run-PackagesChecks
+    Run-AppHostChecks
     Write-Host "All checks passed."
     exit 0
 }
 else {
-    Write-Error "Mode '$Check' is not implemented in this phase (runtime, containers, packages are implemented)."
+    Write-Error "Mode '$Check' is not recognized."
     exit 1
 }
