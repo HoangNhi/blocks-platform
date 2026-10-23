@@ -2,9 +2,10 @@
 
 Ngày: 2026-10-22
 
-Trạng thái: **Người dùng đã duyệt ngày 2026-10-22 và yêu cầu tạo implementation plan.**
-Người dùng cho phép commit các thay đổi hiện tại trước khi lập plan.
-Chưa cho phép triển khai hardening, đổi cấu hình thật, dữ liệu hoặc di chuyển file.
+Trạng thái: **Người dùng đã duyệt ngày 2026-10-22; sau khi làm một phần,
+đã yêu cầu hoàn thiện implementation plan bằng subagent.**
+Quyền hiện tại gồm sửa code, kiểm thử cô lập và commit theo plan.
+Không gồm đổi cấu hình triển khai thật, dữ liệu, di chuyển file thật hoặc deploy.
 
 ## 1. Mục tiêu và quyết định đã có
 
@@ -440,6 +441,7 @@ gRPC chỉ backend qua ranh giới mạng đã kiểm chứng; ngừng embed SAR
 video cũ không còn hoạt động; nâng client avatar theo contract mới.
 Giữ ảnh cũ/mồ côi đến kỳ đối soát, không xóa đồng bộ trong request save.
 
-Người dùng đã yêu cầu viết implementation plan chia theo bảo vệ
-storage/đường dẫn, upload lifecycle, avatar/contract và rollout/verification.
-Chưa sửa code hoặc thao tác dữ liệu trước khi plan được duyệt và chọn cách thực hiện.
+Implementation plan chia theo bảo vệ storage/đường dẫn, upload lifecycle,
+avatar/contract và rollout/verification. Người dùng đã chọn tiếp tục bằng
+subagent từ code làm dở; không suy diễn quyền sửa code thành quyền thao tác
+dữ liệu hoặc triển khai thật. Gate chưa có bằng chứng phải ghi NOT RUN.
