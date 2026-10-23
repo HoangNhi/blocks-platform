@@ -208,7 +208,7 @@ after this evidence require covering checks again.
 | `dotnet run --project test/SystemService.CleanupChecks -- runtime` | PASS | Real local HTTP/gRPC startup, not application DB or deployment network |
 | `& ./test/SystemService.BusinessDependency.Check.ps1` | PASS | Source-level dependency check only |
 | `dotnet build src/services/Blocks.ApiGateway/Blocks.ApiGateway.csproj --nologo` | PASS: 0 errors, 0 warnings on incremental build | Not a firewall check |
-| `dotnet publish src/services/Blocks.FileService/Blocks.FileService.csproj -c Release -o src/services/Blocks.FileService/bin/hardening-check-publish --nologo` | PASS; inspected output excludes `wwwroot`, retired libraries and fonts | Production target remains .NET 8 |
+| `dotnet publish src/services/Blocks.FileService/Blocks.FileService.csproj -c Release -o src/services/Blocks.FileService/bin/hardening-check-publish --nologo` | PASS; inspected output excludes `wwwroot`, retired libraries and fonts | Production target upgraded to .NET 10 (`net10.0`) in platform package upgrade |
 | `docker build --target final -t blocks-fileservice-hardening-check:local -f src/services/Blocks.FileService/Dockerfile .` | PASS; inspected final image excludes historical uploads and retired assets | Not an OS vulnerability scan |
 | Build-stage image inspection | PASS; excludes frontend, CatalogService, `.codex`, old uploads and fonts | Dockerfile-specific ignore rules, not deletion of source data |
 | Isolated production-image smoke | PASS: anonymous application 401, JWT PNG bytes, no-store/nosniff | Random token/PNG, disposable loopback container, private tmpfs; no application storage |

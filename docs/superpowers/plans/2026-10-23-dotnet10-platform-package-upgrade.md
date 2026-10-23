@@ -96,7 +96,7 @@ Chỉ sửa source ngoài bảng nếu dependency API thật sự buộc đổi 
 - Produces: File `internal static class UpgradeChecks`, `internal static Task RunAsync(Func<string, Func<Task>, Task> check)`; mode `upgrade` và `all` cùng gọi. Task 1 chỉ có retry characterization, Task 5 mở rộng.
 - Produces: responder overload `public static Task<EphemeralAuditResponder> StartAsync(Func<int, Grpc.Core.StatusCode> statusForCall)`; call index bắt đầu1, giữ overload không tham số trả OK cho callers cũ.
 
-- [ ] **Step 1: Ghi baseline có thể tái lập.**
+- [x] **Step 1: Ghi baseline có thể tái lập.**
 
 Từ repo root chạy từng lệnh dưới đây, ghi exit code/case count và commit thực.
 Đọc guard của từng mode trước; không chạy `auth`/`provider`.
@@ -123,7 +123,7 @@ restore/build có thể lỗi missing BusinessService: ghi riêng, không phục
 và không suy rằng lỗi ở service khác cũng là baseline. Không chạy solution để
 thay baseline từng project.
 
-- [ ] **Step 2: Viết characterization qua MVC production.**
+- [x] **Step 2: Viết characterization qua MVC production.**
 
 `ValidationChecks.RunAsync()` tạo Kestrel `http://127.0.0.1:0`, config in-memory
 đè JWT/connection/gRPC, OTLP rỗng; DB string chỉ localhost port1, không mở kết nối.
@@ -176,7 +176,7 @@ Không sửa production backoff; timeout180s chỉ là guard. Chờ audit succes
 terminal log rồi drain trước teardown; action không được replay vì audit lỗi.
 Lưu số đo cụ thể vào assertions trước commit, không tính expected từ chính result.
 
-- [ ] **Step 3: Chạy characterization trên adapter cũ.**
+- [x] **Step 3: Chạy characterization trên adapter cũ.**
 
 ```powershell
 dotnet run --project test/SystemService.CleanupChecks -c Release -- validation
@@ -188,7 +188,7 @@ Expected: PASS trên behavior hiện có. Đây là characterization, không c�
 cho hành vi đang đúng. Nếu baseline khác giả định, sửa expected theo bằng chứng,
 ghi vào evidence; không sửa production để hợp thức hóa baseline.
 
-- [ ] **Step 4: Commit chỉ tests/baseline.**
+- [x] **Step 4: Commit chỉ tests/baseline.**
 
 Stage đúng file trong task; commit `test: characterize backend validation and audit before upgrade`.
 
@@ -205,7 +205,7 @@ Stage đúng file trong task; commit `test: characterize backend validation and 
 - Produces: sáu production project ngoài AppHost target10, SDK pin; CLI `& ./test/Backend.Upgrade.Check.ps1 -Check runtime|containers`.
 - Produces: `PlatformChecks.RunAsync(): Task`, mode System `platform`; scope Task 2 chỉ proxy/options/TFM, Task 4 bổ sung Defaults.
 
-- [ ] **Step 1: Thêm source/runtime checks kỳ vọng target mới.**
+- [x] **Step 1: Thêm source/runtime checks kỳ vọng target mới.**
 
 PowerShell dùng `[xml]`/`ConvertFrom-Json`, `$PSScriptRoot` resolve repo,
 `$ErrorActionPreference='Stop'`; `-Check` ValidateSet `runtime,containers,packages,apphost,all`.
@@ -221,7 +221,7 @@ và untrusted; không dùng GetClientIp làm oracle vì helper còn đọc raw h
 Trusted remote đổi `Connection.RemoteIpAddress`/scheme theo giới hạn; untrusted giữ
 remote/scheme. Có IPv4-mapped IPv6 và nhiều-hop không vượt ForwardLimit.
 
-- [ ] **Step 2: Chạy RED đúng lý do.**
+- [x] **Step 2: Chạy RED đúng lý do.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check runtime
@@ -232,7 +232,7 @@ Expected: lỗi thiếu global.json/net8/File image8, không phải lỗi parser
 Test `KnownIPNetworks` chỉ chạy được sau source target10; lỗi compile trước đó không
 thay cho RED assertion source.
 
-- [ ] **Step 3: Đổi target và toolchain cùng lượt.**
+- [x] **Step 3: Đổi target và toolchain cùng lượt.**
 
 Thêm global.json đúng Global Constraints; đổi Shared/Defaults/File net10 cùng lượt
 để File không tham chiếu thư viện target cao hơn. Chưa nâng FV core/package Defaults.
@@ -243,7 +243,7 @@ File FROM aspnet/sdk `10.0`; cả ba Dockerfile thêm
 Thêm `!global.json` sau exclude phù hợp tại File/Catalog ignore; System context
 đã cho root file đi qua, xác minh không cần churn ngoài yêu cầu.
 
-- [ ] **Step 4: Chạy GREEN và consumer checks.**
+- [x] **Step 4: Chạy GREEN và consumer checks.**
 
 Nếu SDK10.0.402 chưa có, dừng task tại prerequisite, không ghi GREEN/commit như hoàn tất.
 
@@ -261,7 +261,7 @@ Expected: SDK `10.0.402` hoặc later patch trong cùng feature band; các check
 Build trực tiếp Shared/Defaults/bốn service và System/Catalog contract/runtime
 như Task 1; AppHost vẫn baseline lỗi tới Task 7.
 
-- [ ] **Step 5: Commit phạm vi Task 2.**
+- [x] **Step 5: Commit phạm vi Task 2.**
 
 Stage từng path trong Files; commit `build: target backend runtime and containers on net10`.
 
@@ -280,7 +280,7 @@ Stage từng path trong Files; commit `build: target backend runtime and contain
 - Members: `public int Order => -2001`; `public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)`.
 - Produces: System/Catalog scan scoped validators chỉ assembly service, filter scoped; File không đăng ký filter.
 
-- [ ] **Step 1: Thêm test async/cancellation và provider compatibility.**
+- [x] **Step 1: Thêm test async/cancellation và provider compatibility.**
 
 Trong từng ValidationChecks mở rộng test-only controller Task 1 (ApiExplorer IgnoreApi),
 DTO/validator đăng ký DI rõ ràng, không scan test assembly trong production.
@@ -301,12 +301,12 @@ Require(cancelledTokenObserved && mutationCalls == 0, "request cancellation prop
 Require(body.GetProperty("StatusCode").GetInt32() != 400, "infrastructure failure not input error");
 ```
 
-- [ ] **Step 2: Chạy RED trên adapter11.**
+- [x] **Step 2: Chạy RED trên adapter11.**
 
 Run hai lệnh `-- validation` Task 1. Expected async case fail do MVC sync validation,
 không phải giả token/permission hoặc DB. Giữ mọi characterization cũ GREEN.
 
-- [ ] **Step 3: Nâng package và thay registration/filter atomically.**
+- [x] **Step 3: Nâng package và thay registration/filter atomically.**
 
 Shared FluentValidation `12.2.0`; bỏ FluentValidation.AspNetCore ở File/System/Catalog.
 System/Catalog thêm DI extensions `12.2.0`, `AddValidatorsFromAssemblyContaining`
@@ -331,14 +331,14 @@ và `RuleForEach(x => x.Permissions).SetValidator(permissionValidator)`.
 Nếu baseline không validate list đó thì không thêm rule mới; ghi rõ trần này.
 Không sửa typo RoleId/MenuId trong PermissionRequestValidator.
 
-- [ ] **Step 4: Chạy GREEN.**
+- [x] **Step 4: Chạy GREEN.**
 
 Run hai mode `validation`, System/Catalog `contract`, `runtime`, File toàn bộ.
 Expected: cả baseline và async/cancel pass, không còn adapter deprecated trong
 source/graph sau restore, malformed JSON/null body vẫn envelope cũ.
 Các service resolve production DI không cần DB.
 
-- [ ] **Step 5: Commit phạm vi Task 3.**
+- [x] **Step 5: Commit phạm vi Task 3.**
 
 Commit `refactor: replace legacy MVC validation with async FluentValidation12 filter`.
 
@@ -357,7 +357,7 @@ Commit `refactor: replace legacy MVC validation with async FluentValidation12 fi
 - Produces: Http.Resilience/ServiceDiscovery `10.11.0`, năm OTel package `1.20.1`; `platform` thêm discovery/resilience, `telemetry` giữ guard endpoint hiện có.
 - Produces: baseline retry-count/final-error log của audit File/Catalog trong evidence Task 1; post-upgrade không nhiều hơn baseline.
 
-- [ ] **Step 1: Thêm characterization Defaults và retry upstream.**
+- [x] **Step 1: Thêm characterization Defaults và retry upstream.**
 
 `PlatformChecks.RunAsync()` dùng `AddServiceDefaults` thật:
 config `services:fixture:http:0=<ephemeral localhost URL>` rồi HttpClient gọi
@@ -395,7 +395,7 @@ Require(!healthSpanObserved && !aliveSpanObserved, "health traces excluded");
 Require(cancellationObserved && lateRequests == 0, "cancel and drain bounded");
 ```
 
-- [ ] **Step 2: Ghi GREEN baseline, thêm RED version assertions.**
+- [x] **Step 2: Ghi GREEN baseline, thêm RED version assertions.**
 
 Run System `platform`, Catalog `validation`, File `upgrade` trước nâng; so với
 baseline Task 1 và ghi attempt/count/log. Trường hợp target10 Task 2 đã làm đổi
@@ -405,7 +405,7 @@ Trong System `Program.cs` runtime deps assertions đổi OTel exporter/hosting s
 tới Task 5 và kiểm tra không legacy ASP.NET2.2.
 Run `-- runtime`: expected RED đúng exporter/hosting pin cũ.
 
-- [ ] **Step 3: Nâng Defaults và Polly theo snapshot.**
+- [x] **Step 3: Nâng Defaults và Polly theo snapshot.**
 
 Đổi 2 Microsoft.Extensions package sang10.11.0, cả5 OTel package sang1.20.1,
 Polly trực tiếp File/Catalog sang8.8.0. Restore kiểm tra bounds thực;
@@ -413,7 +413,7 @@ không pin transitive tùy tiện. Giữ endpoint gating/health filtering/logs/s
 metrics/application source/HttpClient defaults. Extensions.cs không cần đổi thì
 không sửa. RetryPolicy số3 và backoff `2^attempt` giây không đổi.
 
-- [ ] **Step 4: Chạy post-upgrade và telemetry evidence.**
+- [x] **Step 4: Chạy post-upgrade và telemetry evidence.**
 
 Run System `platform`, `runtime`, Catalog `validation`, `runtime`, File toàn bộ.
 Assert parity attempts, không thêm mutation/retry, shutdown drain hoàn tất.
@@ -431,7 +431,7 @@ không coi ForceFlush=true là bằng chứng endpoint ngoài đã nhận đủ 
 Thiếu endpoint: không invoke mode, ghi NOT RUN. Guard hiện ném exception/exit khác0
 khi thiếu hoặc sai endpoint; không đổi guard thành skip thành công.
 
-- [ ] **Step 5: Commit phạm vi Task 4.**
+- [x] **Step 5: Commit phạm vi Task 4.**
 
 Commit `build: update shared discovery resilience and OpenTelemetry packages`.
 
@@ -450,7 +450,7 @@ Commit `build: update shared discovery resilience and OpenTelemetry packages`.
 - Produces: `internal static class UpgradeChecks`, `internal static Task RunAsync(Func<string, Func<Task>, Task> check)`; CLI File `-- upgrade`, cũng chạy trong `all`.
 - Produces: package graph ba service theo spec; `-Check packages` kiểm tra pin trực tiếp bằng XML, không restore và không đoán graph transitive.
 
-- [ ] **Step 1: Thêm test version/artifact/Swagger/transport trước nâng.**
+- [x] **Step 1: Thêm test version/artifact/Swagger/transport trước nâng.**
 
 Trong source checker thêm expected map đúng từng project từ spec3.1, bao gồm
 package giữ nguyên, adapter đã bỏ và PrivateAssets. Không chỉ grep version tồn tại
@@ -490,7 +490,7 @@ Hai validation fixtures kiểm AutoMapper thực map User/Faculty và DateOnly/D
 nullable converters; System/Catalog runtime giữ Swagger routes/security/schema,
 Catalog đúng6 Faculty routes. Không fake IMapper.
 
-- [ ] **Step 2: Chạy RED version check và ghi characterization.**
+- [x] **Step 2: Chạy RED version check và ghi characterization.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check packages
@@ -501,7 +501,7 @@ Expected RED package/AutoMapper cũ, không dependency restore lỗi do test sai
 Các behavior test có thể đã GREEN; lưu descriptor trước bump và so retry với
 baseline Task 1, không tái định nghĩa retry baseline.
 
-- [ ] **Step 3: Cập nhật đúng direct reference và API thật sự bị ảnh hưởng.**
+- [x] **Step 3: Cập nhật đúng direct reference và API thật sự bị ảnh hưởng.**
 
 Shared Grpc.Net.Client2.84.0; tất cả direct Grpc.* tại ba service2.84.0;
 File/Catalog Google.Protobuf3.36.2; File JwtBearer10.0.13;
@@ -513,7 +513,7 @@ graph transitive của service khác.
 Sửa namespace/OpenAPI API khi compiler yêu cầu, giữ document3.0 và Swagger UI,
 không dùng built-in OpenAPI để né migration. Không sửa generated proto.
 
-- [ ] **Step 4: Chạy GREEN và audit graph consumer.**
+- [x] **Step 4: Chạy GREEN và audit graph consumer.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check packages
@@ -533,7 +533,7 @@ Expected exit0, File summary0 failures; NOT RUN phải ghi riêng. Build Shared/
 và bốn service trực tiếp; inspect resolved assets/deps cho EF10/Grpc/Protobuf/OTel,
 không NU1605/NU1608 hoặc legacy ASP.NET2.2. Audit security theo Task 9.
 
-- [ ] **Step 5: Commit phạm vi Task 5.**
+- [x] **Step 5: Commit phạm vi Task 5.**
 
 Commit `build: align service packages and verify grpc swagger compatibility`.
 
@@ -549,7 +549,7 @@ Commit `build: align service packages and verify grpc swagger compatibility`.
 - Consumes: `GatewayHost.Build(string[] args): WebApplication`, `FileBoundaryChecks.RunAsync(Func<string, Func<Task>, Task> check)`, mode `boundary/gateway`.
 - Produces: ServiceDiscovery.Yarp10.11.0, Yarp.ReverseProxy2.3.0 giữ nguyên; behavior routing/boundary không đổi.
 
-- [ ] **Step 1: Thêm regression boundary và RED direct pin.**
+- [x] **Step 1: Thêm regression boundary và RED direct pin.**
 
 Giữ các case `boundary_runtime_config_reload_blocks_malicious_transform`,
 `boundary_native_http2_and_grpc_web_rpc_blocked_at_gateway`.
@@ -568,13 +568,13 @@ Require(downstream.RpcRequests == 0, "reload cannot expose RPC");
 `packages` assert Gateway ServiceDiscovery.Yarp10.11.0 và không có ProjectReference
 tới Defaults. Run source checker: expected RED pin10.0.0.
 
-- [ ] **Step 2: Nâng package Gateway, không bật feature mới.**
+- [x] **Step 2: Nâng package Gateway, không bật feature mới.**
 
 Đổi ServiceDiscovery.Yarp10.11.0; giữ Yarp2.3.0 và registration LoadFromConfig
 hiện có. Không thêm AddServiceDefaults/AddServiceDiscoveryDestinationResolver,
 route business/collab hoặc sửa deployment config.
 
-- [ ] **Step 3: Chạy GREEN boundary qua real listeners.**
+- [x] **Step 3: Chạy GREEN boundary qua real listeners.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check packages
@@ -586,7 +586,7 @@ dotnet run --project test/FileService.RemovalChecks -c Release -- boundary
 Expected exit0; reload test phải chờ change token/condition bounded, không sleep
 rồi đoán config đã áp dụng. Giữ session affinity/load balancing/passive health.
 
-- [ ] **Step 4: Commit phạm vi Task 6.**
+- [x] **Step 4: Commit phạm vi Task 6.**
 
 Commit `build: update gateway integration and lock file boundary behavior`.
 
@@ -601,7 +601,7 @@ Commit `build: update gateway integration and lock file boundary behavior`.
 - Produces: AppHost net10, Aspire.AppHost.Sdk/Hosting.AppHost/Hosting.JavaScript13.6.3; source check `-Check apphost`.
 - Produces: resource Web via `AddJavaScriptApp("Web", "../../apps/Blocks.Web", "dev")`, endpoint VITE_DEV_PORT5173.
 
-- [ ] **Step 1: Viết RED structural check.**
+- [x] **Step 1: Viết RED structural check.**
 
 XML assert đúng4 ProjectReference, mỗi path tồn tại, net10, SDK/package13.6.3,
 không NodeJs/PostgreSQL/BusinessService. Source assert chỉ4 AddProject + Web,
@@ -615,7 +615,7 @@ Check chỉ đọc source, không `dotnet run` hoặc start resources.
 
 Expected RED stale ProjectReference/resource và net8/Aspire9.
 
-- [ ] **Step 2: Sửa AppHost theo contract trên.**
+- [x] **Step 2: Sửa AppHost theo contract trên.**
 
 Đổi target/SDK/package; bỏ NodeJs/PostgreSQL, thêm JavaScript13.6.3;
 xóa Business ProjectReference/resource/WithReference và Collab resource.
@@ -623,7 +623,7 @@ Giữ File/System discovery vòng hai chiều, không thêm WaitFor.
 Đổi Web AddNpmApp thành AddJavaScriptApp; nếu cấu hình Npm hook dùng `ci`,
 không install/đổi lockfile trong structural build. Không thêm DB/resource/credentials.
 
-- [ ] **Step 3: Chạy GREEN source và full build.**
+- [x] **Step 3: Chạy GREEN source và full build.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check all
@@ -635,7 +635,7 @@ Expected exit0, không missing project reference. Lúc này stale AppHost không
 là lý do miễn trừ solution build. Không nhận orchestration runtime đã PASS từ build.
 Launch chỉ ở gate riêng Task 9 với cấu hình/fixture được phép.
 
-- [ ] **Step 4: Commit phạm vi Task 7.**
+- [x] **Step 4: Commit phạm vi Task 7.**
 
 Commit `build: upgrade Aspire and remove absent AppHost resources`.
 
@@ -652,7 +652,7 @@ Commit `build: upgrade Aspire and remove absent AppHost resources`.
 - Không ImageTagPrefix: chạy4 published DLL trên host. Có prefix: chạy thêm3 image `${prefix}/fileservice:local`, `${prefix}/systemservice:local`, `${prefix}/catalogservice:local`; Gateway không có Dockerfile.
 - Script exit0 chỉ khi mọi case được yêu cầu đạt; thiếu publish/Docker/fixture permission phải fail rõ, không silently skip.
 
-- [ ] **Step 1: Viết smoke script có guard và assertion.**
+- [x] **Step 1: Viết smoke script có guard và assertion.**
 
 Script chỉ đọc PublishRoot đã chỉ định; tự tạo fixture riêng dưới temp, không nhận
 storage/DB connection từ caller. Validate absolute/non-link path và đầy đủ DLL/
@@ -679,7 +679,7 @@ volume fixture ACL/owner đúng UID trước start, không `--user root`, chmod7
 gắn volume thật. Publish ports chỉ `127.0.0.1` với port tạm.
 Không tự tải scanner, cài package vào container hoặc push image.
 
-- [ ] **Step 2: Chạy negative guard.**
+- [x] **Step 2: Chạy negative guard.**
 
 ```powershell
 & ./test/Backend.ArtifactChecks.ps1 -PublishRoot ./src
@@ -688,7 +688,7 @@ Không tự tải scanner, cài package vào container hoặc push image.
 Expected exit khác0: relative/non-artifact root bị từ chối trước khi start process,
 không có filesystem/DB mutation ngoài temp. Đây là guard test, không báo là service failure.
 
-- [ ] **Step 3: Publish production riêng, không publish harness File.**
+- [x] **Step 3: Publish production riêng, không publish harness File.**
 
 ```powershell
 $publishRoot = Join-Path ([IO.Path]::GetTempPath()) ("blocks-net10-artifacts-" + [Guid]::NewGuid().ToString("N"))
@@ -704,7 +704,7 @@ ErrorOnDuplicatePublishOutputFiles=false; nếu gặp NETSDK1152 phải giải q
 ownership thật, không tắt detection. Trước publish/build kiểm config không đóng gói
 credentials thật; chỉ ghi tên key/path, không giá trị.
 
-- [ ] **Step 4: Build image và chạy smoke Linux.**
+- [x] **Step 4: Build image và chạy smoke Linux.**
 
 ```powershell
 docker build --pull -f src/services/Blocks.FileService/Dockerfile -t blocks-net10-check/fileservice:local .
@@ -725,7 +725,7 @@ cho child/container, không sửa trust-store host/base image. Kiểm cert hợp
 Thiếu responder/trust fixture thì ghi TLS NOT RUN, không tự thêm hạ tầng cấp cert
 hoặc tuyên bố image smoke đã chứng minh TLS. Script trên không tự dựng PKI.
 
-- [ ] **Step 5: Chạy harness trên Linux đúng output type.**
+- [x] **Step 5: Chạy harness trên Linux đúng output type.**
 
 Build Release riêng3 harness; chạy output build trong môi trường Linux .NET10
 với source checkout path/working directory test phù hợp. File `all`, System
@@ -738,7 +738,7 @@ Expected mọi case bắt buộc đạt; ghi rõ symlink/case-sensitive cases v�
 Scan CVE bằng local scanner đã được phép, ghi scanner/database date; không upload
 private image/SBOM để lấy kết quả nếu chưa được duyệt.
 
-- [ ] **Step 6: Commit script/evidence và sửa artifact tối thiểu nếu cần.**
+- [x] **Step 6: Commit script/evidence và sửa artifact tối thiểu nếu cần.**
 
 Commit `test: verify standalone net10 artifacts and Linux containers`.
 Không stage publishRoot, image tar, logs raw hoặc test credentials.
@@ -754,7 +754,7 @@ Không stage publishRoot, image tar, logs raw hoặc test credentials.
 - Consumes: tất cả deliverable Tasks 1-8, exact snapshot/exception list và artifact IDs.
 - Produces: evidence phân biệt PASS/FAIL/BASELINE FAILURE/NOT RUN, gate owner sign-off và rollback artifact đã vá.
 
-- [ ] **Step 1: Chạy build/source checks cuối cùng theo thứ tự.**
+- [x] **Step 1: Chạy build/source checks cuối cùng theo thứ tự.**
 
 ```powershell
 & ./test/Backend.Upgrade.Check.ps1 -Check all
@@ -773,7 +773,7 @@ dotnet build Blocks.slnx -c Release
 Expected exit0 từng lệnh; build3 harness bởi các run ở Step 3.
 Kiểm exitcode ngay khi chạy, không chỉ nhìn lệnh cuối. Không che warning mới.
 
-- [ ] **Step 2: Audit đúng10 project đã restore.**
+- [x] **Step 2: Audit đúng10 project đã restore.**
 
 Với từng `.csproj` của7 production+3 harness, lần lượt chạy:
 
@@ -790,7 +790,7 @@ Không preview/EF11/legacy ASP.NET2.2, NU1605/NU1608, deprecated adapter/NodeJs.
 Package giữ nguyên phải có lý do latest-compatible, không bị coi là chưa nâng.
 Advisory chưa xử lý hoặc license chưa được duyệt giữ rollout gate chưa đạt.
 
-- [ ] **Step 3: Chạy DB-free matrix và so baseline.**
+- [x] **Step 3: Chạy DB-free matrix và so baseline.**
 
 File chạy `all` (không args), rồi mode riêng chỉ khi cần điều tra:
 `removal/paths/sessions/lifecycle/transport/gateway/boundary/migration/upgrade`.
@@ -809,7 +809,7 @@ File `0 failure(s)`; NOT RUN vẫn liệt kê. So baseline envelopes, retry coun
 descriptor, mapping/SQL, clocks/converters, JWT/gRPC headers. Không lấy runtime
 major của harness thay TFM/artifact smoke Task 8.
 
-- [ ] **Step 4: Thực hiện hoặc ghi chưa chạy các gate cần quyền riêng.**
+- [x] **Step 4: Thực hiện hoặc ghi chưa chạy các gate cần quyền riêng.**
 
 Chỉ invoke sau khi owner cấp quyền đúng fixture:
 
@@ -834,7 +834,7 @@ chặn/thay toàn bộ endpoint ứng dụng thật bằng fixture được phé
 ghi NOT RUN. Provider comparison/CRUD/permission-audit E2E/external consumers/
 firewall/volume/license vẫn cần evidence riêng.
 
-- [ ] **Step 5: Hoàn thiện runbook và trạng thái hướng dẫn.**
+- [x] **Step 5: Hoàn thiện runbook và trạng thái hướng dẫn.**
 
 Evidence ghi baseline revision, SDK/pins/graph, command/exit/case counts/OS,
 receiver delivery và external ForceFlush khác nhau, publish/image digests,
@@ -849,7 +849,7 @@ không đổi schema/metadata format, không rollback về Catalog AutoMapper16.
 Thiếu backup, compatible patched fallback, owner license hoặc runtime gate thì
 không deploy. Plan này không thực hiện deploy hoặc di chuyển dữ liệu.
 
-- [ ] **Step 6: Rà diff, commit evidence và gửi review cuối nhánh.**
+- [x] **Step 6: Rà diff, commit evidence và gửi review cuối nhánh.**
 
 ```powershell
 git diff --check

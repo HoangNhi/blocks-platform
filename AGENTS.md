@@ -59,18 +59,17 @@
 | `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
 | `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
 | `src/services/Blocks.CatalogService/` | Departments (Faculty); EF Core 10 with Oracle MySQL provider; targets `net10.0`. |
-| `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net8.0`. |
-| `src/platform/Blocks.AppHost/` | Aspire orchestration; currently references missing services. |
-| `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults. |
-| `src/platform/Blocks.Shared/` | Shared DTOs, validation, exceptions, gRPC helpers. |
+| `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net10.0`. |
+| `src/platform/Blocks.AppHost/` | Aspire orchestration; targets `net10.0`. |
+| `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults; targets `net10.0`. |
+| `src/platform/Blocks.Shared/` | Shared DTOs, validation, exceptions, gRPC helpers; targets `net10.0`. |
 | `test/` | Backend regression checks; inspect each check before running. |
 
 ## Current Checkout Limits
 
-- `Blocks.BusinessService` and `Blocks.CollabService` are absent, but
-  `Blocks.AppHost.csproj` and `AppHost.cs` still reference them. Full-solution build
-  and AppHost startup are not reliable acceptance checks for unrelated changes.
-  Do not fix these references unless requested.
+- `Blocks.BusinessService` and `Blocks.CollabService` are absent from the repository.
+  `Blocks.AppHost.csproj` and `Blocks.slnx` build cleanly without them.
+  Do not reintroduce references to absent services unless requested.
 - Frontend `src/features/business/` still exists. Its presence does not mean the
   matching backend is available; do not delete those screens or invent a backend.
 - SystemService's direct BusinessService dependency was deliberately removed.
@@ -170,6 +169,22 @@ Vite uses `VITE_DEV_PORT`, defaulting to port 3000; AppHost overrides it to 5173
 The API client uses `VITE_API_URL` with a local fallback; verify configuration
 before attempting end-to-end checks.
 
+Backend target framework, package pins, and container definitions regression check:
+
+```powershell
+& ./test/Backend.Upgrade.Check.ps1 -Check all
+```
+
+Checks target framework (`net10.0`), SDK/global.json, package pins, Dockerfile definitions, and AppHost structure without starting services.
+
+Standalone published artifact and Linux container smoke checks:
+
+```powershell
+& ./test/Backend.ArtifactChecks.ps1 -PublishRoot <absolute-path> [-ImageTagPrefix <prefix>]
+```
+
+Requires absolute path to publish directory. Validates `.runtimeconfig.json` major 10, `/health`, `/alive`, missing JWT application 401 envelopes, Swagger 3.0, and non-root container execution (`app` / UID 1654).
+
 Existing SystemService source-level regression check:
 
 ```powershell
@@ -178,9 +193,9 @@ Existing SystemService source-level regression check:
 
 This checks source references and file existence, not authentication behavior.
 
-FileService DB-free checks use a `net10.0` harness; production FileService remains
-`net8.0`. The harness covers production DI, filesystem fixtures, real local
-HTTP/gRPC listeners and Gateway boundaries:
+FileService DB-free checks use a `net10.0` harness; production FileService targets `net10.0`.
+The harness covers production DI, filesystem fixtures, real local HTTP/gRPC listeners,
+Gateway boundaries, and upgrade regression characterization:
 
 ```powershell
 dotnet run --project test/FileService.RemovalChecks
@@ -191,6 +206,7 @@ dotnet run --project test/FileService.RemovalChecks -- transport
 dotnet run --project test/FileService.RemovalChecks -- gateway
 dotnet run --project test/FileService.RemovalChecks -- boundary
 dotnet run --project test/FileService.RemovalChecks -- migration
+dotnet run --project test/FileService.RemovalChecks -- upgrade
 ```
 
 These isolated checks do not prove deployment firewall rules, real domain object
@@ -212,12 +228,15 @@ The CatalogService cleanup harness targets `net10.0`. Its DB-free checks are:
 ```powershell
 dotnet run --project test/CatalogService.CleanupChecks -- contract
 dotnet run --project test/CatalogService.CleanupChecks -- runtime
+dotnet run --project test/CatalogService.CleanupChecks -- validation
 ```
 
 The `contract` mode checks Oracle Faculty mapping, SQL translation/parameters,
 connection guards and validation without opening a database connection. The
 `runtime` mode checks production DI/model resolution, health, JWT raw claims,
 401/403 application envelopes, retired routes and six-route Swagger.
+The `validation` mode verifies FluentValidation 12 integration, single error envelope,
+empty/malformed payloads, and audit retry behavior.
 
 Catalog provider integration requires separate authorization for an empty,
 isolated localhost MySQL database named `blocks_catalogservice_upgrade_test`:
@@ -236,11 +255,17 @@ The SystemService cleanup harness targets `net10.0`. Its DB-free checks are:
 ```powershell
 dotnet run --project test/SystemService.CleanupChecks -- contract
 dotnet run --project test/SystemService.CleanupChecks -- runtime
+dotnet run --project test/SystemService.CleanupChecks -- validation
+dotnet run --project test/SystemService.CleanupChecks -- platform
 dotnet run --project test/SystemService.CleanupChecks -- telemetry
 ```
 
 The `runtime` mode checks EF/Npgsql SQL generation, startup, the unauthorized
 HTTP response envelope, and Swagger without opening a database connection.
+The `validation` mode verifies FluentValidation 12 integration, single error envelope,
+nested permissions, unregistered validator pass-through, and filter ordering.
+The `platform` mode checks ServiceDefaults registration, OpenTelemetry tracer/meter,
+Polly retry/timeout resilience pipelines, and graceful cancellation without retry.
 The `telemetry` mode checks OpenTelemetry trace export and flush against an isolated
 collector receiver; it requires `SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT` pointing
 to an absolute http localhost URI with an explicit port and no credentials.
