@@ -16,9 +16,10 @@ function Test-IsFullyQualifiedPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
     if (-not [System.IO.Path]::IsPathRooted($Path)) { return $false }
-    if ($Path -match '^[a-zA-Z]:[\\/]' -or $Path.StartsWith('\\')) {
+    if ($Path -match '^[a-zA-Z]:[\\/]' -or $Path.StartsWith('\\') -or $Path.StartsWith('/')) {
         $full = [System.IO.Path]::GetFullPath($Path)
-        return ($full.TrimEnd('\', '/') -eq $Path.Replace('/', '\').TrimEnd('\', '/'))
+        $sep = [System.IO.Path]::DirectorySeparatorChar
+        return ($full.TrimEnd('\', '/') -eq $Path.Replace('/', $sep).Replace('\', $sep).TrimEnd('\', '/'))
     }
     return $false
 }
@@ -309,7 +310,7 @@ try {
     if ($ctOptions -notmatch "nosniff") { throw "Avatar response must have X-Content-Type-Options: nosniff" }
     if ($authAvResp.Content.Headers.ContentType.MediaType -ne "image/png") { throw "Avatar Content-Type must be image/png" }
     $authAvBytes = $authAvResp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-    if ($authAvBytes.Length -ne $tinyPngBytes.Length) { throw "Avatar body bytes mismatch" }
+    if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$authAvBytes, [byte[]]$tinyPngBytes)) { throw "Avatar body bytes mismatch" }
     Write-Host "PASS: FileService avatar with valid JWT returns 200 OK, nosniff, no-store, image/png, matching payload"
 
     # Sentinels must NOT be served statically (404)

@@ -942,6 +942,8 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
 
             var proxyState = gwApp.Services.GetRequiredService<IProxyStateLookup>();
             Require(proxyState != null, "IProxyStateLookup must be available from YARP runtime");
+            var proxyStateH2 = gwAppH2.Services.GetRequiredService<IProxyStateLookup>();
+            Require(proxyStateH2 != null, "IProxyStateLookup must be available from YARP H2 runtime");
 
             var configRoot = (IConfigurationRoot)gwApp.Services.GetRequiredService<IConfiguration>();
             configRoot.Reload();
@@ -954,7 +956,10 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
             {
                 if (proxyState.TryGetRoute("aliasRoute", out _) &&
                     proxyState.TryGetCluster("fileCluster", out var clusterModel) &&
-                    clusterModel?.Destinations?.ContainsKey("dAlias") == true)
+                    clusterModel?.Destinations?.ContainsKey("dAlias") == true &&
+                    proxyStateH2.TryGetRoute("aliasRoute", out _) &&
+                    proxyStateH2.TryGetCluster("fileCluster", out var clusterModelH2) &&
+                    clusterModelH2?.Destinations?.ContainsKey("dAlias") == true)
                 {
                     reloaded = true;
                     break;
