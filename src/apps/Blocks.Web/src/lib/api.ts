@@ -11,6 +11,14 @@ import {
 } from "./cookies";
 import { API_ENDPOINTS } from "@/config";
 
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    unwrapBlobErrors?: boolean;
+  }
+}
+
+export type DownloadFileConfig = Pick<AxiosRequestConfig, "signal" | "unwrapBlobErrors">;
+
 export interface ApiResponse<T = unknown> {
   Data?: T;
   Message?: string;
@@ -68,7 +76,9 @@ class ApiClient {
     this.axiosInstance.interceptors.response.use(
       async (response) => {
         // Handle blob responses that contain JSON error envelopes
+        // ponytail: opt-in flag unwrapBlobErrors scopes blob unwrap to avatar endpoints; upgrade if more services return soft-error blobs
         if (
+          response.config?.unwrapBlobErrors &&
           response.config.responseType === "blob" &&
           response.data instanceof Blob &&
           response.data.type?.includes("application/json")
@@ -241,10 +251,11 @@ class ApiClient {
     return response.data;
   }
 
-  downloadFile(url: string, config?: Pick<AxiosRequestConfig, "signal">) {
+  downloadFile(url: string, config?: DownloadFileConfig) {
     return this.axiosInstance.get(url, {
       responseType: "blob",
       signal: config?.signal,
+      unwrapBlobErrors: config?.unwrapBlobErrors,
     });
   }
 }

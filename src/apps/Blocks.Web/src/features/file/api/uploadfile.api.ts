@@ -62,7 +62,10 @@ export const fileService = {
 
     const fileName = match[1];
     const endpoint = API_ENDPOINTS.File.Avatar.GET(fileName);
-    const response = await api.downloadFile(endpoint, { signal });
+    const response = await api.downloadFile(endpoint, {
+      signal,
+      unwrapBlobErrors: true,
+    });
     const blob: Blob = response.data;
     const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
     const mimeType = blob?.type ? blob.type.split(";")[0].trim().toLowerCase() : "";

@@ -32,7 +32,7 @@ describe("fileService.getAvatarBlob", () => {
 
     expect(api.downloadFile).toHaveBeenCalledWith(
       "/File/api/Avatar/11111111-2222-3333-4444-555555555555.png",
-      { signal: controller.signal }
+      { signal: controller.signal, unwrapBlobErrors: true }
     );
     expect(result).toBe(pngBlob);
   });
@@ -65,6 +65,10 @@ describe("fileService.getAvatarBlob", () => {
 
     const result = await fileService.getAvatarBlob(
       "System/Avatar/11111111-2222-3333-4444-555555555555.png"
+    );
+    expect(api.downloadFile).toHaveBeenCalledWith(
+      "/File/api/Avatar/11111111-2222-3333-4444-555555555555.png",
+      { signal: undefined, unwrapBlobErrors: true }
     );
     expect(result).toBe(pngBlobWithParam);
   });

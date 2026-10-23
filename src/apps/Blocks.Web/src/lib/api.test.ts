@@ -31,7 +31,9 @@ describe("api client blob handling and refresh", () => {
       };
     };
 
-    await expect(api.downloadFile("/test/avatar/403")).rejects.toThrow(
+    await expect(
+      api.downloadFile("/test/avatar/403", { unwrapBlobErrors: true })
+    ).rejects.toThrow(
       "Yêu cầu đến dịch vụ tệp tin không được phép"
     );
     expect(URL.createObjectURL).not.toHaveBeenCalledWith(errorBlob);
@@ -86,7 +88,9 @@ describe("api client blob handling and refresh", () => {
       };
     };
 
-    const response = await api.downloadFile("/File/api/Avatar/test-file.png");
+    const response = await api.downloadFile("/File/api/Avatar/test-file.png", {
+      unwrapBlobErrors: true,
+    });
 
     expect(callCount).toBe(2);
     expect(refreshPostSpy).toHaveBeenCalledTimes(1);
@@ -148,6 +152,51 @@ describe("api client blob handling and refresh", () => {
     }
   });
 
+  it("generic_json_blob_shaped_like_401_or_403_is_preserved_without_refresh_or_rejection", async () => {
+    const refreshPostSpy = vi.spyOn(axios, "post");
+    const getRefreshTokenSpy = vi.spyOn(cookies, "getRefreshToken");
+
+    const envelopes = [
+      {
+        url: "/files/legit-401.json",
+        raw: JSON.stringify({
+          Success: false,
+          StatusCode: 401,
+          Message: "Legitimate data containing 401 status",
+        }),
+      },
+      {
+        url: "/files/legit-403.json",
+        raw: JSON.stringify({
+          Success: false,
+          StatusCode: 403,
+          Message: "Legitimate data containing 403 status",
+        }),
+      },
+    ];
+
+    for (const item of envelopes) {
+      const docBlob = new Blob([item.raw], { type: "application/json" });
+      axiosInstance.defaults.adapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
+        return {
+          data: docBlob,
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "application/json" },
+          config,
+        };
+      };
+
+      const response = await api.downloadFile(item.url);
+      expect(response.data).toBe(docBlob);
+      const text = await response.data.text();
+      expect(text).toBe(item.raw);
+    }
+
+    expect(refreshPostSpy).not.toHaveBeenCalled();
+    expect(getRefreshTokenSpy).not.toHaveBeenCalled();
+  });
+
   it("signal_survives_retry", async () => {
     vi.spyOn(cookies, "getRefreshToken").mockReturnValue("existing-refresh-token");
     vi.spyOn(cookies, "saveTokens").mockImplementation(() => {});
@@ -196,7 +245,10 @@ describe("api client blob handling and refresh", () => {
       };
     };
 
-    await api.downloadFile("/File/api/Avatar/retry-signal.png", { signal: controller.signal });
+    await api.downloadFile("/File/api/Avatar/retry-signal.png", {
+      signal: controller.signal,
+      unwrapBlobErrors: true,
+    });
 
     expect(retrySignal).toBe(controller.signal);
     expect(retrySignal?.aborted).toBe(false);
