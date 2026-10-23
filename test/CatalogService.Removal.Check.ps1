@@ -110,4 +110,49 @@ if ($config -notmatch 'AddGrpcClient<AuditProto\.AuditProtoClient>') {
     throw 'AuditProto client registration missing'
 }
 
+# Assert Catalog targets net10.0 and Oracle provider
+$catalogTf = $csprojXml.SelectSingleNode('//TargetFramework')
+if ($catalogTf.InnerText -ne 'net10.0') {
+    throw "catalog_targets_net10_and_oracle: Catalog TargetFramework is $($catalogTf.InnerText), expected net10.0"
+}
+$oraclePkg = $csprojXml.SelectSingleNode('//PackageReference[@Include="MySql.EntityFrameworkCore"]')
+if ($null -eq $oraclePkg -or $oraclePkg.GetAttribute('Version') -ne '10.0.12') {
+    throw "catalog_targets_net10_and_oracle: MySql.EntityFrameworkCore 10.0.12 package missing or wrong version"
+}
+$pomeloPkg = $csprojXml.SelectSingleNode('//PackageReference[@Include="Pomelo.EntityFrameworkCore.MySql"]')
+if ($null -ne $pomeloPkg) {
+    throw "catalog_targets_net10_and_oracle: Pomelo.EntityFrameworkCore.MySql direct package reference must be removed"
+}
+$jwtPkg = $csprojXml.SelectSingleNode('//PackageReference[@Include="Microsoft.AspNetCore.Authentication.JwtBearer"]')
+if ($null -eq $jwtPkg -or $jwtPkg.GetAttribute('Version') -ne '10.0.13') {
+    throw "catalog_targets_net10_and_oracle: Microsoft.AspNetCore.Authentication.JwtBearer 10.0.13 package missing or wrong version"
+}
+$protoPkg = $csprojXml.SelectSingleNode('//PackageReference[@Include="Google.Protobuf"]')
+if ($null -eq $protoPkg -or $protoPkg.GetAttribute('Version') -ne '3.35.0') {
+    throw "catalog_targets_net10_and_oracle: Google.Protobuf 3.35.0 package missing or wrong version"
+}
+foreach ($efPkgName in @('Microsoft.EntityFrameworkCore.Design', 'Microsoft.EntityFrameworkCore.Tools')) {
+    $efPkg = $csprojXml.SelectSingleNode("//PackageReference[@Include='$efPkgName']")
+    if ($null -eq $efPkg -or $efPkg.GetAttribute('Version') -ne '10.0.13') {
+        throw "catalog_targets_net10_and_oracle: $efPkgName 10.0.13 package missing or wrong version"
+    }
+}
+
+# Assert CleanupChecks harness targets net10.0 and EF Core 10
+$harnessCsprojPath = Join-Path $repoRoot 'test\CatalogService.CleanupChecks\CatalogService.CleanupChecks.csproj'
+if (-not (Test-Path $harnessCsprojPath)) {
+    throw "Cannot find harness csproj at $harnessCsprojPath"
+}
+[xml]$harnessXml = Get-Content -Raw $harnessCsprojPath
+$harnessTf = $harnessXml.SelectSingleNode('//TargetFramework')
+if ($harnessTf.InnerText -ne 'net10.0') {
+    throw "cleanup_harness_targets_net10: Harness TargetFramework is $($harnessTf.InnerText), expected net10.0"
+}
+foreach ($efPkgName in @('Microsoft.EntityFrameworkCore', 'Microsoft.EntityFrameworkCore.Relational')) {
+    $efPkg = $harnessXml.SelectSingleNode("//PackageReference[@Include='$efPkgName']")
+    if ($null -eq $efPkg -or $efPkg.GetAttribute('Version') -ne '10.0.13') {
+        throw "cleanup_harness_targets_net10: $efPkgName 10.0.13 package missing or wrong version"
+    }
+}
+
 Write-Output 'PASS CatalogService removal checks'

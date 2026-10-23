@@ -1,3 +1,5 @@
+using System.Data.Common;
+using MySql.Data.MySqlClient;
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Common;
 using Grpc.Net.Client.Web;
@@ -32,9 +34,9 @@ namespace Blocks.CatalogService.Configs
             builder.Services.AddScoped<Blocks.CatalogService.Infrastructure.Filters.AuditActionFilter>();
 
             //DATABASE
+            var catalogConnStr = ValidateConnectionString(builder.Configuration.GetConnectionString("Catalog"));
             builder.Services.AddDbContext<CatalogContext>((sp, options) =>
-                options.UseMySql(builder.Configuration.GetConnectionString("Catalog"),
-                ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("Catalog")))
+                options.UseMySQL(catalogConnStr)
                        .AddInterceptors(sp.GetRequiredService<Blocks.CatalogService.Infrastructure.Interceptors.AuditInterceptor>()));
 
             //MAPPER
@@ -112,6 +114,41 @@ namespace Blocks.CatalogService.Configs
             })
             .ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(GrpcWebMode.GrpcWeb, new HttpClientHandler()))
             .AddInterceptor<Blocks.Shared.Common.GrpcJwtInterceptor>();
+        }
+        public static string ValidateConnectionString(string? connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException("ConnectionStrings:Catalog must not be empty");
+            }
+
+            DbConnectionStringBuilder supplied;
+            try
+            {
+                supplied = new DbConnectionStringBuilder { ConnectionString = connectionString };
+            }
+            catch (ArgumentException)
+            {
+                throw new InvalidOperationException("Connection string format is invalid");
+            }
+
+            var supported = new MySqlConnectionStringBuilder();
+            foreach (string keyword in supplied.Keys)
+            {
+                if (!supported.ContainsKey(keyword))
+                    throw new InvalidOperationException($"Unsupported connection option: '{keyword}'");
+            }
+
+            try
+            {
+                _ = new MySqlConnectionStringBuilder(connectionString);
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException)
+            {
+                // Driver value errors can include credentials; do not retain the original exception.
+                throw new InvalidOperationException("Connection string contains an invalid value or format");
+            }
+            return connectionString;
         }
     }
     public class DateTimeTypeConverter : ITypeConverter<DateOnly?, DateTime?>

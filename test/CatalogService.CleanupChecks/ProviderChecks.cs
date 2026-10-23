@@ -30,7 +30,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 
 internal static class ProviderChecks
 {
@@ -115,7 +115,8 @@ internal static class ProviderChecks
             throw new InvalidOperationException("Protocol must be TCP");
         }
 
-        if (builder.ContainsKey("PipeName") || builder.ContainsKey("Pipe Name"))
+        var explicitKeys = builder.Keys.Cast<string>();
+        if (explicitKeys.Any(k => string.Equals(k, "pipe", StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidOperationException("Named pipes are not supported");
         }

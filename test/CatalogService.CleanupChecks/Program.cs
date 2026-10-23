@@ -13,6 +13,7 @@ using Blocks.CatalogService.Infrastructure.Data;
 using Blocks.CatalogService.Infrastructure.Filters;
 using Blocks.CatalogService.Middlewares;
 using Blocks.CatalogService.Services.CoreFeature.Faculty;
+using Blocks.ServiceDefaults;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
+using MySql.EntityFrameworkCore.Extensions;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Configuration;
@@ -83,7 +85,7 @@ else
     return 1;
 }
 
-static void Require(bool condition, string message)
+static void Require([System.Diagnostics.CodeAnalysis.DoesNotReturnIf(false)] bool condition, string message)
 {
     if (!condition)
     {
@@ -94,8 +96,9 @@ static void Require(bool condition, string message)
 static void RunContractChecks()
 {
     ProviderChecks.RunGuardChecks();
+    production_connection_options_fail_without_leaking_values();
     var options = new DbContextOptionsBuilder<CatalogContext>()
-        .UseMySql("Server=localhost;Database=test;Uid=test;Pwd=test;", new MySqlServerVersion(new Version(8, 0, 0)))
+        .UseMySQL("Server=127.0.0.1;Port=1;Database=test;Uid=test;Pwd=test;")
         .Options;
 
     using var db = new CatalogContext(options);
@@ -117,6 +120,7 @@ static void RunContractChecks()
     Require(idProp != null, "Id property exists");
     Require(idProp!.GetColumnName() == "id", "id snake_case retained");
     Require(idProp.ClrType == typeof(Guid), "Id is Guid");
+    Require(idProp!.GetColumnType() == "char(36)", "UUID schema retained");
     var primaryKey = entity.FindPrimaryKey();
     Require(primaryKey != null && primaryKey.GetName() == "PRIMARY", "Primary key PRIMARY retained");
 
@@ -129,36 +133,44 @@ static void RunContractChecks()
     Require(createdByProp != null, "CreatedBy property exists");
     Require(createdByProp!.GetColumnName() == "created_by", "created_by snake_case retained");
     Require(createdByProp.GetMaxLength() == 255, "CreatedBy max length is 255");
+    Require(createdByProp.GetColumnType() == "varchar(255)" && !createdByProp.IsNullable, "CreatedBy store contract");
 
     var updatedAtProp = entity.FindProperty(nameof(Faculty.UpdatedAt));
     Require(updatedAtProp != null, "UpdatedAt property exists");
     Require(updatedAtProp!.GetColumnName() == "updated_at", "updated_at snake_case retained");
     Require(updatedAtProp.GetColumnType() == "timestamp", "UpdatedAt column type is timestamp");
     Require(updatedAtProp.GetDefaultValueSql() == "CURRENT_TIMESTAMP", "UpdatedAt default is CURRENT_TIMESTAMP");
+    Require(updatedAtProp.IsNullable, "UpdatedAt nullable retained");
 
     var updatedByProp = entity.FindProperty(nameof(Faculty.UpdatedBy));
     Require(updatedByProp != null, "UpdatedBy property exists");
     Require(updatedByProp!.GetColumnName() == "updated_by", "updated_by snake_case retained");
     Require(updatedByProp.GetMaxLength() == 255, "UpdatedBy max length is 255");
+    Require(updatedByProp.GetColumnType() == "varchar(255)" && updatedByProp.IsNullable, "UpdatedBy store contract");
 
     var isActivedProp = entity.FindProperty(nameof(Faculty.IsActived));
     Require(isActivedProp != null, "IsActived property exists");
     Require(isActivedProp!.GetColumnName() == "is_actived", "is_actived snake_case retained");
     Require(isActivedProp.GetDefaultValueSql() == "'1'", "IsActived default value is '1'");
+    Require(isActivedProp.ClrType == typeof(bool?) && !isActivedProp.IsNullable, "CLR/DB nullability retained");
+    Require(isActivedProp.GetColumnType() == "tinyint(1)", "Active flag store type retained");
 
     var isDeletedProp = entity.FindProperty(nameof(Faculty.IsDeleted));
     Require(isDeletedProp != null, "IsDeleted property exists");
     Require(isDeletedProp!.GetColumnName() == "is_deleted", "is_deleted snake_case retained");
+    Require(isDeletedProp.ClrType == typeof(bool) && !isDeletedProp.IsNullable &&
+        isDeletedProp.GetColumnType() == "tinyint(1)", "Deleted flag store contract");
+    Require(!nameProp!.IsNullable && !idProp.IsNullable, "Name and UUID required");
 
     var props = entity.GetProperties().ToList();
     Require(props.Count == 8, "Exactly 8 properties mapped on Faculty");
 
     var designModel = db.GetService<IDesignTimeModel>().Model;
-    Require(designModel.GetCollation() == "utf8mb4_0900_ai_ci", "Collation utf8mb4_0900_ai_ci retained");
-    Require(designModel.GetCharSet() == "utf8mb4", "CharSet utf8mb4 retained");
+    Require(designModel.GetCollation() == "utf8mb4_0900_ai_ci", "Oracle collation retained");
+    Require(designModel.FindAnnotation("MySQL:Charset")?.Value as string == "utf8mb4", "Oracle charset retained");
 
-    var sql = db.Faculties.Where(x => !x.IsDeleted).ToQueryString();
-    Require(sql.Contains("`faculty`") && sql.Contains("`is_deleted`"), "Scaffold SQL retained");
+    Console.WriteLine("PASS oracle_model_preserves_faculty_schema");
+    oracle_queries_translate_with_parameters(db);
 
     var validation = new FacultyRequestValidator().Validate(new FacultyRequest { Name = "" });
     Require(validation.Errors.Any(e => e.ErrorMessage == "Tên phòng ban không được để trống"),
@@ -186,6 +198,72 @@ static void RunContractChecks()
         "DTO nullability unchanged");
 
     Console.WriteLine("PASS contract checks");
+}
+
+static void production_connection_options_fail_without_leaking_values()
+{
+    const string secret = "distinctive_connection_value_947";
+    foreach (var input in new[]
+    {
+        null, "", "  ", "not a connection string",
+        $"Server=127.0.0.1;Password={secret};Port={secret}",
+        $"Server=127.0.0.1;Password={secret};SslMode={secret}",
+        $"Server=127.0.0.1;Password={secret};UnsupportedOption={secret}"
+    })
+    {
+        try
+        {
+            ConfigService.ValidateConnectionString(input);
+            throw new Exception("Invalid connection options accepted");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Require(!ex.ToString().Contains(secret), "Invalid option error contains no value or inner exception");
+            if (input?.Contains("UnsupportedOption=") == true)
+                Require(ex.Message.Contains("UnsupportedOption", StringComparison.OrdinalIgnoreCase), "Unsupported option identified without value");
+        }
+    }
+
+    const string valid = "Server=127.0.0.1;Port=1;Database=test;Uid=x;Pwd='x;y';SslMode=Required;";
+    Require(ConfigService.ValidateConnectionString(valid) == valid, "Supported options retained unchanged");
+}
+
+static void oracle_queries_translate_with_parameters(CatalogContext db)
+{
+    var id = Guid.Parse("00000000-0000-4000-8000-000000000001");
+    var name = "100%_O'Reilly";
+    var findQuery = db.Faculties.Where(x => x.Id == id);
+    var duplicateQuery = db.Faculties.Where(x => x.Name == name && !x.IsDeleted && x.Id != id);
+    var pageQuery = db.Faculties.Where(x => !x.IsDeleted && x.Name.Contains(name))
+        .OrderByDescending(x => x.UpdatedAt.HasValue ? x.UpdatedAt : x.CreatedAt)
+        .Skip(1).Take(2);
+    var find = findQuery.ToQueryString();
+    var duplicate = duplicateQuery.ToQueryString();
+    var page = pageQuery.ToQueryString();
+    var combo = db.Faculties.Where(x => !x.IsDeleted && x.IsActived == true)
+        .OrderBy(x => x.Name).ToQueryString();
+    foreach (var sql in new[] { find, duplicate, page, combo })
+        Require(sql.Contains("`faculty`") && sql.Contains("WHERE"), "Server-side Faculty filtering retained");
+    // Ignore diagnostic parameter declarations; inspect executable statement only.
+    var findStatement = find[find.IndexOf("SELECT", StringComparison.Ordinal)..];
+    var duplicateStatement = duplicate[duplicate.IndexOf("SELECT", StringComparison.Ordinal)..];
+    var pageStatement = page[page.IndexOf("SELECT", StringComparison.Ordinal)..];
+    using var duplicateCommand = duplicateQuery.CreateDbCommand();
+    using var pageCommand = pageQuery.CreateDbCommand();
+    Require(duplicateCommand.Parameters.Cast<System.Data.Common.DbParameter>().Any(p => Equals(p.Value, name)) &&
+        !duplicateCommand.CommandText.Contains(name), "Duplicate-name value bound separately");
+    Require(pageCommand.Parameters.Cast<System.Data.Common.DbParameter>().Any(p => Equals(p.Value, name)) &&
+        !pageCommand.CommandText.Contains(name), "Contains value bound separately");
+    Require(findStatement.Contains('@') && !findStatement.Contains(id.ToString()), "UUID predicate parameterized");
+    Require(duplicateStatement.Contains('@') && duplicateStatement.Contains("<>"), "Excluded-ID predicate parameterized");
+    Require(pageCommand.CommandText.Contains('@') &&
+        (pageStatement.Contains("LIKE") || pageStatement.Contains("LOCATE")), "Literal Contains translated with parameter");
+    Require(pageStatement.Contains("ORDER BY") && pageStatement.Contains("CASE") &&
+        pageStatement.Contains("`updated_at`") && pageStatement.Contains("`created_at`") &&
+        pageStatement.Contains("LIMIT") && pageStatement.Contains("OFFSET"), "Conditional ordering and paging stay server-side");
+    Require(combo.Contains("`is_actived`") && combo.Contains("`is_deleted`") &&
+        combo.Contains("ORDER BY"), "Active nondeleted combobox query translates");
+    Console.WriteLine("PASS oracle_queries_translate_with_parameters");
 }
 
 static async Task RunRuntimeChecksAsync()
@@ -221,6 +299,7 @@ static async Task RunRuntimeChecksAsync()
         ["ConnectionStrings:Catalog"] = "Server=127.0.0.1;Port=1;Database=nonexistent;Uid=x;Pwd=x;",
         ["GrpcClients:SystemService"] = "http://127.0.0.1:1"
     });
+    builder.AddServiceDefaults();
 
     builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 
@@ -236,6 +315,14 @@ static async Task RunRuntimeChecksAsync()
     builder.ExecuteConfigAuthentication();
 
     var app = builder.Build();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<CatalogContext>();
+        Require(db.Database.GetDbConnection().State == System.Data.ConnectionState.Closed, "DI leaves connection closed");
+        oracle_queries_translate_with_parameters(db);
+        Require(db.Database.GetDbConnection().State == System.Data.ConnectionState.Closed, "Model/SQL resolution leaves connection closed");
+        Console.WriteLine("PASS oracle_di_model_resolution_is_db_free");
+    }
 
     app.UseMiddleware<GlobalExceptionHandler>();
     if (app.Environment.IsDevelopment())
@@ -264,6 +351,7 @@ static async Task RunRuntimeChecksAsync()
         });
     }).ExcludeFromDescription().RequireAuthorization();
     app.MapControllers();
+    app.MapDefaultEndpoints();
 
     await app.StartAsync();
 
@@ -271,6 +359,12 @@ static async Task RunRuntimeChecksAsync()
     {
         var address = app.Urls.First();
         using var client = new HttpClient { BaseAddress = new Uri(address) };
+        foreach (var path in new[] { "/health", "/alive" })
+        {
+            using var response = await client.GetAsync(path);
+            Require(response.StatusCode == HttpStatusCode.OK &&
+                await response.Content.ReadAsStringAsync() == "Healthy", $"{path} healthy without DB");
+        }
 
         // Test 1: faculty_missing_invalid_expired_jwt_keeps_401_envelope
         // Anonymous (missing token)

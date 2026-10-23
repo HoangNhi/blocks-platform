@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Blocks.CatalogService.Entities;
 using Microsoft.EntityFrameworkCore;
+using MySql.EntityFrameworkCore.Extensions;
 
 namespace Blocks.CatalogService.Infrastructure.Data;
 
@@ -16,9 +17,8 @@ public partial class CatalogContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder
-            .UseCollation("utf8mb4_0900_ai_ci")
-            .HasCharSet("utf8mb4");
+        MySQLModelBuilderExtensions.UseCollation(modelBuilder, "utf8mb4_0900_ai_ci");
+        MySQLModelBuilderExtensions.HasCharSet(modelBuilder, "utf8mb4");
 
         modelBuilder.Entity<Faculty>(entity =>
         {
@@ -26,7 +26,7 @@ public partial class CatalogContext : DbContext
 
             entity.ToTable("faculty");
 
-            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Id).HasColumnType("char(36)").HasColumnName("id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp")
@@ -36,9 +36,10 @@ public partial class CatalogContext : DbContext
                 .HasColumnName("created_by");
             entity.Property(e => e.IsActived)
                 .IsRequired()
+                .HasColumnType("tinyint(1)")
                 .HasDefaultValueSql("'1'")
                 .HasColumnName("is_actived");
-            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
+            entity.Property(e => e.IsDeleted).HasColumnType("tinyint(1)").HasColumnName("is_deleted");
             entity.Property(e => e.Name)
                 .HasColumnType("text")
                 .HasColumnName("name");
