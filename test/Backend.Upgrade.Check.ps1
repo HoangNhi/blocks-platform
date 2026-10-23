@@ -411,10 +411,29 @@ function Run-AppHostChecks {
     Assert-Condition ($csContent -notmatch 'WaitFor') "$csRel must NOT use WaitFor"
 
     # Keeps mutual discovery references between FileService and SystemService without WaitFor
-    Assert-Condition ($csContent -match 'systemService.*WithReference\(\s*fileService\s*\)' -or $csContent -match 'WithReference\(\s*fileService\s*\)') `
-        "$csRel must keep reference from systemService to fileService"
-    Assert-Condition ($csContent -match 'fileService\.WithReference\(\s*systemService\s*\)') `
-        "$csRel must keep reference from fileService to systemService"
+    # Scoped strictly to systemService declaration statement to avoid false positives from other services (Catalog, Gateway)
+    if ($csContent -match '(?s)var\s+systemService\s*=\s*builder\s*\.AddProject<[^>]+>\("SystemService"\)([^;]*);') {
+        $systemServiceStatement = $Matches[1]
+        Assert-Condition ($systemServiceStatement -match '\.WithReference\(\s*fileService\s*\)') `
+            "$csRel must keep reference from systemService to fileService within systemService declaration"
+    } else {
+        Assert-Condition ($false) "$csRel could not find systemService declaration statement"
+    }
+
+    # fileService must explicitly reference systemService
+    Assert-Condition ($csContent -match '(?m)^\s*fileService\.WithReference\(\s*systemService\s*\)\s*;') `
+        "$csRel must keep reference from fileService to systemService via fileService.WithReference(systemService)"
+
+    # Regression test in memory: verify that removing systemService's WithReference(fileService) while keeping catalog/gateway WithReference(fileService) is caught
+    $mockContentWithoutSystemRef = $csContent -replace '(?s)(var\s+systemService\s*=\s*builder\s*\.AddProject<[^>]+>\("SystemService"\))\s*\.WithReference\(\s*fileService\s*\);', '$1;'
+    $mutationDetected = $false
+    if ($mockContentWithoutSystemRef -match '(?s)var\s+systemService\s*=\s*builder\s*\.AddProject<[^>]+>\("SystemService"\)([^;]*);') {
+        $mockStmt = $Matches[1]
+        if ($mockStmt -notmatch '\.WithReference\(\s*fileService\s*\)') {
+            $mutationDetected = $true
+        }
+    }
+    Assert-Condition ($mutationDetected) "Regression guard: assertion must fail if systemService.WithReference(fileService) is removed even when other services reference fileService"
 
     # Keeps Web WithReference(gateway) / external endpoint
     Assert-Condition ($csContent -match 'WithReference\(\s*gateway\s*\)') "$csRel Web must include WithReference(gateway)"

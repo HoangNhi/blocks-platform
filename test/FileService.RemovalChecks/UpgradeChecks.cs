@@ -377,6 +377,128 @@ internal static class UpgradeChecks
                 if (Directory.Exists(fixtureDir)) Directory.Delete(fixtureDir, true);
             }
         }
+
+        // Case 6: Persistent upstream HTTP 503 (all 4 attempts fail -> AUDIT LOG LOST, action not replayed)
+        {
+            await using var responder = await EphemeralAuditResponder.StartAsync(_ => (StatusCode)503);
+
+            var fixtureDir = Path.Combine(tempRoot, $"blocks-fs-upgrade-503-terminal-{Guid.NewGuid():N}");
+            var storageDir = Path.Combine(fixtureDir, "storage");
+            Directory.CreateDirectory(storageDir);
+
+            var actorId = Guid.NewGuid();
+            var jwt = CreateJwt(actorId, "file_503_term_actor");
+
+            var logSink = new TestLogSink();
+            var fileApp = FileServiceHost.Build(new[]
+            {
+                "--urls", "http://127.0.0.1:0",
+                "--GrpcClients:SystemService", responder.Url,
+                "--contentRoot", fixtureDir,
+                "--FileStorage:RootPath", storageDir,
+                "--Jwt:Issuer", JwtIssuer,
+                "--Jwt:Audience", JwtAudience,
+                "--Jwt:Key", JwtSecret,
+                "--Environment", "Production"
+            });
+            fileApp.Services.GetRequiredService<ILoggerFactory>().AddProvider(logSink);
+            await fileApp.StartAsync();
+            var baseUrl = fileApp.Urls.First();
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+                var folderGuid = Guid.NewGuid();
+                using var multipart = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(new byte[] { 110, 120 });
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+                multipart.Add(fileContent, "files", "503_terminal_test.txt");
+                multipart.Add(new StringContent(folderGuid.ToString("D")), "FolderName");
+
+                using var resp = await client.PostAsync("/api/UploadFile", multipart);
+                Require(resp.IsSuccessStatusCode, "upload HTTP 200 despite persistent HTTP 503 audit failure");
+                var env = await resp.Content.ReadFromJsonAsync<BaseResponse>();
+                Require(env?.Success == true, "upload application success");
+
+                var sw = Stopwatch.StartNew();
+                while (sw.Elapsed < TimeSpan.FromSeconds(60) && !logSink.HasMessage("AUDIT LOG LOST"))
+                {
+                    await Task.Delay(50);
+                }
+                Require(logSink.HasMessage("AUDIT LOG LOST"), $"persistent HTTP 503 must log AUDIT LOG LOST within timeout, calls so far: {responder.AuditCalls}");
+                Require(responder.AuditCalls >= 4, $"total transport attempts must be at least 4 on persistent HTTP 503, got {responder.AuditCalls}");
+            }
+            finally
+            {
+                await responder.DrainAsync(TimeSpan.FromSeconds(2));
+                await fileApp.StopAsync();
+                await fileApp.DisposeAsync();
+                if (Directory.Exists(fixtureDir)) Directory.Delete(fixtureDir, true);
+            }
+        }
+
+        // Case 7: Persistent connection abort (all attempts abort -> AUDIT LOG LOST, action not replayed)
+        {
+            await using var responder = await EphemeralAuditResponder.StartAsync(_ => (StatusCode)999);
+
+            var fixtureDir = Path.Combine(tempRoot, $"blocks-fs-upgrade-abort-terminal-{Guid.NewGuid():N}");
+            var storageDir = Path.Combine(fixtureDir, "storage");
+            Directory.CreateDirectory(storageDir);
+
+            var actorId = Guid.NewGuid();
+            var jwt = CreateJwt(actorId, "file_abort_term_actor");
+
+            var logSink = new TestLogSink();
+            var fileApp = FileServiceHost.Build(new[]
+            {
+                "--urls", "http://127.0.0.1:0",
+                "--GrpcClients:SystemService", responder.Url,
+                "--contentRoot", fixtureDir,
+                "--FileStorage:RootPath", storageDir,
+                "--Jwt:Issuer", JwtIssuer,
+                "--Jwt:Audience", JwtAudience,
+                "--Jwt:Key", JwtSecret,
+                "--Environment", "Production"
+            });
+            fileApp.Services.GetRequiredService<ILoggerFactory>().AddProvider(logSink);
+            await fileApp.StartAsync();
+            var baseUrl = fileApp.Urls.First();
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+                var folderGuid = Guid.NewGuid();
+                using var multipart = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(new byte[] { 130, 140 });
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+                multipart.Add(fileContent, "files", "abort_terminal_test.txt");
+                multipart.Add(new StringContent(folderGuid.ToString("D")), "FolderName");
+
+                using var resp = await client.PostAsync("/api/UploadFile", multipart);
+                Require(resp.IsSuccessStatusCode, "upload HTTP 200 despite persistent abort audit failure");
+                var env = await resp.Content.ReadFromJsonAsync<BaseResponse>();
+                Require(env?.Success == true, "upload application success");
+
+                var sw = Stopwatch.StartNew();
+                while (sw.Elapsed < TimeSpan.FromSeconds(60) && !logSink.HasMessage("AUDIT LOG LOST"))
+                {
+                    await Task.Delay(50);
+                }
+                Require(logSink.HasMessage("AUDIT LOG LOST"), $"persistent connection abort must log AUDIT LOG LOST within timeout, calls so far: {responder.AuditCalls}");
+                Require(responder.AuditCalls >= 4, $"total transport attempts must be at least 4 on connection abort, got {responder.AuditCalls}");
+            }
+            finally
+            {
+                await responder.DrainAsync(TimeSpan.FromSeconds(2));
+                await fileApp.StopAsync();
+                await fileApp.DisposeAsync();
+                if (Directory.Exists(fixtureDir)) Directory.Delete(fixtureDir, true);
+            }
+        }
     }
 
     private static Task CheckAssemblyTargetAndRuntimeAsync()

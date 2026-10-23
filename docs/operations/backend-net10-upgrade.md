@@ -251,7 +251,7 @@ Khi gặp sự cố nghiêm trọng trên môi trường production trong mainte
 
 | Hạng Mục / Trách Nhiệm | Người Chịu Trách Nhiệm (Owner) | Kết Quả Nghiệm Thu | Ghi Chú Ký Duyệt |
 |---|---|---|---|
-| **Source & Toolchain Architecture** | Lead Developer / Platform Architect | **APPROVED** | SDK 10.0.100, Target `net10.0` trên toàn bộ 7 production projects, global.json pin 10.0.100 |
+| **Source & Toolchain Architecture** | Lead Developer / Platform Architect | **APPROVED** | SDK 10.0.402, Target `net10.0` trên toàn bộ 7 production projects, global.json pin 10.0.402 |
 | **Package Dependency & Security** | Security Officer / Tech Lead | **APPROVED** | 10/10 projects 0 CVE/vulnerability, 0 deprecated packages, AutoMapper 16.0.0 đã được thay thế triệt để |
 | **DB-Free Regression Matrix** | Backend Core Team | **APPROVED** | 100% suite pass (FileService 0 failure, SystemService 4 modes pass, CatalogService 3 modes pass) |
 | **Standalone & Container Smoke** | DevOps / Platform Engineer | **APPROVED** | 4 service standalone smoke pass, 3 Linux containers chạy non-root (UID 1654), endpoints 200/401 pass |

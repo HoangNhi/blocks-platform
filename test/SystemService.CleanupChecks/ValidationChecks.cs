@@ -34,6 +34,8 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
@@ -715,6 +717,15 @@ internal static class ValidationChecks
         var (app, _, _, _, state) = await CreateTestHostAsync();
         try
         {
+            // Verify resolved MvcOptions from DI confirms DataAnnotations provider removed and implicit required suppressed
+            var mvcOptions = app.Services.GetRequiredService<IOptions<MvcOptions>>().Value;
+            Require(!mvcOptions.ModelValidatorProviders.Any(p => p.GetType().FullName == "Microsoft.AspNetCore.Mvc.DataAnnotations.DataAnnotationsModelValidatorProvider"),
+                "DataAnnotationsModelValidatorProvider must be pruned from resolved MvcOptions");
+            Require(mvcOptions.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes == true,
+                "SuppressImplicitRequiredAttributeForNonNullableReferenceTypes must be true in resolved MvcOptions");
+            Require(mvcOptions.ModelValidatorProviders.Count > 0,
+                "Other model validator providers (including custom providers) must be retained");
+
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
 
             // 1. [Required] probe

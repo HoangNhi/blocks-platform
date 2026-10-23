@@ -29,6 +29,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -605,6 +606,80 @@ internal static class ValidationChecks
                 await app.DisposeAsync();
             }
         }
+
+        // Subcase 5: Terminal failure with persistent HTTP 503 (4 attempts -> AUDIT LOG LOST)
+        {
+            await using var responder = await CatalogEphemeralResponder.StartAsync(_ => (StatusCode)503);
+            responder.AllowPermission = true;
+
+            var (app, fakeService, logSink, _) = await CreateTestHostAsync(responder);
+            fakeService.ThrowBusinessExceptionOnInsert = true;
+
+            var actorId = Guid.NewGuid();
+            var jwt = CreateJwt(actorId, "cat_503_term_actor");
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+                var req = new FacultyRequest { Name = "Khoa 503 Terminal" };
+                using var resp = await client.PostAsJsonAsync("/api/Faculty/insert", req);
+                Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+
+                var sw = Stopwatch.StartNew();
+                while (sw.Elapsed < TimeSpan.FromSeconds(60) && !logSink.HasMessage("AUDIT LOG LOST"))
+                {
+                    await Task.Delay(50);
+                }
+                Require(logSink.HasMessage("AUDIT LOG LOST"), $"persistent HTTP 503 must log AUDIT LOG LOST within timeout, calls so far: {responder.AuditCalls}");
+                Require(responder.AuditCalls >= 4, $"total transport attempts must be at least 4 on persistent HTTP 503, got {responder.AuditCalls}");
+                Require(fakeService.InsertCalls == 1, "action executed exactly once, not replayed on failure");
+            }
+            finally
+            {
+                await responder.DrainAsync(TimeSpan.FromSeconds(2));
+                await app.StopAsync();
+                await app.DisposeAsync();
+            }
+        }
+
+        // Subcase 6: Terminal failure with persistent connection abort (all attempts abort -> AUDIT LOG LOST)
+        {
+            await using var responder = await CatalogEphemeralResponder.StartAsync(_ => (StatusCode)999);
+            responder.AllowPermission = true;
+
+            var (app, fakeService, logSink, _) = await CreateTestHostAsync(responder);
+            fakeService.ThrowBusinessExceptionOnInsert = true;
+
+            var actorId = Guid.NewGuid();
+            var jwt = CreateJwt(actorId, "cat_abort_term_actor");
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+                var req = new FacultyRequest { Name = "Khoa Abort Terminal" };
+                using var resp = await client.PostAsJsonAsync("/api/Faculty/insert", req);
+                Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+
+                var sw = Stopwatch.StartNew();
+                while (sw.Elapsed < TimeSpan.FromSeconds(60) && !logSink.HasMessage("AUDIT LOG LOST"))
+                {
+                    await Task.Delay(50);
+                }
+                Require(logSink.HasMessage("AUDIT LOG LOST"), $"persistent connection abort must log AUDIT LOG LOST within timeout, calls so far: {responder.AuditCalls}");
+                Require(responder.AuditCalls >= 4, $"total transport attempts must be at least 4 on connection abort, got {responder.AuditCalls}");
+                Require(fakeService.InsertCalls == 1, "action executed exactly once, not replayed on failure");
+            }
+            finally
+            {
+                await responder.DrainAsync(TimeSpan.FromSeconds(2));
+                await app.StopAsync();
+                await app.DisposeAsync();
+            }
+        }
     }
 
     private static async Task async_validator_is_awaited_once()
@@ -695,6 +770,15 @@ internal static class ValidationChecks
         var (app, _, _, state) = await CreateTestHostAsync();
         try
         {
+            // Verify resolved MvcOptions from DI confirms DataAnnotations provider removed and implicit required suppressed
+            var mvcOptions = app.Services.GetRequiredService<IOptions<MvcOptions>>().Value;
+            Require(!mvcOptions.ModelValidatorProviders.Any(p => p.GetType().FullName == "Microsoft.AspNetCore.Mvc.DataAnnotations.DataAnnotationsModelValidatorProvider"),
+                "DataAnnotationsModelValidatorProvider must be pruned from resolved MvcOptions");
+            Require(mvcOptions.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes == true,
+                "SuppressImplicitRequiredAttributeForNonNullableReferenceTypes must be true in resolved MvcOptions");
+            Require(mvcOptions.ModelValidatorProviders.Count > 0,
+                "Other model validator providers (including custom providers) must be retained");
+
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
 
             // 1. [Required] probe
