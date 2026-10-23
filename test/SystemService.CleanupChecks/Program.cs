@@ -262,10 +262,10 @@ async Task RunRuntimeChecksAsync()
     var apiVersion = Version.Parse(otelApiVersionStr.Split('-')[0]);
 
     Assert(libraries.Contains("AutoMapper/16.1.1"), "patched AutoMapper");
-    Assert(libraries.Contains("OpenTelemetry.Exporter.OpenTelemetryProtocol/1.15.3"),
+    Assert(libraries.Contains("OpenTelemetry.Exporter.OpenTelemetryProtocol/1.20.1"),
         "patched OTLP exporter");
-    Assert(libraries.Contains("OpenTelemetry.Extensions.Hosting/1.15.3"), "patched hosting");
-    Assert(apiVersion >= new Version(1, 15, 3), "patched OpenTelemetry.Api floor");
+    Assert(libraries.Contains("OpenTelemetry.Extensions.Hosting/1.20.1"), "patched hosting");
+    Assert(apiVersion >= new Version(1, 20, 1), "patched OpenTelemetry.Api floor");
     Assert(!libraries.Any(n => n.StartsWith("Microsoft.AspNetCore.Mvc.Core/", StringComparison.OrdinalIgnoreCase) ||
         n.StartsWith("Microsoft.AspNetCore.HttpOverrides/", StringComparison.OrdinalIgnoreCase) ||
         n.StartsWith("Microsoft.AspNetCore.Http.Abstractions/", StringComparison.OrdinalIgnoreCase)), "no legacy ASP.NET packages");

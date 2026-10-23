@@ -302,6 +302,68 @@ internal static class UpgradeChecks
                 if (Directory.Exists(fixtureDir)) Directory.Delete(fixtureDir, true);
             }
         }
+
+        // Case 5: Failed action audit retry success (action fails, audit retries and succeeds on attempt 2)
+        {
+            await using var responder = await EphemeralAuditResponder.StartAsync(callIndex =>
+                callIndex == 1 ? StatusCode.Unavailable : StatusCode.OK);
+
+            var fixtureDir = Path.Combine(tempRoot, $"blocks-fs-upgrade-failed-action-{Guid.NewGuid():N}");
+            var storageDir = Path.Combine(fixtureDir, "storage");
+            Directory.CreateDirectory(storageDir);
+
+            var actorId = Guid.NewGuid();
+            var jwt = CreateJwt(actorId, "file_failed_action_actor");
+
+            var fileApp = FileServiceHost.Build(new[]
+            {
+                "--urls", "http://127.0.0.1:0",
+                "--GrpcClients:SystemService", responder.Url,
+                "--contentRoot", fixtureDir,
+                "--FileStorage:RootPath", storageDir,
+                "--Jwt:Issuer", JwtIssuer,
+                "--Jwt:Audience", JwtAudience,
+                "--Jwt:Key", JwtSecret,
+                "--Environment", "Production"
+            });
+            await fileApp.StartAsync();
+            var baseUrl = fileApp.Urls.First();
+
+            try
+            {
+                using var client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+                var folderGuid = Guid.NewGuid();
+                using var multipart = new MultipartFormDataContent();
+                // No files -> Insert throws BusinessException("Danh sách tệp rỗng", 400)
+                multipart.Add(new StringContent(folderGuid.ToString("D")), "FolderName");
+
+                using var resp = await client.PostAsync("/api/UploadFile", multipart);
+                Require(resp.IsSuccessStatusCode, "HTTP envelope retained on business failure");
+                var env = await resp.Content.ReadFromJsonAsync<BaseResponse>();
+                Require(env?.Success == false, "application failure returned");
+
+                var delivered = await responder.WaitForCallAsync(TimeSpan.FromSeconds(10));
+                Require(delivered, "audit delivered on retry for failed action");
+                Require(responder.AuditCalls == 2, $"transport attempts must be 2, got {responder.AuditCalls}");
+
+                var reqs = responder.ReceivedRequests;
+                Require(reqs.Count > 0, "request captured");
+                var lastReq = reqs.Last();
+                Require(lastReq.UserId == actorId.ToString("D"), "actor UserId matches JWT claim");
+                Require(lastReq.UserName == "file_failed_action_actor", "actor UserName matches JWT claim");
+                Require(lastReq.ServiceName == "FileService", "ServiceName is FileService");
+                Require(!lastReq.IsSuccess, "audit record marks failed action");
+            }
+            finally
+            {
+                await responder.DrainAsync(TimeSpan.FromSeconds(2));
+                await fileApp.StopAsync();
+                await fileApp.DisposeAsync();
+                if (Directory.Exists(fixtureDir)) Directory.Delete(fixtureDir, true);
+            }
+        }
     }
 
     private sealed class TestLogSink : ILoggerProvider, ILogger
