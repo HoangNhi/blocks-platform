@@ -7,7 +7,7 @@ using Blocks.SystemService.Infrastructure.Data;
 using Blocks.SystemService.Infrastructure.Validation;
 using AutoDependencyRegistration;
 using AutoMapper;
-using FluentValidation.AspNetCore;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,6 +52,8 @@ namespace Blocks.SystemService.Configs
             });
 
             //FLUENT
+            builder.Services.AddValidatorsFromAssemblyContaining<UserRequestValidator>();
+
             builder.Services.Configure<ApiBehaviorOptions>(options =>
             {
                 options.InvalidModelStateResponseFactory = context =>
@@ -60,13 +62,18 @@ namespace Blocks.SystemService.Configs
                     return new OkObjectResult(new BaseResponse(false, 400, errorMsg));
                 };
             });
-            builder.Services.AddMvc()
-                .AddFluentValidation(config =>
+            builder.Services.AddMvc(options =>
+            {
+                options.Filters.Add<FluentValidationActionFilter>(-2001);
+                options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+                for (int i = options.ModelValidatorProviders.Count - 1; i >= 0; i--)
                 {
-                    config.ImplicitlyValidateChildProperties = true;
-                    config.DisableDataAnnotationsValidation = true;
-                    config.RegisterValidatorsFromAssemblyContaining<UserRequestValidator>();
-                })
+                    if (options.ModelValidatorProviders[i].GetType().FullName == "Microsoft.AspNetCore.Mvc.DataAnnotations.DataAnnotationsModelValidatorProvider")
+                    {
+                        options.ModelValidatorProviders.RemoveAt(i);
+                    }
+                }
+            })
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.PropertyNamingPolicy = null;

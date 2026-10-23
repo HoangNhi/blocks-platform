@@ -9,9 +9,10 @@ namespace Blocks.SystemService.DTOs.CoreFeature.Permission.Requests
 
     public class UpdatePermissionRequestValidator : AbstractValidator<UpdatePermissionsRequest>
     {
-        public UpdatePermissionRequestValidator()
+        public UpdatePermissionRequestValidator(IValidator<PermissionRequest> permissionValidator)
         {
             RuleFor(r => r.Permissions).NotEmpty().WithMessage("Danh sách phân quyền không được rỗng");
+            RuleForEach(x => x.Permissions).SetValidator(permissionValidator);
         }
     }
 }

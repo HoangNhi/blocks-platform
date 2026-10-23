@@ -24,6 +24,7 @@ using Blocks.SystemService.Infrastructure.Services;
 using Blocks.SystemService.Middlewares;
 using Blocks.SystemService.Services.CoreFeature.Role;
 using Blocks.SystemService.Services.CoreFeature.User;
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -55,6 +56,11 @@ internal static class ValidationChecks
         await valid_request_reaches_action_once();
         await probe_mvc_annotations_and_prefixes();
         await audit_failure_records_failed_operation();
+        await async_validator_is_awaited_once();
+        await request_abort_reaches_validator();
+        await validator_infrastructure_error_is_not_input400();
+        await dataannotations_stay_disabled();
+        await two_dtos_query_prefixes_and_no_double_validation();
 
         Console.WriteLine("PASS SystemService validation characterization checks");
     }
@@ -103,7 +109,7 @@ internal static class ValidationChecks
         services.AddSingleton<T>(implementation);
     }
 
-    private static async Task<(WebApplication app, FakeRoleService roleService, FakeUserService userService, FakeAuditLogWriter auditWriter)> CreateTestHostAsync()
+    private static async Task<(WebApplication app, FakeRoleService roleService, FakeUserService userService, FakeAuditLogWriter auditWriter, ValidationProbeState probeState)> CreateTestHostAsync()
     {
         var tempContentRoot = Path.Combine(Path.GetTempPath(), "system-val-checks-" + Guid.NewGuid());
         Directory.CreateDirectory(tempContentRoot);
@@ -136,9 +142,17 @@ internal static class ValidationChecks
         builder.AddServiceDefaults();
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 
+        var probeState = new ValidationProbeState();
+        builder.Services.AddSingleton(probeState);
+        builder.Services.AddScoped<IValidator<AsyncProbeDto>, AsyncProbeValidator>();
+        builder.Services.AddScoped<IValidator<CancelProbeDto>, CancelProbeValidator>();
+        builder.Services.AddScoped<IValidator<InfraErrorProbeDto>, InfraErrorProbeValidator>();
+        builder.Services.AddScoped<IValidator<TwoDtosProbeDto>, TwoDtosProbeValidator>();
+
         builder.Services.AddControllers(options =>
         {
             options.Filters.AddService<AuditActionFilter>();
+            options.ModelValidatorProviders.Add(new TestCustomModelValidatorProvider(probeState));
         })
         .AddApplicationPart(typeof(RoleController).Assembly)
         .AddApplicationPart(typeof(ValidationChecks).Assembly)
@@ -148,6 +162,22 @@ internal static class ValidationChecks
 
         builder.ExecuteConfigService();
         builder.ExecuteConfigAuthentication();
+
+        builder.Services.Configure<ApiBehaviorOptions>(options =>
+        {
+            var existingFactory = options.InvalidModelStateResponseFactory;
+            options.InvalidModelStateResponseFactory = context =>
+            {
+                lock (probeState.LastModelStateKeys)
+                {
+                    probeState.LastModelStateKeys.Clear();
+                    probeState.LastModelStateKeys.AddRange(context.ModelState.Keys);
+                }
+                return existingFactory != null
+                    ? existingFactory(context)
+                    : new OkObjectResult(new BaseResponse(false, 400, Blocks.Shared.Common.CommonFunc.GetModelStateAPI(context.ModelState)));
+            };
+        });
 
         var fakeRoleService = new FakeRoleService();
         var fakeUserService = new FakeUserService();
@@ -164,12 +194,12 @@ internal static class ValidationChecks
         app.MapControllers();
 
         await app.StartAsync();
-        return (app, fakeRoleService, fakeUserService, fakeAuditWriter);
+        return (app, fakeRoleService, fakeUserService, fakeAuditWriter, probeState);
     }
 
     private static async Task single_error_keeps_vietnamese_envelope()
     {
-        var (app, fakeRoleService, fakeUserService, fakeAuditWriter) = await CreateTestHostAsync();
+        var (app, fakeRoleService, fakeUserService, fakeAuditWriter, _) = await CreateTestHostAsync();
 
         try
         {
@@ -222,7 +252,7 @@ internal static class ValidationChecks
 
     private static async Task binding_errors_keep_baseline()
     {
-        var (app, fakeRoleService, _, _) = await CreateTestHostAsync();
+        var (app, fakeRoleService, _, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -263,7 +293,7 @@ internal static class ValidationChecks
 
     private static async Task multiple_errors_keep_first_message()
     {
-        var (app, _, _, _) = await CreateTestHostAsync();
+        var (app, _, _, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -295,7 +325,7 @@ internal static class ValidationChecks
 
     private static async Task nested_permissions_keep_baseline()
     {
-        var (app, fakeRoleService, _, _) = await CreateTestHostAsync();
+        var (app, fakeRoleService, _, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -370,7 +400,7 @@ internal static class ValidationChecks
 
     private static async Task unregistered_shared_validator_stays_inactive()
     {
-        var (app, _, fakeUserService, _) = await CreateTestHostAsync();
+        var (app, _, fakeUserService, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -401,7 +431,7 @@ internal static class ValidationChecks
 
     private static async Task permission_precedes_validation()
     {
-        var (app, fakeRoleService, fakeUserService, fakeAuditWriter) = await CreateTestHostAsync();
+        var (app, fakeRoleService, fakeUserService, fakeAuditWriter, _) = await CreateTestHostAsync();
 
         try
         {
@@ -483,7 +513,7 @@ internal static class ValidationChecks
 
     private static async Task valid_request_reaches_action_once()
     {
-        var (app, fakeRoleService, _, _) = await CreateTestHostAsync();
+        var (app, fakeRoleService, _, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -512,7 +542,7 @@ internal static class ValidationChecks
 
     private static async Task probe_mvc_annotations_and_prefixes()
     {
-        var (app, _, _, _) = await CreateTestHostAsync();
+        var (app, _, _, _, _) = await CreateTestHostAsync();
 
         try
         {
@@ -556,7 +586,7 @@ internal static class ValidationChecks
 
     private static async Task audit_failure_records_failed_operation()
     {
-        var (app, fakeRoleService, _, fakeAuditWriter) = await CreateTestHostAsync();
+        var (app, fakeRoleService, _, fakeAuditWriter, _) = await CreateTestHostAsync();
         fakeRoleService.ThrowBusinessExceptionOnInsert = true;
 
         var actorId = Guid.NewGuid();
@@ -587,6 +617,182 @@ internal static class ValidationChecks
             Require(lastLog.Action == "CREATE", "Action is CREATE");
             Require(lastLog.IsSuccess == false, "IsSuccess is false");
             Require(lastLog.ErrorMessage == "Vai trò đã tồn tại", "ErrorMessage matches business exception");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task async_validator_is_awaited_once()
+    {
+        var (app, _, _, _, state) = await CreateTestHostAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            using var resp = await client.PostAsJsonAsync("/__checks/probe/async-validation", new AsyncProbeDto { Value = "invalid" });
+
+            Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+            using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var body = bodyDoc.RootElement;
+            Require(!body.GetProperty("Success").GetBoolean(), "invalid input rejected");
+            Require(body.GetProperty("StatusCode").GetInt32() == 400, "application 400");
+            Require(body.GetProperty("Message").GetString() == "Async validation failed", "async validator message retained");
+            Require(state.AsyncRuleCalls == 1 && state.MutationCalls == 0, "async rule awaited once");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task request_abort_reaches_validator()
+    {
+        var (app, _, _, _, state) = await CreateTestHostAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            using var cts = new CancellationTokenSource();
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/__checks/probe/cancel-validation")
+            {
+                Content = new StringContent("{\"Value\":\"cancel\"}", Encoding.UTF8, "application/json")
+            };
+            var sendTask = client.SendAsync(req, cts.Token);
+            var started = await Task.WhenAny(state.CancelStarted.Task, Task.Delay(5000));
+            Require(started == state.CancelStarted.Task, "validator started before cancel");
+
+            cts.Cancel();
+            try
+            {
+                await sendTask;
+            }
+            catch (Exception)
+            {
+            }
+
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed < TimeSpan.FromSeconds(3) && !state.CancelledTokenObserved)
+            {
+                await Task.Delay(20);
+            }
+
+            Require(state.CancelledTokenObserved && state.MutationCalls == 0, "request cancellation propagated");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task validator_infrastructure_error_is_not_input400()
+    {
+        var (app, _, _, _, state) = await CreateTestHostAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            using var resp = await client.PostAsJsonAsync("/__checks/probe/infra-error", new InfraErrorProbeDto { Value = "test" });
+
+            using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var body = bodyDoc.RootElement;
+            Require(state.MutationCalls == 0, "mutation calls 0 on infra error");
+            Require(!body.GetProperty("Success").GetBoolean(), "failure returned");
+            Require(body.GetProperty("StatusCode").GetInt32() != 400, "infrastructure failure not input error");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task dataannotations_stay_disabled()
+    {
+        var (app, _, _, _, state) = await CreateTestHostAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+
+            // 1. [Required] probe
+            using (var resp = await client.PostAsJsonAsync("/__checks/probe/required", new { Name = (string?)null }))
+            {
+                Require(resp.StatusCode == HttpStatusCode.OK, "probe [Required] HTTP envelope");
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                Require(doc.RootElement.GetProperty("Success").GetBoolean(),
+                    "DisableDataAnnotationsValidation leaves [Required] inactive without FluentValidation rule");
+            }
+
+            // 2. Custom model validator provider retained
+            using (var resp = await client.PostAsJsonAsync("/__checks/probe/custom-provider", new CustomProviderProbeDto { Value = "test" }))
+            {
+                Require(resp.StatusCode == HttpStatusCode.OK, "custom provider probe HTTP 200");
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                Require(doc.RootElement.GetProperty("Success").GetBoolean(), "custom provider probe success");
+                Require(state.CustomProviderCalls > 0, "custom model validator provider was retained and executed");
+            }
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task two_dtos_query_prefixes_and_no_double_validation()
+    {
+        var (app, _, _, _, state) = await CreateTestHostAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+
+            // Subcase A: first valid, second invalid -> error on second
+            {
+                using var resp = await client.GetAsync("/__checks/probe/two-dtos?first.Value=hello&second.Value=");
+                Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(!body.GetProperty("Success").GetBoolean(), "invalid second dto rejected");
+                Require(body.GetProperty("StatusCode").GetInt32() == 400, "application 400");
+                Require(body.GetProperty("Message").GetString() == "Giá trị không được để trống", "error message retained");
+                Require(state.MutationCalls == 0, "no action mutation on failure");
+                lock (state.LastModelStateKeys)
+                {
+                    Require(state.LastModelStateKeys.Contains("second.Value") || state.LastModelStateKeys.Contains("second"),
+                        "error key matches second parameter prefix");
+                }
+            }
+
+            // Subcase B: first invalid, second valid -> error on first
+            {
+                using var resp = await client.GetAsync("/__checks/probe/two-dtos?first.Value=&second.Value=world");
+                Require(resp.StatusCode == HttpStatusCode.OK, "HTTP envelope retained");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(!body.GetProperty("Success").GetBoolean(), "invalid first dto rejected");
+                Require(body.GetProperty("StatusCode").GetInt32() == 400, "application 400");
+                Require(body.GetProperty("Message").GetString() == "Giá trị không được để trống", "error message retained");
+                Require(state.MutationCalls == 0, "no action mutation on failure");
+                lock (state.LastModelStateKeys)
+                {
+                    Require(state.LastModelStateKeys.Contains("first.Value") || state.LastModelStateKeys.Contains("first"),
+                        "error key matches first parameter prefix");
+                }
+            }
+
+            // Subcase C: both valid -> success, action called once, exactly 2 validation executions
+            {
+                state.TwoDtosValidationCalls = 0;
+                using var resp = await client.GetAsync("/__checks/probe/two-dtos?first.Value=hello&second.Value=world");
+                Require(resp.StatusCode == HttpStatusCode.OK, "HTTP 200 on valid inputs");
+                using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var body = bodyDoc.RootElement;
+                Require(body.GetProperty("Success").GetBoolean(), "both dtos valid succeeded");
+                Require(body.GetProperty("StatusCode").GetInt32() == 200, "application 200");
+                Require(state.MutationCalls == 1, "action called exactly once");
+                Require(state.TwoDtosValidationCalls == 2, "both parameters validated once without double validation");
+            }
         }
         finally
         {
@@ -725,6 +931,13 @@ internal static class ValidationChecks
     [ApiExplorerSettings(IgnoreApi = true)]
     public sealed class ValidationProbeController : ControllerBase
     {
+        private readonly ValidationProbeState _state;
+
+        public ValidationProbeController(ValidationProbeState state)
+        {
+            _state = state;
+        }
+
         [HttpPost("required")]
         public IActionResult CheckRequired([FromBody] RequiredModel model) =>
             Ok(new BaseResponse<string> { Data = model.Name, Success = true });
@@ -738,6 +951,43 @@ internal static class ValidationChecks
             [FromQuery(Name = "filter")] ProbeFilterDto filter,
             [FromQuery(Name = "paging")] ProbePagingDto paging) =>
             Ok(new BaseResponse<object> { Data = new { filter = filter?.Keyword, page = paging?.PageIndex }, Success = true });
+
+        [HttpPost("async-validation")]
+        public IActionResult CheckAsync([FromBody] AsyncProbeDto dto)
+        {
+            Interlocked.Increment(ref _state.MutationCalls);
+            return Ok(new BaseResponse<string> { Data = dto.Value, Success = true });
+        }
+
+        [HttpPost("cancel-validation")]
+        public IActionResult CheckCancel([FromBody] CancelProbeDto dto)
+        {
+            Interlocked.Increment(ref _state.MutationCalls);
+            return Ok(new BaseResponse<string> { Data = dto.Value, Success = true });
+        }
+
+        [HttpPost("infra-error")]
+        public IActionResult CheckInfraError([FromBody] InfraErrorProbeDto dto)
+        {
+            Interlocked.Increment(ref _state.MutationCalls);
+            return Ok(new BaseResponse<string> { Data = dto.Value, Success = true });
+        }
+
+        [HttpGet("two-dtos")]
+        public IActionResult CheckTwoDtos(
+            [FromQuery(Name = "first")] TwoDtosProbeDto first,
+            [FromQuery(Name = "second")] TwoDtosProbeDto second)
+        {
+            Interlocked.Increment(ref _state.MutationCalls);
+            return Ok(new BaseResponse<object> { Data = new { first = first?.Value, second = second?.Value }, Success = true });
+        }
+
+        [HttpPost("custom-provider")]
+        public IActionResult CheckCustomProvider([FromBody] CustomProviderProbeDto dto)
+        {
+            Interlocked.Increment(ref _state.MutationCalls);
+            return Ok(new BaseResponse<string> { Data = dto.Value, Success = true });
+        }
     }
 
     public sealed class RequiredModel
@@ -759,5 +1009,114 @@ internal static class ValidationChecks
     public sealed class ProbePagingDto
     {
         public int PageIndex { get; set; } = 1;
+    }
+
+    public sealed class ValidationProbeState
+    {
+        public int AsyncRuleCalls;
+        public int MutationCalls;
+        public int CustomProviderCalls;
+        public int TwoDtosValidationCalls;
+        public bool CancelledTokenObserved;
+        public readonly TaskCompletionSource<bool> CancelStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly List<string> LastModelStateKeys = new();
+    }
+
+    public sealed class AsyncProbeDto
+    {
+        public string? Value { get; set; }
+    }
+
+    public sealed class AsyncProbeValidator : AbstractValidator<AsyncProbeDto>
+    {
+        public AsyncProbeValidator(ValidationProbeState state)
+        {
+            RuleFor(x => x.Value).MustAsync(async (val, ct) =>
+            {
+                Interlocked.Increment(ref state.AsyncRuleCalls);
+                await Task.Delay(20, ct);
+                return val == "valid";
+            }).WithMessage("Async validation failed");
+        }
+    }
+
+    public sealed class CancelProbeDto
+    {
+        public string? Value { get; set; }
+    }
+
+    public sealed class CancelProbeValidator : AbstractValidator<CancelProbeDto>
+    {
+        public CancelProbeValidator(ValidationProbeState state)
+        {
+            RuleFor(x => x.Value).MustAsync(async (val, ct) =>
+            {
+                state.CancelStarted.TrySetResult(true);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), ct);
+                    return true;
+                }
+                catch (OperationCanceledException)
+                {
+                    state.CancelledTokenObserved = true;
+                    throw;
+                }
+            });
+        }
+    }
+
+    public sealed class InfraErrorProbeDto
+    {
+        public string? Value { get; set; }
+    }
+
+    public sealed class InfraErrorProbeValidator : AbstractValidator<InfraErrorProbeDto>
+    {
+        public InfraErrorProbeValidator()
+        {
+            RuleFor(x => x.Value).Custom((val, context) =>
+            {
+                throw new InvalidOperationException("DB connection broken in validator");
+            });
+        }
+    }
+
+    public sealed class TwoDtosProbeDto
+    {
+        public string? Value { get; set; }
+    }
+
+    public sealed class TwoDtosProbeValidator : AbstractValidator<TwoDtosProbeDto>
+    {
+        public TwoDtosProbeValidator(ValidationProbeState state)
+        {
+            RuleFor(x => x.Value)
+                .NotEmpty().WithMessage("Giá trị không được để trống")
+                .Must((dto, val) =>
+                {
+                    Interlocked.Increment(ref state.TwoDtosValidationCalls);
+                    return true;
+                });
+        }
+    }
+
+    public sealed class CustomProviderProbeDto
+    {
+        public string? Value { get; set; }
+    }
+
+    public sealed class TestCustomModelValidatorProvider : Microsoft.AspNetCore.Mvc.ModelBinding.Validation.IModelValidatorProvider
+    {
+        private readonly ValidationProbeState _state;
+        public TestCustomModelValidatorProvider(ValidationProbeState state) => _state = state;
+
+        public void CreateValidators(Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ModelValidatorProviderContext context)
+        {
+            if (context.ModelMetadata.ModelType == typeof(CustomProviderProbeDto))
+            {
+                Interlocked.Increment(ref _state.CustomProviderCalls);
+            }
+        }
     }
 }
