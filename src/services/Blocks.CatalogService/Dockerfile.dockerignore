@@ -1,4 +1,5 @@
 **
+!global.json
 !src/platform/Blocks.Shared/**
 !src/platform/Blocks.ServiceDefaults/**
 !src/services/Blocks.CatalogService/**

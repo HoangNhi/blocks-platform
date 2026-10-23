@@ -12,6 +12,7 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+COPY ["global.json", "./"]
 COPY ["src/platform/Blocks.ServiceDefaults/Blocks.ServiceDefaults.csproj", "platform/Blocks.ServiceDefaults/"]
 COPY ["src/platform/Blocks.Shared/Blocks.Shared.csproj", "platform/Blocks.Shared/"]
 COPY ["src/services/Blocks.SystemService/Blocks.SystemService.csproj", "services/Blocks.SystemService/"]

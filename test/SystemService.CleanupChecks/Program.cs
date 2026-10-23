@@ -45,7 +45,7 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/SystemService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: auth, contract, runtime, telemetry, validation");
+    Console.Error.WriteLine("Supported modes: auth, contract, platform, runtime, telemetry, validation");
     return 1;
 }
 
@@ -61,6 +61,19 @@ if (mode == "auth")
     catch (Exception ex)
     {
         Console.Error.WriteLine($"Fatal error in auth checks: {ex.Message}");
+        return 1;
+    }
+}
+else if (mode == "platform")
+{
+    try
+    {
+        await PlatformChecks.RunAsync();
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"platform check failed: {ex.Message}");
         return 1;
     }
 }
