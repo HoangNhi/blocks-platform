@@ -54,6 +54,7 @@ internal static class FileBoundaryChecks
         await check("boundary_enforces_exact_transforms_and_rejects_bypass", CheckTransformsAndBypassAsync);
         await check("boundary_blocks_unauthorized_paths_methods_and_rpc", CheckPathsMethodsAndRpcBlockingAsync);
         await check("boundary_runtime_config_reload_blocks_malicious_transform", CheckRuntimeConfigReloadAsync);
+        await check("boundary_reload_destination_alias_never_exposes_private_path", CheckReloadDestinationAliasNeverExposesPrivatePathAsync);
         await check("boundary_static_sentinels_in_webroot_and_storage_not_served", CheckStaticSentinelsAsync);
         await check("boundary_avatar_delivery_auth_headers_and_payload", CheckAvatarDeliveryAuthAsync);
         await check("boundary_native_http2_and_grpc_web_rpc_blocked_at_gateway", CheckRpcBlockedThroughGatewayAsync);
@@ -97,6 +98,7 @@ internal static class FileBoundaryChecks
     private sealed class DownstreamRecorder : IAsyncDisposable
     {
         private readonly WebApplication _app;
+        private readonly HttpClient? _forwardClient;
         private int _totalRequests;
         private int _rpcRequests;
         private int _httpRequests;
@@ -106,12 +108,13 @@ internal static class FileBoundaryChecks
         public int HttpRequests => Volatile.Read(ref _httpRequests);
         public string Url { get; private set; } = string.Empty;
 
-        private DownstreamRecorder(WebApplication app)
+        private DownstreamRecorder(WebApplication app, HttpClient? forwardClient)
         {
             _app = app;
+            _forwardClient = forwardClient;
         }
 
-        public static async Task<DownstreamRecorder> StartAsync()
+        public static async Task<DownstreamRecorder> StartAsync(string? forwardToUrl = null)
         {
             var builder = WebApplication.CreateBuilder(new[] { "--urls", "http://127.0.0.1:0" });
             builder.WebHost.ConfigureKestrel(k =>
@@ -119,8 +122,14 @@ internal static class FileBoundaryChecks
                 k.ConfigureEndpointDefaults(lo => lo.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2);
             });
 
+            HttpClient? forwardClient = null;
+            if (!string.IsNullOrEmpty(forwardToUrl))
+            {
+                forwardClient = new HttpClient { BaseAddress = new Uri(forwardToUrl) };
+            }
+
             var app = builder.Build();
-            var recorder = new DownstreamRecorder(app);
+            var recorder = new DownstreamRecorder(app, forwardClient);
 
             app.Run(async context =>
             {
@@ -136,6 +145,42 @@ internal static class FileBoundaryChecks
                 else
                 {
                     Interlocked.Increment(ref recorder._httpRequests);
+                }
+
+                if (recorder._forwardClient != null)
+                {
+                    var targetUri = context.Request.Path + context.Request.QueryString;
+                    using var fwdReq = new HttpRequestMessage(new HttpMethod(context.Request.Method), targetUri);
+                    foreach (var header in context.Request.Headers)
+                    {
+                        fwdReq.Headers.TryAddWithoutValidation(header.Key, (IEnumerable<string>)header.Value);
+                    }
+                    if (context.Request.ContentLength > 0 || !string.IsNullOrEmpty(context.Request.ContentType))
+                    {
+                        var ms = new MemoryStream();
+                        await context.Request.Body.CopyToAsync(ms);
+                        ms.Position = 0;
+                        fwdReq.Content = new StreamContent(ms);
+                        if (!string.IsNullOrEmpty(context.Request.ContentType))
+                        {
+                            fwdReq.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(context.Request.ContentType);
+                        }
+                    }
+
+                    using var fwdResp = await recorder._forwardClient.SendAsync(fwdReq);
+                    context.Response.StatusCode = (int)fwdResp.StatusCode;
+                    foreach (var header in fwdResp.Headers)
+                    {
+                        if (string.Equals(header.Key, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)) continue;
+                        context.Response.Headers[header.Key] = header.Value.ToArray();
+                    }
+                    foreach (var header in fwdResp.Content.Headers)
+                    {
+                        if (string.Equals(header.Key, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)) continue;
+                        context.Response.Headers[header.Key] = header.Value.ToArray();
+                    }
+                    await fwdResp.Content.CopyToAsync(context.Response.Body);
+                    return;
                 }
 
                 context.Response.StatusCode = StatusCodes.Status200OK;
@@ -156,6 +201,7 @@ internal static class FileBoundaryChecks
 
         public async ValueTask DisposeAsync()
         {
+            _forwardClient?.Dispose();
             await _app.StopAsync();
             await _app.DisposeAsync();
         }
@@ -740,6 +786,304 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
             Directory.Delete(fixtureDir, recursive: true);
         }
     }
+
+    private static async Task CheckReloadDestinationAliasNeverExposesPrivatePathAsync()
+    {
+        var tempRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));
+        var fixtureDir = Path.Combine(tempRoot, $"blocks-gw-reload-alias-{Guid.NewGuid():N}");
+        var storageDir = Path.Combine(fixtureDir, "storage");
+        var avatarsDir = Path.Combine(storageDir, "Avatars");
+        Directory.CreateDirectory(avatarsDir);
+
+        var avatarGuid = Guid.NewGuid();
+        var avatarFile = Path.Combine(avatarsDir, $"{avatarGuid:D}.png");
+        await File.WriteAllBytesAsync(avatarFile, TinyPng);
+
+        var otherBuilder = WebApplication.CreateBuilder(new[] { "--urls", "http://127.0.0.1:0" });
+        var otherApp = otherBuilder.Build();
+        otherApp.MapGet("/test", () => "other cluster ok");
+        await otherApp.StartAsync();
+        var otherUrl = otherApp.Urls.First();
+
+        var fileApp = FileServiceHost.Build(new[]
+        {
+            "--urls", "http://127.0.0.1:0",
+            "--contentRoot", fixtureDir,
+            "--FileStorage:RootPath", storageDir,
+            "--Jwt:Issuer", JwtIssuer,
+            "--Jwt:Audience", JwtAudience,
+            "--Jwt:Key", JwtSecret,
+            "--Environment", "Production"
+        });
+        await fileApp.StartAsync();
+        var fileUrl = fileApp.Urls.First();
+
+        await using var downstream = await DownstreamRecorder.StartAsync(fileUrl);
+
+        var initialConfig = new
+        {
+            FileProxy = new { ClusterId = "fileCluster" },
+            ReverseProxy = new
+            {
+                Routes = new Dictionary<string, object>
+                {
+                    ["fileRoute"] = new
+                    {
+                        ClusterId = "fileCluster",
+                        Match = new { Path = "/File/{**catch-all}" },
+                        Transforms = new[] { new Dictionary<string, string> { ["PathRemovePrefix"] = "/File" } }
+                    },
+                    ["otherRoute"] = new
+                    {
+                        ClusterId = "otherCluster",
+                        Match = new { Path = "/Other/{**catch-all}" },
+                        Transforms = new[] { new Dictionary<string, string> { ["PathRemovePrefix"] = "/Other" } }
+                    }
+                },
+                Clusters = new Dictionary<string, object>
+                {
+                    ["fileCluster"] = new
+                    {
+                        Destinations = new Dictionary<string, object>
+                        {
+                            ["d1"] = new { Address = downstream.Url }
+                        }
+                    },
+                    ["otherCluster"] = new
+                    {
+                        Destinations = new Dictionary<string, object>
+                        {
+                            ["dOther"] = new { Address = otherUrl }
+                        }
+                    }
+                }
+            }
+        };
+
+        var configFile = Path.Combine(fixtureDir, "appsettings.Production.json");
+        await File.WriteAllTextAsync(configFile, JsonSerializer.Serialize(initialConfig));
+
+        var gwApp = GatewayHost.Build(new[]
+        {
+            "--urls", "http://127.0.0.1:0",
+            "--contentRoot", fixtureDir,
+            "--Kestrel:EndpointDefaults:Protocols", "Http1",
+            "--Environment", "Production"
+        });
+        await gwApp.StartAsync();
+        var gwUrl = gwApp.Urls.First();
+        using var client = new HttpClient { BaseAddress = new Uri(gwUrl) };
+
+        var gwAppH2 = GatewayHost.Build(new[]
+        {
+            "--urls", "http://127.0.0.1:0",
+            "--contentRoot", fixtureDir,
+            "--Kestrel:EndpointDefaults:Protocols", "Http2",
+            "--Environment", "Production"
+        });
+        await gwAppH2.StartAsync();
+        var gwH2Url = gwAppH2.Urls.First();
+
+        try
+        {
+            var initOtherResp = await client.GetAsync("/Other/test");
+            Require(initOtherResp.IsSuccessStatusCode, "other cluster should route initially");
+            var initOtherText = await initOtherResp.Content.ReadAsStringAsync();
+            Require(initOtherText == "other cluster ok", "other cluster content must match initially");
+
+            // Reload configuration with destination alias and route alias
+            var reloadedConfig = new
+            {
+                FileProxy = new { ClusterId = "fileCluster" },
+                ReverseProxy = new
+                {
+                    Routes = new Dictionary<string, object>
+                    {
+                        ["fileRoute"] = new
+                        {
+                            ClusterId = "fileCluster",
+                            Match = new { Path = "/File/{**catch-all}" },
+                            Transforms = new[] { new Dictionary<string, string> { ["PathRemovePrefix"] = "/File" } }
+                        },
+                        ["aliasRoute"] = new
+                        {
+                            ClusterId = "fileCluster",
+                            Match = new { Path = "/FileAlias/{**catch-all}" },
+                            Transforms = new[] { new Dictionary<string, string> { ["PathRemovePrefix"] = "/FileAlias" } }
+                        },
+                        ["otherRoute"] = new
+                        {
+                            ClusterId = "otherCluster",
+                            Match = new { Path = "/Other/{**catch-all}" },
+                            Transforms = new[] { new Dictionary<string, string> { ["PathRemovePrefix"] = "/Other" } }
+                        }
+                    },
+                    Clusters = new Dictionary<string, object>
+                    {
+                        ["fileCluster"] = new
+                        {
+                            Destinations = new Dictionary<string, object>
+                            {
+                                ["d1"] = new { Address = downstream.Url },
+                                ["dAlias"] = new { Address = downstream.Url }
+                            }
+                        },
+                        ["otherCluster"] = new
+                        {
+                            Destinations = new Dictionary<string, object>
+                            {
+                                ["dOther"] = new { Address = otherUrl }
+                            }
+                        }
+                    }
+                }
+            };
+            await File.WriteAllTextAsync(configFile, JsonSerializer.Serialize(reloadedConfig));
+
+            var proxyState = gwApp.Services.GetRequiredService<IProxyStateLookup>();
+            Require(proxyState != null, "IProxyStateLookup must be available from YARP runtime");
+
+            var configRoot = (IConfigurationRoot)gwApp.Services.GetRequiredService<IConfiguration>();
+            configRoot.Reload();
+            var configRootH2 = (IConfigurationRoot)gwAppH2.Services.GetRequiredService<IConfiguration>();
+            configRootH2.Reload();
+
+            var sw = Stopwatch.StartNew();
+            var reloaded = false;
+            while (sw.ElapsedMilliseconds < 5000)
+            {
+                if (proxyState.TryGetRoute("aliasRoute", out _) &&
+                    proxyState.TryGetCluster("fileCluster", out var clusterModel) &&
+                    clusterModel?.Destinations?.ContainsKey("dAlias") == true)
+                {
+                    reloaded = true;
+                    break;
+                }
+                await Task.Delay(20);
+            }
+            Require(reloaded, "YARP configuration did not reload destination alias and route within 5s");
+
+            // 1. Cluster outside File still routes as baseline
+            downstream.Reset();
+            var otherResp = await client.GetAsync("/Other/test");
+            Require(otherResp.IsSuccessStatusCode, "other cluster should route after reload");
+            var otherText = await otherResp.Content.ReadAsStringAsync();
+            Require(otherText == "other cluster ok", "other cluster content must match after reload");
+            Require(downstream.TotalRequests == 0, "other cluster request must not reach downstream");
+
+            // 2. Private paths and aliases must be blocked with 403 envelope and zero downstream calls
+            var privatePaths = new[]
+            {
+                "/File/Temp",
+                "/File/Temp/sentinel.txt",
+                "/File/Files",
+                "/File/Files/secret.txt",
+                "/File/Deleted",
+                "/File/Deleted/document.pdf",
+                "/FileAlias/Temp",
+                "/FileAlias/Temp/sentinel.txt",
+                "/FileAlias/Files",
+                "/FileAlias/Files/secret.txt",
+                "/FileAlias/Deleted",
+                "/FileAlias/Deleted/document.pdf",
+                "/FileAlias/api/UploadFile"
+            };
+
+            foreach (var privPath in privatePaths)
+            {
+                downstream.Reset();
+                var privResp = await client.GetAsync(privPath);
+                var privJson = await privResp.Content.ReadAsStringAsync();
+                var privEnv = JsonSerializer.Deserialize<BaseResponse>(privJson);
+                Require(privEnv != null && privEnv.StatusCode == 403 && !privEnv.Success, $"private path {privPath} must be blocked with 403 envelope");
+                Require(downstream.TotalRequests == 0, "reload cannot bypass private boundary");
+                Require(downstream.RpcRequests == 0, "reload cannot expose RPC");
+            }
+
+            // 3. RPC over HTTP/1.1 and gRPC-Web must be blocked
+            foreach (var rpcPath in new[]
+            {
+                "/File/file.FileProto/UploadData",
+                "/File/file.FileProto/PreviewFile",
+                "/FileAlias/file.FileProto/UploadData"
+            })
+            {
+                downstream.Reset();
+                using var rpcMsg = new HttpRequestMessage(HttpMethod.Post, rpcPath)
+                {
+                    Content = new ByteArrayContent(Array.Empty<byte>())
+                };
+                rpcMsg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
+                var rpcResp = await client.SendAsync(rpcMsg);
+                var rpcJson = await rpcResp.Content.ReadAsStringAsync();
+                var rpcEnv = JsonSerializer.Deserialize<BaseResponse>(rpcJson);
+                Require(rpcEnv != null && rpcEnv.StatusCode == 403 && !rpcEnv.Success, $"RPC path {rpcPath} must be 403");
+                Require(downstream.TotalRequests == 0, "reload cannot bypass private boundary");
+                Require(downstream.RpcRequests == 0, "reload cannot expose RPC");
+            }
+
+            // 4. Native HTTP/2 RPC blocked at gateway
+            downstream.Reset();
+            using var h2Client = new HttpClient
+            {
+                DefaultRequestVersion = HttpVersion.Version20,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                Timeout = TimeSpan.FromSeconds(5)
+            };
+            using var h2Req = new HttpRequestMessage(HttpMethod.Post, $"{gwH2Url}/File/file.FileProto/UploadData")
+            {
+                Version = HttpVersion.Version20,
+                VersionPolicy = HttpVersionPolicy.RequestVersionExact
+            };
+            var validJwt = CreateJwt(Guid.NewGuid());
+            h2Req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", validJwt);
+            h2Req.Content = new ByteArrayContent(Array.Empty<byte>());
+            h2Req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
+
+            var h2Resp = await h2Client.SendAsync(h2Req);
+            var h2Json = await h2Resp.Content.ReadAsStringAsync();
+            var h2Env = JsonSerializer.Deserialize<BaseResponse>(h2Json);
+            Require(h2Env != null && h2Env.StatusCode == 403 && !h2Env.Success, "native HTTP/2 gRPC after reload must return 403 envelope");
+            Require(downstream.TotalRequests == 0, "reload cannot bypass private boundary");
+            Require(downstream.RpcRequests == 0, "reload cannot expose RPC");
+
+            // 5. Legitimate avatar still requires JWT / returns no-store
+            var avatarUrl = $"/File/api/Avatar/{avatarGuid:D}.png";
+
+            downstream.Reset();
+            var anonAvResp = await client.GetAsync(avatarUrl);
+            var anonAvJson = await anonAvResp.Content.ReadAsStringAsync();
+            var anonAvEnv = JsonSerializer.Deserialize<BaseResponse>(anonAvJson);
+            Require(anonAvEnv != null && anonAvEnv.StatusCode == 401 && !anonAvEnv.Success, "anonymous avatar must return 401 envelope");
+            Require(downstream.RpcRequests == 0, "avatar request must not trigger RPC");
+            Require(downstream.TotalRequests == 1, "anonymous avatar request reaches downstream auth");
+
+            downstream.Reset();
+            using var authAvReq = new HttpRequestMessage(HttpMethod.Get, avatarUrl);
+            authAvReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", validJwt);
+            var authAvResp = await client.SendAsync(authAvReq);
+            Require(authAvResp.StatusCode == HttpStatusCode.OK, "valid JWT avatar request must return 200 OK");
+            Require(authAvResp.Headers.CacheControl?.NoStore == true, "avatar response must have Cache-Control: no-store");
+            Require(downstream.RpcRequests == 0, "avatar request must not trigger RPC");
+            Require(downstream.TotalRequests == 1, "legitimate avatar request reaches downstream");
+            var avBytes = await authAvResp.Content.ReadAsByteArrayAsync();
+            Require(avBytes.SequenceEqual(TinyPng), "avatar body bytes must match stored TinyPng");
+        }
+        finally
+        {
+            await gwApp.StopAsync();
+            await gwApp.DisposeAsync();
+            await gwAppH2.StopAsync();
+            await gwAppH2.DisposeAsync();
+            await fileApp.StopAsync();
+            await fileApp.DisposeAsync();
+            await otherApp.StopAsync();
+            await otherApp.DisposeAsync();
+            Require(Path.GetDirectoryName(Path.GetFullPath(fixtureDir)) == tempRoot, "Unsafe cleanup");
+            Directory.Delete(fixtureDir, recursive: true);
+        }
+    }
+
     private static async Task CheckStaticSentinelsAsync()
     {
         var tempRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));

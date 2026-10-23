@@ -291,6 +291,22 @@ function Run-PackagesChecks {
             'Microsoft.EntityFrameworkCore.Relational' = '10.0.13'
         }
 
+    # 7. Blocks.ApiGateway
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/services/Blocks.ApiGateway/Blocks.ApiGateway.csproj" `
+        -ExpectedPins @{
+            'Microsoft.Extensions.ServiceDiscovery.Yarp' = '10.11.0'
+            'Yarp.ReverseProxy'                          = '2.3.0'
+        }
+
+    $gatewayFullPath = Join-Path $repoRoot "src/services/Blocks.ApiGateway/Blocks.ApiGateway.csproj"
+    [xml]$gwXml = Get-Content $gatewayFullPath -Raw
+    $projRefs = $gwXml.SelectNodes('//ProjectReference')
+    foreach ($pRef in $projRefs) {
+        $include = $pRef.GetAttribute('Include')
+        Assert-Condition ($include -notmatch 'Blocks\.ServiceDefaults') "Blocks.ApiGateway.csproj must NOT reference Blocks.ServiceDefaults, found '$include'"
+    }
+
     Write-Host "All package pin checks passed."
 }
 
