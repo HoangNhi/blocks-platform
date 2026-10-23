@@ -350,6 +350,9 @@ static async Task RunRuntimeChecksAsync()
             is_in_role = isInRole
         });
     }).ExcludeFromDescription().RequireAuthorization();
+    app.MapGet("/__checks/role", () => Results.NoContent())
+        .ExcludeFromDescription()
+        .RequireAuthorization(policy => policy.RequireRole("00000000-0000-0000-0000-000000000088"));
     app.MapControllers();
     app.MapDefaultEndpoints();
 
@@ -424,7 +427,7 @@ static async Task RunRuntimeChecksAsync()
             Require(resp.StatusCode == System.Net.HttpStatusCode.NotFound, $"Retired route {route} returns 404");
         }
 
-                // Test 3: Claims endpoint verification
+        // jwt_raw_claims_and_identity_use_system_contract
         const string testUserId = "00000000-0000-0000-0000-000000000099";
         const string testUserName = "test_user_deterministic";
         const string testRoleId = "00000000-0000-0000-0000-000000000088";
@@ -441,9 +444,44 @@ static async Task RunRuntimeChecksAsync()
                 "identity_name matches testUserName");
             Require(claimsRoot.GetProperty("is_in_role").GetBoolean(), "IsInRole returns true for token role");
             Require(claimsRoot.GetProperty("raw_name").GetString() == testUserId, "raw_name matches testUserId");
-            Require(claimsRoot.GetProperty("raw_unique_name").ValueKind == JsonValueKind.Null, "raw_unique_name is null in .NET 8 due to inbound mapping to Name");
-            Require(claimsRoot.GetProperty("raw_role").ValueKind == JsonValueKind.Null, "raw_role is null in .NET 8 due to inbound mapping to Role");
+            Require(claimsRoot.GetProperty("raw_unique_name").GetString() == testUserName, "Raw username retained");
+            Require(claimsRoot.GetProperty("raw_role").GetString() == testRoleId, "Raw role retained");
         }
+
+        // jwt_wrong_issuer_audience_and_missing_role_are_denied
+        foreach (var token in new[]
+        {
+            CreateJwt(testJwtKey, "wrong-issuer", testAudience),
+            CreateJwt(testJwtKey, testIssuer, "wrong-audience")
+        })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/Faculty/get-all-combobox");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            using var response = await client.SendAsync(request);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Require(response.StatusCode == HttpStatusCode.OK &&
+                !body.RootElement.GetProperty("Success").GetBoolean() &&
+                body.RootElement.GetProperty("StatusCode").GetInt32() == 401,
+                "Wrong issuer/audience rejected with 401 application envelope");
+        }
+        using (var request = new HttpRequestMessage(HttpMethod.Get, "/__checks/role"))
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                CreateJwt(testJwtKey, testIssuer, testAudience, roleId: ""));
+            using var response = await client.SendAsync(request);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Require(response.StatusCode == HttpStatusCode.OK &&
+                !body.RootElement.GetProperty("Success").GetBoolean() &&
+                body.RootElement.GetProperty("StatusCode").GetInt32() == 403,
+                "Missing role rejected with 403 application envelope");
+        }
+        using (var request = new HttpRequestMessage(HttpMethod.Get, "/__checks/role"))
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", claimsJwt);
+            using var response = await client.SendAsync(request);
+            Require(response.StatusCode == HttpStatusCode.NoContent, "Required role authorized");
+        }
+        Console.WriteLine("PASS JWT raw claims, identity, issuer, audience and role checks");
 
         // Test 4: Swagger only contains six Faculty routes, no retired routes
         using (var swaggerResp = await client.GetAsync("/swagger/v1/swagger.json"))
@@ -469,6 +507,8 @@ static async Task RunRuntimeChecksAsync()
             }
 
             Require(!paths.TryGetProperty("/__checks/claims", out _), "Swagger must not contain /__checks/claims");
+            Require(!paths.TryGetProperty("/__checks/role", out _), "Swagger must not contain /__checks/role");
+            Require(paths.EnumerateObject().Count() == 6, "Swagger contains exactly six Faculty routes");
 
             foreach (var retiredPrefix in new[] { "/api/FileType", "/api/Stakeholder", "/api/Standard", "/api/StandardSet" })
             {

@@ -38,8 +38,11 @@ namespace Blocks.CatalogService.Configs
                 })
                 .AddJwtBearer(options =>
                 {
+                    options.MapInboundClaims = false;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
+                        NameClaimType = "unique_name",
+                        RoleClaimType = "role",
                         ValidateIssuer = true,
                         ValidateAudience = true,
                         ValidateIssuerSigningKey = true,
