@@ -128,8 +128,8 @@ if ($null -eq $jwtPkg -or $jwtPkg.GetAttribute('Version') -ne '10.0.13') {
     throw "catalog_targets_net10_and_oracle: Microsoft.AspNetCore.Authentication.JwtBearer 10.0.13 package missing or wrong version"
 }
 $protoPkg = $csprojXml.SelectSingleNode('//PackageReference[@Include="Google.Protobuf"]')
-if ($null -eq $protoPkg -or $protoPkg.GetAttribute('Version') -ne '3.35.0') {
-    throw "catalog_targets_net10_and_oracle: Google.Protobuf 3.35.0 package missing or wrong version"
+if ($null -eq $protoPkg -or $protoPkg.GetAttribute('Version') -ne '3.36.2') {
+    throw "catalog_targets_net10_and_oracle: Google.Protobuf 3.36.2 package missing or wrong version"
 }
 foreach ($efPkgName in @('Microsoft.EntityFrameworkCore.Design', 'Microsoft.EntityFrameworkCore.Tools')) {
     $efPkg = $csprojXml.SelectSingleNode("//PackageReference[@Include='$efPkgName']")

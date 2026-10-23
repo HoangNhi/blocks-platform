@@ -61,6 +61,8 @@ internal static class ValidationChecks
         await validator_infrastructure_error_is_not_input400();
         await dataannotations_stay_disabled();
         await two_dtos_query_prefixes_and_no_double_validation();
+        await automapper_maps_user_and_date_converters();
+        await grpc_web_auth_header_and_version();
 
         Console.WriteLine("PASS SystemService validation characterization checks");
     }
@@ -798,6 +800,142 @@ internal static class ValidationChecks
         {
             await app.StopAsync();
             await app.DisposeAsync();
+        }
+    }
+
+    private static async Task automapper_maps_user_and_date_converters()
+    {
+        var (app, _, _, _, _) = await CreateTestHostAsync();
+        try
+        {
+            var mapper = app.Services.GetRequiredService<AutoMapper.IMapper>();
+
+            var userId = Guid.NewGuid();
+            var user = new User
+            {
+                Id = userId,
+                Username = "testuser",
+                Email = "test@example.com",
+                Fullname = "Test User",
+                IsActived = true
+            };
+            var modelUser = mapper.Map<ModelUser>(user);
+            Require(modelUser.Id == userId, "User -> ModelUser Id preserved");
+            Require(modelUser.Username == "testuser", "User -> ModelUser Username preserved");
+            Require(modelUser.Fullname == "Test User", "User -> ModelUser Fullname preserved");
+
+            var userReq = mapper.Map<UserRequest>(user);
+            Require(userReq.Id == userId, "User -> UserRequest Id preserved");
+            Require(userReq.Username == "testuser", "User -> UserRequest Username preserved");
+
+            var dt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Unspecified);
+            var dateOnly = new DateOnly(2026, 10, 23);
+
+            var convertedDt = mapper.Map<DateOnly?, DateTime?>(dateOnly);
+            Require(convertedDt == dt, "DateOnly? -> DateTime? matches");
+
+            var convertedDateOnly = mapper.Map<DateTime?, DateOnly?>(dt);
+            Require(convertedDateOnly == dateOnly, "DateTime? -> DateOnly? matches");
+
+            Require(mapper.Map<DateOnly?, DateTime?>(null) == null, "null DateOnly? -> null DateTime?");
+            Require(mapper.Map<DateTime?, DateOnly?>(null) == null, "null DateTime? -> null DateOnly?");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task grpc_web_auth_header_and_version()
+    {
+        string? capturedProtocol = null;
+        string? capturedAuth = null;
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var responderBuilder = WebApplication.CreateBuilder(new[] { "--urls", "http://127.0.0.1:0" });
+        var responderApp = responderBuilder.Build();
+        responderApp.MapPost("/file.FileProto/UploadData", async context =>
+        {
+            capturedProtocol = context.Request.Protocol;
+            capturedAuth = context.Request.Headers["x-service-authorization"].ToString();
+            context.Response.ContentType = "application/grpc-web";
+
+            var reply = new Blocks.FileService.Protos.UploadDataResponse();
+            var replyBytes = Google.Protobuf.MessageExtensions.ToByteArray(reply);
+            var trailerBytes = Encoding.ASCII.GetBytes("grpc-status:0\r\n");
+
+            var body = new byte[5 + replyBytes.Length + 5 + trailerBytes.Length];
+            body[0] = 0;
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(1, 4), replyBytes.Length);
+            replyBytes.CopyTo(body.AsSpan(5));
+
+            var tOffset = 5 + replyBytes.Length;
+            body[tOffset] = 0x80;
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(tOffset + 1, 4), trailerBytes.Length);
+            trailerBytes.CopyTo(body.AsSpan(tOffset + 5));
+
+            await context.Response.Body.WriteAsync(body);
+            tcs.TrySetResult(true);
+        });
+        await responderApp.StartAsync();
+
+        var tempContentRoot = Path.Combine(Path.GetTempPath(), "system-grpcweb-" + Guid.NewGuid());
+        Directory.CreateDirectory(tempContentRoot);
+
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = Array.Empty<string>(),
+            EnvironmentName = Environments.Development,
+            ContentRootPath = tempContentRoot
+        });
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            options.Listen(IPAddress.Loopback, 0, listenOptions =>
+            {
+                listenOptions.Protocols = HttpProtocols.Http1;
+            });
+        });
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = JwtSecret,
+            ["Jwt:Issuer"] = JwtIssuer,
+            ["Jwt:Audience"] = JwtAudience,
+            ["ConnectionStrings:System"] = "Host=127.0.0.1;Port=1;Database=unused;Username=x;Password=x;",
+            ["GrpcClients:FileService"] = responderApp.Urls.First()
+        });
+        builder.AddServiceDefaults();
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.ExecuteConfigService();
+        builder.ExecuteConfigAuthentication();
+
+        var app = builder.Build();
+        await app.StartAsync();
+
+        try
+        {
+            var httpContextAccessor = app.Services.GetRequiredService<IHttpContextAccessor>();
+            var jwt = CreateJwt(Guid.NewGuid());
+            httpContextAccessor.HttpContext = new DefaultHttpContext();
+            httpContextAccessor.HttpContext.Request.Headers["Authorization"] = $"Bearer {jwt}";
+
+            var fileClient = app.Services.GetRequiredService<Blocks.FileService.Protos.FileProto.FileProtoClient>();
+            var resp = await fileClient.UploadDataAsync(new Blocks.FileService.Protos.UploadDataRequest());
+
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5))) == tcs.Task;
+            Require(completed, "responder received gRPC-Web call");
+
+            Require(capturedProtocol == "HTTP/1.1", $"protocol HTTP/1.1, got {capturedProtocol}");
+            Require(capturedAuth == $"Bearer {jwt}", $"x-service-authorization propagated, got {capturedAuth}");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+            await responderApp.StopAsync();
+            await responderApp.DisposeAsync();
+            if (Directory.Exists(tempContentRoot)) Directory.Delete(tempContentRoot, true);
         }
     }
 

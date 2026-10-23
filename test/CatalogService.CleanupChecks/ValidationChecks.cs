@@ -7,6 +7,8 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Blocks.CatalogService.Entities;
+using AutoMapper;
 using Blocks.CatalogService.Configs;
 using Blocks.CatalogService.Controllers;
 using Blocks.CatalogService.DTOs.CoreFeature.Faculty.Dtos;
@@ -53,6 +55,8 @@ internal static class ValidationChecks
         await validator_infrastructure_error_is_not_input400();
         await dataannotations_stay_disabled();
         await two_dtos_query_prefixes_and_no_double_validation();
+        await automapper_maps_faculty_and_date_converters();
+        await grpc_web_auth_header_and_version();
 
         Console.WriteLine("PASS CatalogService validation characterization checks");
     }
@@ -779,6 +783,85 @@ internal static class ValidationChecks
         }
     }
 
+    private static async Task automapper_maps_faculty_and_date_converters()
+    {
+        var (app, _, _, _) = await CreateTestHostAsync();
+        try
+        {
+            var mapper = app.Services.GetRequiredService<IMapper>();
+
+            var facultyId = Guid.NewGuid();
+            var faculty = new Faculty
+            {
+                Id = facultyId,
+                Name = "Khoa Cong nghe thong tin",
+                IsActived = true
+            };
+            var modelFaculty = mapper.Map<ModelFaculty>(faculty);
+            Require(modelFaculty.Id == facultyId, "Faculty -> ModelFaculty Id preserved");
+            Require(modelFaculty.Name == "Khoa Cong nghe thong tin", "Faculty -> ModelFaculty Name preserved");
+            Require(modelFaculty.IsActived == true, "Faculty -> ModelFaculty IsActived preserved");
+
+            var facultyReq = new FacultyRequest
+            {
+                Id = facultyId,
+                Name = "Khoa Dien"
+            };
+            var mappedFaculty = mapper.Map<Faculty>(facultyReq);
+            Require(mappedFaculty.Id == facultyId, "FacultyRequest -> Faculty Id preserved");
+            Require(mappedFaculty.Name == "Khoa Dien", "FacultyRequest -> Faculty Name preserved");
+
+            var dt = new DateTime(2026, 10, 23, 0, 0, 0, DateTimeKind.Unspecified);
+            var dateOnly = new DateOnly(2026, 10, 23);
+
+            var convertedDt = mapper.Map<DateOnly?, DateTime?>(dateOnly);
+            Require(convertedDt == dt, "DateOnly? -> DateTime? matches");
+
+            var convertedDateOnly = mapper.Map<DateTime?, DateOnly?>(dt);
+            Require(convertedDateOnly == dateOnly, "DateTime? -> DateOnly? matches");
+
+            Require(mapper.Map<DateOnly?, DateTime?>(null) == null, "null DateOnly? -> null DateTime?");
+            Require(mapper.Map<DateTime?, DateOnly?>(null) == null, "null DateTime? -> null DateOnly?");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private static async Task grpc_web_auth_header_and_version()
+    {
+        await using var responder = await CatalogEphemeralResponder.StartAsync();
+        responder.AllowPermission = true;
+        var (app, fakeService, _, _) = await CreateTestHostAsync(responder);
+        fakeService.ThrowBusinessExceptionOnInsert = true;
+
+        try
+        {
+            var jwt = CreateJwt(Guid.NewGuid());
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+            var req = new FacultyRequest { Name = "Khoa Toan" };
+            using var resp = await client.PostAsJsonAsync("/api/Faculty/insert", req);
+            Require(resp.StatusCode == HttpStatusCode.OK, "HTTP 200 on faculty insert");
+
+            var delivered = await responder.WaitForCallAsync(TimeSpan.FromSeconds(10));
+            Require(delivered, "audit delivered via gRPC-Web");
+
+            Require(responder.LastPermissionProtocol == "HTTP/1.1", $"permission protocol HTTP/1.1, got {responder.LastPermissionProtocol}");
+            Require(responder.LastPermissionAuthHeader == $"Bearer {jwt}", "permission x-service-authorization propagated");
+            Require(responder.LastAuditProtocol == "HTTP/1.1", $"audit protocol HTTP/1.1, got {responder.LastAuditProtocol}");
+            Require(responder.LastAuditAuthHeader == $"Bearer {jwt}", "audit x-service-authorization propagated");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
     private sealed class FakeFacultyService : IFacultyService
     {
         private int _insertCalls;
@@ -824,6 +907,14 @@ internal static class ValidationChecks
         public int AuditCalls => Volatile.Read(ref _auditCalls);
         public int PermissionCalls => Volatile.Read(ref _permissionCalls);
         public bool AllowPermission { get; set; } = true;
+        public string? LastPermissionProtocol { get; private set; }
+        public string? LastPermissionAuthHeader { get; private set; }
+        public string? LastAuditProtocol { get; private set; }
+        public string? LastAuditAuthHeader { get; private set; }
+
+        public Task<bool> WaitForAuditAsync(TimeSpan timeout) =>
+            Task.WhenAny(_auditReceived.Task, Task.Delay(timeout)).ContinueWith(t => _auditReceived.Task.IsCompletedSuccessfully && _auditReceived.Task.Result);
+
         public IReadOnlyList<Blocks.SystemService.Protos.WriteAuditLogRequest> ReceivedAuditRequests
         {
             get { lock (_receivedAuditRequests) return _receivedAuditRequests.ToList(); }
@@ -846,6 +937,8 @@ internal static class ValidationChecks
             app.MapPost("/system.SystemProto/CheckPermission", async context =>
             {
                 Interlocked.Increment(ref responder._permissionCalls);
+                responder.LastPermissionProtocol = context.Request.Protocol;
+                responder.LastPermissionAuthHeader = context.Request.Headers["x-service-authorization"].ToString();
                 context.Response.ContentType = "application/grpc-web";
 
                 var reply = new Blocks.SystemService.Protos.CheckActionResponse { Success = responder.AllowPermission };
@@ -872,6 +965,8 @@ internal static class ValidationChecks
                 {
                     var callIndex = Interlocked.Increment(ref responder._auditCalls);
                     var statusCode = statusForCall(callIndex);
+                    responder.LastAuditProtocol = context.Request.Protocol;
+                    responder.LastAuditAuthHeader = context.Request.Headers["x-service-authorization"].ToString();
 
                     if ((int)statusCode == 503)
                     {

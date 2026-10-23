@@ -261,7 +261,7 @@ async Task RunRuntimeChecksAsync()
     var otelApiVersionStr = otelApiEntry!.Split('/')[1];
     var apiVersion = Version.Parse(otelApiVersionStr.Split('-')[0]);
 
-    Assert(libraries.Contains("AutoMapper/16.1.1"), "patched AutoMapper");
+    Assert(libraries.Contains("AutoMapper/16.2.0"), "patched AutoMapper");
     Assert(libraries.Contains("OpenTelemetry.Exporter.OpenTelemetryProtocol/1.20.1"),
         "patched OTLP exporter");
     Assert(libraries.Contains("OpenTelemetry.Extensions.Hosting/1.20.1"), "patched hosting");

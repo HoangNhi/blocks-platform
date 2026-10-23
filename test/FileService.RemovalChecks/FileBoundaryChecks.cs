@@ -167,12 +167,16 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly TaskCompletionSource<bool> _auditReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<Blocks.SystemService.Protos.WriteAuditLogRequest> _receivedRequests = new();
+    private readonly List<string> _protocols = new();
+    private readonly List<string> _authHeaders = new();
     private int _auditCalls;
     private int _inFlight;
 
     public string Url { get; private set; } = string.Empty;
     public string Address => Url;
     public int AuditCalls => Volatile.Read(ref _auditCalls);
+    public IReadOnlyList<string> Protocols { get { lock (_protocols) return _protocols.ToList(); } }
+    public IReadOnlyList<string> AuthHeaders { get { lock (_authHeaders) return _authHeaders.ToList(); } }
     public IReadOnlyList<Blocks.SystemService.Protos.WriteAuditLogRequest> ReceivedRequests
     {
         get
@@ -207,6 +211,11 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
             {
                 var callIndex = Interlocked.Increment(ref responder._auditCalls);
                 var statusCode = statusForCall(callIndex);
+                lock (responder._protocols)
+                {
+                    responder._protocols.Add(context.Request.Protocol);
+                    responder._authHeaders.Add(context.Request.Headers["x-service-authorization"].ToString());
+                }
 
                 if ((int)statusCode == 503)
                 {

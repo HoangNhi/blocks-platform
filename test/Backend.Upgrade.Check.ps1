@@ -18,7 +18,50 @@ function Assert-Condition {
     }
 }
 
-if ($Check -eq 'runtime') {
+function Assert-ProjectPackages {
+    param(
+        [string]$ProjectRelPath,
+        [hashtable]$ExpectedPins,
+        [hashtable]$ExpectedPrivateAssets = @{},
+        [string[]]$ForbiddenPackages = @()
+    )
+    $fullPath = Join-Path $repoRoot $ProjectRelPath
+    Assert-Condition (Test-Path $fullPath) "Project file must exist: $ProjectRelPath"
+    [xml]$xml = Get-Content $fullPath -Raw
+    $pkgNodes = $xml.SelectNodes('//PackageReference')
+
+    $presentPackages = @{}
+    foreach ($node in $pkgNodes) {
+        $name = $node.GetAttribute('Include')
+        $ver = $node.GetAttribute('Version')
+        $privateAssetsNode = $node.SelectSingleNode('PrivateAssets')
+        $privateAssets = if ($null -ne $privateAssetsNode) { $privateAssetsNode.InnerText } else { $node.GetAttribute('PrivateAssets') }
+        $presentPackages[$name] = @{
+            Version = $ver
+            PrivateAssets = $privateAssets
+        }
+    }
+
+    foreach ($name in $ExpectedPins.Keys) {
+        $expectedVer = $ExpectedPins[$name]
+        Assert-Condition ($presentPackages.ContainsKey($name)) "$ProjectRelPath must directly reference package '$name'"
+        $actualVer = $presentPackages[$name].Version
+        Assert-Condition ($actualVer -eq $expectedVer) "$ProjectRelPath package '$name' must be pinned to '$expectedVer', found '$actualVer'"
+    }
+
+    foreach ($name in $ExpectedPrivateAssets.Keys) {
+        $expectedPA = $ExpectedPrivateAssets[$name]
+        Assert-Condition ($presentPackages.ContainsKey($name)) "$ProjectRelPath must reference '$name' for PrivateAssets check"
+        $actualPA = $presentPackages[$name].PrivateAssets
+        Assert-Condition ($actualPA -eq $expectedPA) "$ProjectRelPath package '$name' PrivateAssets must be '$expectedPA', found '$actualPA'"
+    }
+
+    foreach ($forbidden in $ForbiddenPackages) {
+        Assert-Condition (-not $presentPackages.ContainsKey($forbidden)) "$ProjectRelPath must NOT reference '$forbidden'"
+    }
+}
+
+function Run-RuntimeChecks {
     Write-Host "Running runtime target and toolchain assertions..."
 
     # 1. global.json
@@ -79,9 +122,9 @@ if ($Check -eq 'runtime') {
     }
 
     Write-Host "All runtime target checks passed."
-    exit 0
 }
-elseif ($Check -eq 'containers') {
+
+function Run-ContainersChecks {
     Write-Host "Running container definitions assertions..."
 
     $dockerfiles = @(
@@ -135,9 +178,142 @@ elseif ($Check -eq 'containers') {
     Assert-Condition ($catalogIgnoreContent -match '(?m)^!global\.json\s*$') "CatalogService Dockerfile.dockerignore must permit global.json via !global.json"
 
     Write-Host "All container checks passed."
+}
+
+function Run-PackagesChecks {
+    Write-Host "Running package direct pins assertions..."
+
+    # 1. Blocks.Shared
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/platform/Blocks.Shared/Blocks.Shared.csproj" `
+        -ExpectedPins @{
+            'FluentValidation' = '12.2.0'
+            'Grpc.Net.Client'  = '2.84.0'
+        } `
+        -ForbiddenPackages @('FluentValidation.AspNetCore')
+
+    # 2. Blocks.ServiceDefaults
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/platform/Blocks.ServiceDefaults/Blocks.ServiceDefaults.csproj" `
+        -ExpectedPins @{
+            'Microsoft.Extensions.Http.Resilience'         = '10.11.0'
+            'Microsoft.Extensions.ServiceDiscovery'       = '10.11.0'
+            'OpenTelemetry.Exporter.OpenTelemetryProtocol' = '1.20.1'
+            'OpenTelemetry.Extensions.Hosting'              = '1.20.1'
+            'OpenTelemetry.Instrumentation.AspNetCore'     = '1.20.1'
+            'OpenTelemetry.Instrumentation.Http'           = '1.20.1'
+            'OpenTelemetry.Instrumentation.Runtime'        = '1.20.1'
+        }
+
+    # 3. Blocks.FileService
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/services/Blocks.FileService/Blocks.FileService.csproj" `
+        -ExpectedPins @{
+            'Google.Protobuf'                                        = '3.36.2'
+            'Grpc.AspNetCore'                                        = '2.84.0'
+            'Grpc.AspNetCore.Web'                                    = '2.84.0'
+            'Grpc.Net.Client.Web'                                    = '2.84.0'
+            'Grpc.Net.ClientFactory'                                 = '2.84.0'
+            'Grpc.Tools'                                             = '2.84.0'
+            'Microsoft.AspNetCore.Authentication.JwtBearer'          = '10.0.13'
+            'Microsoft.VisualStudio.Azure.Containers.Tools.Targets' = '1.23.0'
+            'Newtonsoft.Json'                                        = '13.0.4'
+            'Polly'                                                  = '8.8.0'
+            'Stax.AutoDependencyInjectionRegistration'               = '4.0.0'
+            'Swashbuckle.AspNetCore'                                 = '10.3.1'
+        } `
+        -ExpectedPrivateAssets @{
+            'Grpc.Tools' = 'all'
+        } `
+        -ForbiddenPackages @('FluentValidation.AspNetCore')
+
+    # 4. Blocks.SystemService
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/services/Blocks.SystemService/Blocks.SystemService.csproj" `
+        -ExpectedPins @{
+            'AutoMapper'                                             = '16.2.0'
+            'FluentValidation.DependencyInjectionExtensions'         = '12.2.0'
+            'Grpc.AspNetCore'                                        = '2.84.0'
+            'Grpc.AspNetCore.Web'                                    = '2.84.0'
+            'Grpc.Net.Client.Web'                                    = '2.84.0'
+            'Microsoft.AspNetCore.Authentication.JwtBearer'          = '10.0.13'
+            'Microsoft.EntityFrameworkCore.Design'                   = '10.0.13'
+            'Microsoft.VisualStudio.Azure.Containers.Tools.Targets' = '1.23.0'
+            'Newtonsoft.Json'                                        = '13.0.4'
+            'Npgsql.EntityFrameworkCore.PostgreSQL'                  = '10.0.3'
+            'Stax.AutoDependencyInjectionRegistration'               = '4.0.0'
+            'Swashbuckle.AspNetCore'                                 = '10.3.1'
+        } `
+        -ExpectedPrivateAssets @{
+            'Microsoft.EntityFrameworkCore.Design' = 'all'
+        } `
+        -ForbiddenPackages @('FluentValidation.AspNetCore')
+
+    # 5. Blocks.CatalogService
+    Assert-ProjectPackages `
+        -ProjectRelPath "src/services/Blocks.CatalogService/Blocks.CatalogService.csproj" `
+        -ExpectedPins @{
+            'AutoMapper'                                             = '16.2.0'
+            'FluentValidation.DependencyInjectionExtensions'         = '12.2.0'
+            'Google.Protobuf'                                        = '3.36.2'
+            'Grpc.Net.Client.Web'                                    = '2.84.0'
+            'Grpc.Net.ClientFactory'                                 = '2.84.0'
+            'Grpc.Tools'                                             = '2.84.0'
+            'Microsoft.AspNetCore.Authentication.JwtBearer'          = '10.0.13'
+            'Microsoft.EntityFrameworkCore.Design'                   = '10.0.13'
+            'Microsoft.EntityFrameworkCore.Tools'                    = '10.0.13'
+            'Microsoft.VisualStudio.Azure.Containers.Tools.Targets' = '1.23.0'
+            'Newtonsoft.Json'                                        = '13.0.4'
+            'Polly'                                                  = '8.8.0'
+            'MySql.EntityFrameworkCore'                              = '10.0.12'
+            'Stax.AutoDependencyInjectionRegistration'               = '4.0.0'
+            'Swashbuckle.AspNetCore'                                 = '10.3.1'
+        } `
+        -ExpectedPrivateAssets @{
+            'Grpc.Tools'                           = 'all'
+            'Microsoft.EntityFrameworkCore.Design' = 'all'
+            'Microsoft.EntityFrameworkCore.Tools'  = 'all'
+        } `
+        -ForbiddenPackages @('FluentValidation.AspNetCore', 'Pomelo.EntityFrameworkCore.MySql')
+
+    # 6. Harness direct pins
+    Assert-ProjectPackages `
+        -ProjectRelPath "test/SystemService.CleanupChecks/SystemService.CleanupChecks.csproj" `
+        -ExpectedPins @{
+            'Microsoft.EntityFrameworkCore'           = '10.0.13'
+            'Microsoft.EntityFrameworkCore.Relational' = '10.0.13'
+        }
+
+    Assert-ProjectPackages `
+        -ProjectRelPath "test/CatalogService.CleanupChecks/CatalogService.CleanupChecks.csproj" `
+        -ExpectedPins @{
+            'Microsoft.EntityFrameworkCore'           = '10.0.13'
+            'Microsoft.EntityFrameworkCore.Relational' = '10.0.13'
+        }
+
+    Write-Host "All package pin checks passed."
+}
+
+if ($Check -eq 'runtime') {
+    Run-RuntimeChecks
+    exit 0
+}
+elseif ($Check -eq 'containers') {
+    Run-ContainersChecks
+    exit 0
+}
+elseif ($Check -eq 'packages') {
+    Run-PackagesChecks
+    exit 0
+}
+elseif ($Check -eq 'all') {
+    Run-RuntimeChecks
+    Run-ContainersChecks
+    Run-PackagesChecks
+    Write-Host "All checks passed."
     exit 0
 }
 else {
-    Write-Error "Mode '$Check' is not implemented in this phase (runtime and containers are implemented in Task 2)."
+    Write-Error "Mode '$Check' is not implemented in this phase (runtime, containers, packages are implemented)."
     exit 1
 }
