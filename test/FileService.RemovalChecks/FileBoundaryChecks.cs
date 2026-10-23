@@ -166,19 +166,35 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
 {
     private readonly WebApplication _app;
     private readonly TaskCompletionSource<bool> _auditReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly List<Blocks.SystemService.Protos.WriteAuditLogRequest> _receivedRequests = new();
     private int _auditCalls;
     private int _inFlight;
 
     public string Url { get; private set; } = string.Empty;
     public string Address => Url;
     public int AuditCalls => Volatile.Read(ref _auditCalls);
+    public IReadOnlyList<Blocks.SystemService.Protos.WriteAuditLogRequest> ReceivedRequests
+    {
+        get
+        {
+            lock (_receivedRequests)
+            {
+                return _receivedRequests.ToList();
+            }
+        }
+    }
 
     private EphemeralAuditResponder(WebApplication app)
     {
         _app = app;
     }
 
-    public static async Task<EphemeralAuditResponder> StartAsync()
+    public static Task<EphemeralAuditResponder> StartAsync()
+    {
+        return StartAsync(_ => Grpc.Core.StatusCode.OK);
+    }
+
+    public static async Task<EphemeralAuditResponder> StartAsync(Func<int, Grpc.Core.StatusCode> statusForCall)
     {
         var builder = WebApplication.CreateBuilder(new[] { "--urls", "http://127.0.0.1:0" });
         var app = builder.Build();
@@ -189,25 +205,74 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
             Interlocked.Increment(ref responder._inFlight);
             try
             {
-                Interlocked.Increment(ref responder._auditCalls);
+                var callIndex = Interlocked.Increment(ref responder._auditCalls);
+                var statusCode = statusForCall(callIndex);
+
+                if ((int)statusCode == 503)
+                {
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                    context.Response.ContentType = "text/plain";
+                    await context.Response.WriteAsync("Service Unavailable");
+                    return;
+                }
+                if ((int)statusCode == 999)
+                {
+                    context.Abort();
+                    return;
+                }
+
+                try
+                {
+                    var ms = new MemoryStream();
+                    await context.Request.Body.CopyToAsync(ms);
+                    var bytes = ms.ToArray();
+                    if (bytes.Length >= 5)
+                    {
+                        var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(1, 4));
+                        if (bytes.Length >= 5 + length)
+                        {
+                            var reqBytes = bytes.AsSpan(5, length).ToArray();
+                            var req = Blocks.SystemService.Protos.WriteAuditLogRequest.Parser.ParseFrom(reqBytes);
+                            lock (responder._receivedRequests)
+                            {
+                                responder._receivedRequests.Add(req);
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 context.Response.ContentType = "application/grpc-web";
 
-                var reply = new Blocks.SystemService.Protos.WriteAuditLogReply { Success = true, Message = "ok" };
-                var replyBytes = Google.Protobuf.MessageExtensions.ToByteArray(reply);
-                var trailerBytes = Encoding.ASCII.GetBytes("grpc-status:0\r\n");
+                if (statusCode == Grpc.Core.StatusCode.OK)
+                {
+                    var reply = new Blocks.SystemService.Protos.WriteAuditLogReply { Success = true, Message = "ok" };
+                    var replyBytes = Google.Protobuf.MessageExtensions.ToByteArray(reply);
+                    var trailerBytes = Encoding.ASCII.GetBytes("grpc-status:0\r\n");
 
-                var body = new byte[5 + replyBytes.Length + 5 + trailerBytes.Length];
-                body[0] = 0;
-                System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(1, 4), replyBytes.Length);
-                replyBytes.CopyTo(body.AsSpan(5));
+                    var body = new byte[5 + replyBytes.Length + 5 + trailerBytes.Length];
+                    body[0] = 0;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(1, 4), replyBytes.Length);
+                    replyBytes.CopyTo(body.AsSpan(5));
 
-                var tOffset = 5 + replyBytes.Length;
-                body[tOffset] = 0x80;
-                System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(tOffset + 1, 4), trailerBytes.Length);
-                trailerBytes.CopyTo(body.AsSpan(tOffset + 5));
+                    var tOffset = 5 + replyBytes.Length;
+                    body[tOffset] = 0x80;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(tOffset + 1, 4), trailerBytes.Length);
+                    trailerBytes.CopyTo(body.AsSpan(tOffset + 5));
 
-                await context.Response.Body.WriteAsync(body);
-                responder._auditReceived.TrySetResult(true);
+                    await context.Response.Body.WriteAsync(body);
+                    responder._auditReceived.TrySetResult(true);
+                }
+                else
+                {
+                    var trailerBytes = Encoding.ASCII.GetBytes($"grpc-status:{(int)statusCode}\r\ngrpc-message:{statusCode}\r\n");
+                    var body = new byte[5 + trailerBytes.Length];
+                    body[0] = 0x80;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(body.AsSpan(1, 4), trailerBytes.Length);
+                    trailerBytes.CopyTo(body.AsSpan(5));
+
+                    await context.Response.Body.WriteAsync(body);
+                }
             }
             finally
             {
@@ -218,6 +283,17 @@ internal sealed class EphemeralAuditResponder : IAsyncDisposable
         await app.StartAsync();
         responder.Url = app.Urls.First();
         return responder;
+    }
+
+    public async Task<bool> WaitForCallsAsync(int count, TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            if (Volatile.Read(ref _auditCalls) >= count) return true;
+            await Task.Delay(20);
+        }
+        return Volatile.Read(ref _auditCalls) >= count;
     }
 
     public async Task<bool> WaitForCallAsync(TimeSpan timeout)

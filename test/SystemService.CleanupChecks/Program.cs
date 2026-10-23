@@ -45,7 +45,7 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/SystemService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: auth, contract, runtime, telemetry");
+    Console.Error.WriteLine("Supported modes: auth, contract, runtime, telemetry, validation");
     return 1;
 }
 
@@ -79,6 +79,19 @@ else if (mode == "contract" || mode == "runtime" || mode == "telemetry")
     catch (Exception ex)
     {
         Console.Error.WriteLine($"{mode} check failed: {ex.Message}");
+        return 1;
+    }
+}
+else if (mode == "validation")
+{
+    try
+    {
+        await ValidationChecks.RunAsync();
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"validation check failed: {ex.Message}");
         return 1;
     }
 }

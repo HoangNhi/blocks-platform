@@ -29,7 +29,7 @@ var skipped = 0;
 
 var knownModes = new HashSet<string>
 {
-    "removal", "paths", "sessions", "lifecycle", "transport", "gateway", "migration", "boundary", "all"
+    "removal", "paths", "sessions", "lifecycle", "transport", "gateway", "migration", "boundary", "upgrade", "all"
 };
 if (!knownModes.Contains(mode))
 {
@@ -75,6 +75,11 @@ if (mode is "migration" or "all")
 if (mode is "boundary" or "all")
 {
     await FileBoundaryChecks.RunAsync(CheckAsync);
+}
+
+if (mode is "upgrade" or "all")
+{
+    await UpgradeChecks.RunAsync(CheckAsync);
 }
 
 Console.WriteLine($"FileService checks: {failures} failure(s), {skipped} NOT RUN.");

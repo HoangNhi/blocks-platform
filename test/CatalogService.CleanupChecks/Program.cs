@@ -33,7 +33,7 @@ using Microsoft.IdentityModel.Tokens;
 if (args.Length == 0)
 {
     Console.Error.WriteLine("Usage: dotnet run --project test/CatalogService.CleanupChecks -- <mode>");
-    Console.Error.WriteLine("Supported modes: contract, runtime, provider");
+    Console.Error.WriteLine("Supported modes: contract, runtime, provider, validation");
     return 1;
 }
 
@@ -76,6 +76,19 @@ else if (mode == "provider")
     catch (Exception ex)
     {
         Console.Error.WriteLine($"provider check failed: {ProviderChecks.SanitizeMessage(ex)}");
+        return 1;
+    }
+}
+else if (mode == "validation")
+{
+    try
+    {
+        await ValidationChecks.RunAsync();
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"validation check failed: {ex.Message}");
         return 1;
     }
 }
