@@ -72,14 +72,66 @@ Kết quả thu thập và khóa hành vi qua các bài kiểm tra characterizat
 
 ---
 
-## 4. Trạng Thái Các Hạng Mục Kiểm Tra Tương Lai (Tasks 2 - 8)
+## 4. Trạng Thái Các Hạng Mục Kiểm Tra Nâng Cấp (Tasks 2 - 8)
 
 | Task | Tên Hạng Mục | Trạng Thái Hiện Tại | Ghi Chú |
 |---|---|---|---|
-| Task 2 | Nâng cấp Shared, ServiceDefaults & ApiGateway lên `net10.0` | **PENDING** | CHƯA CHẠY (dành cho Task 2) |
-| Task 3 | Cập nhật FluentValidation & migrate sang pipeline tích hợp | **PENDING** | CHƯA CHẠY (dành cho Task 3) |
-| Task 4 | Nâng cấp Entity Framework Core & Providers (Npgsql, MySQL) | **PENDING** | CHƯA CHẠY (dành cho Task 4) |
-| Task 5 | Cập nhật AutoMapper & thay thế gói có lỗ hổng NU1903 | **PENDING** | CHƯA CHẠY (dành cho Task 5) |
-| Task 6 | Hoàn thiện nâng cấp FileService lên `net10.0` | **PENDING** | CHƯA CHẠY (dành cho Task 6) |
-| Task 7 | Nâng cấp Aspire AppHost & OpenTelemetry Instrumentation | **PENDING** | CHƯA CHẠY (dành cho Task 7) |
-| Task 8 | Xác thực toàn diện, bảo mật & cập nhật tài liệu vận hành | **PENDING** | CHƯA CHẠY (dành cho Task 8) |
+| Task 2 | Nâng cấp Shared, ServiceDefaults & ApiGateway lên `net10.0` | **COMPLETED** | Hoàn thành trong commit fc69930 |
+| Task 3 | Cập nhật FluentValidation & migrate sang pipeline tích hợp | **COMPLETED** | Hoàn thành trong commit ce55b46 |
+| Task 4 | Nâng cấp Entity Framework Core & Providers (Npgsql, MySQL) | **COMPLETED** | Hoàn thành trong commit 636dd5a |
+| Task 5 | Cập nhật AutoMapper & thay thế gói có lỗ hổng NU1903 | **COMPLETED** | Hoàn thành trong commit 636dd5a |
+| Task 6 | Hoàn thiện nâng cấp FileService lên `net10.0` | **COMPLETED** | Hoàn thành trong commit 948fbb8 |
+| Task 7 | Nâng cấp Aspire AppHost & OpenTelemetry Instrumentation | **COMPLETED** | Hoàn thành trong commit 73c1870 |
+| Task 8 | Xác thực toàn diện, bảo mật & cập nhật tài liệu vận hành | **COMPLETED** | Hoàn thành với `test/Backend.ArtifactChecks.ps1`, standalone smoke và Linux container smoke |
+
+---
+
+## 5. Kết Quả Xác Thực Task 8 (Standalone Publish & Linux Container Smoke)
+
+### 5.1 Guard & Negative Path Rejection Tests
+- **Guard Path Check**: Lệnh `powershell -ExecutionPolicy Bypass -File ./test/Backend.ArtifactChecks.ps1 -PublishRoot ./src` bị từ chối ngay lập tức với exit code 1 (`Guard rejection: PublishRoot must be an absolute fully-qualified path`) trước khi khởi chạy bất kỳ tiến trình hay tạo fixture nào.
+- **Negative Startup Tests (FileService)**:
+  - Relative storage root (`./relative-storage`): Bị từ chối khởi động (Exit code: `-532462766` / fatal startup exception).
+  - Storage root under webroot (`<webroot>/storage`): Bị từ chối khởi động (Exit code: `-532462766`).
+  - Symlink storage root: Bị từ chối khởi động qua file link guard (Exit code: `-532462766`).
+
+### 5.2 Standalone Published Artifact Smoke Tests
+Xác thực 4 service được publish độc lập (`dotnet publish -c Release /p:UseAppHost=false`) trên các cổng loopback tạm:
+- **Runtime Target**: Cả 4 file `.runtimeconfig.json` (`FileService`, `SystemService`, `CatalogService`, `ApiGateway`) yêu cầu runtime major `10` (`Microsoft.NETCore.App` và `Microsoft.AspNetCore.App` 10.0.0).
+- **Health Endpoints**: Cả 4 service trả về HTTP 200 trên `/health` và `/alive`.
+- **JWT Application Envelope**: Khi thiếu token JWT, `FileService`, `SystemService`, và `CatalogService` trả về HTTP 200 với application envelope `{ "Success": false, "StatusCode": 401 }` kèm header `Cache-Control: no-store` và `X-Content-Type-Options: nosniff`.
+- **Gateway Isolation**: `ApiGateway` không áp dụng JWT downstream hay phơi bày Swagger nội bộ của service (`/swagger/v1/swagger.json` trả về 404).
+- **Swagger 3.0**: Development Swagger 3.0 tải thành công; FileService multipart schema đầy đủ và không chứa trường đã gỡ bỏ.
+- **Avatar & Static Sentinels**: Endpoint Avatar của `FileService` trả về HTTP 200 với đúng bytes và content-type `image/png`. File tĩnh trong webroot và storage trả về 404, không truy cập được trực tiếp.
+
+### 5.3 Linux Container Smoke Tests
+Xác thực 3 image Docker Linux (`blocks-net10-check/fileservice:local`, `systemservice:local`, `catalogservice:local`):
+- **Non-Root Execution**: Cả 3 container chạy dưới user `app` với UID `1654` và GID `1654`, biến môi trường `APP_UID=1654`. Không sử dụng `--user root`.
+- **Volume ACL**: Thư mục tạm gắn kết được chuẩn bị quyền sở hữu `chown -R 1654:1654` và `chmod 750`, không dùng `chmod 777`.
+- **Network & Ports**: Cổng chỉ bind loopback `127.0.0.1:<temp_port>`.
+- **Endpoints**: `/health`, `/alive` trả về 200; missing JWT trả về HTTP 200 + application envelope 401.
+
+| Image | Base Image Digest | Image ID | Runtime User / UID | Endpoint Smoke |
+|---|---|---|---|---|
+| `blocks-net10-check/fileservice:local` | `mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca` | `sha256:64fcb1645664a12328ae484bb4fc79b2c887f2e92ba962a5ac1940f40c3fe877` | `app` / `1654` | PASS (/health, /alive, 401 envelope) |
+| `blocks-net10-check/systemservice:local` | `mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca` | `sha256:b0bf264bfd6393a2b9852990447d6afa93a5d052b7b09683a6c73e45a4df5cc8` | `app` / `1654` | PASS (/health, /alive, 401 envelope) |
+| `blocks-net10-check/catalogservice:local` | `mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca` | `sha256:93686f6449b3462640917241163a40b9a4c6810da607bc37f62e12c81053d2fc` | `app` / `1654` | PASS (/health, /alive, 401 envelope) |
+
+### 5.4 Linux Container Harness Execution
+Chạy 3 harness trên môi trường Linux .NET 10 (`mcr.microsoft.com/dotnet/sdk:10.0`) với mã nguồn mount read-only và thư mục output ghi riêng biệt:
+- `CatalogService.CleanupChecks`:
+  - `contract`: PASS
+  - `runtime`: PASS
+  - `validation`: PASS
+- `SystemService.CleanupChecks`:
+  - `contract`: PASS
+  - `runtime`: PASS
+  - `validation`: PASS
+  - `platform`: PASS
+- `FileService.RemovalChecks`:
+  - `all`: PASS (0 failure(s), 0 NOT RUN)
+
+### 5.5 Gate Status
+- **TLS Trust Gate**: `NOT RUN` (Do chưa cung cấp HTTPS responder fixture và trust bundle riêng đã được duyệt; script không tự sinh PKI).
+- **Local CVE Scanner Gate**: `NOT RUN / DEFERRED` (Docker scout yêu cầu upload SBOM lên cloud, không được phép thực hiện với private image mà chưa có duyệt).
+- **Windows Host Symlink Gate**: Được kiểm tra qua negative startup test và chạy native trong môi trường Linux; trên Windows host đòi hỏi quyền quản trị viên đặc quyền (Developer Mode / SeCreateSymbolicLinkPrivilege).
