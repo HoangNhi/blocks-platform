@@ -26,7 +26,7 @@ namespace Blocks.FileService.Infrastructure.Storage
                 throw new InvalidOperationException("FileStorage:RootPath cấu hình thiếu hoặc rỗng.");
             }
 
-            if (!Path.IsPathRooted(configuredRoot))
+            if (!Path.IsPathFullyQualified(configuredRoot))
             {
                 throw new InvalidOperationException("FileStorage:RootPath phải là đường dẫn tuyệt đối.");
             }
@@ -47,21 +47,33 @@ namespace Blocks.FileService.Infrastructure.Storage
                 throw new InvalidOperationException("FileStorage:RootPath không được trùng web root.");
             }
 
-            if (cleanRoot.StartsWith(cleanWebRoot + Path.DirectorySeparatorChar, comparison))
+            var webPrefix = Path.EndsInDirectorySeparator(cleanWebRoot) ? cleanWebRoot : cleanWebRoot + Path.DirectorySeparatorChar;
+            var rootPrefix = Path.EndsInDirectorySeparator(cleanRoot) ? cleanRoot : cleanRoot + Path.DirectorySeparatorChar;
+            if (cleanRoot.StartsWith(webPrefix, comparison))
             {
                 throw new InvalidOperationException("FileStorage:RootPath không được nằm trong web root.");
             }
 
-            if (cleanWebRoot.StartsWith(cleanRoot + Path.DirectorySeparatorChar, comparison))
+            if (cleanWebRoot.StartsWith(rootPrefix, comparison))
             {
                 throw new InvalidOperationException("FileStorage:RootPath không được chứa web root.");
+            }
+
+            var currentCheck = new DirectoryInfo(cleanRoot);
+            while (currentCheck != null)
+            {
+                if (currentCheck.LinkTarget != null || (currentCheck.Exists && currentCheck.Attributes.HasFlag(FileAttributes.ReparsePoint)))
+                {
+                    throw new InvalidOperationException($"FileStorage:RootPath không được đi qua symlink/reparse point: '{currentCheck.FullName}'.");
+                }
+                currentCheck = currentCheck.Parent;
             }
 
             Directory.CreateDirectory(cleanRoot);
             var rootDir = new DirectoryInfo(cleanRoot);
             for (var cur = rootDir; cur != null; cur = cur.Parent)
             {
-                if (cur.Attributes.HasFlag(FileAttributes.ReparsePoint) || cur.LinkTarget != null)
+                if (cur.Exists && (cur.Attributes.HasFlag(FileAttributes.ReparsePoint) || cur.LinkTarget != null))
                 {
                     throw new InvalidOperationException($"FileStorage:RootPath không được đi qua symlink/reparse point: '{cur.FullName}'.");
                 }
@@ -79,6 +91,7 @@ namespace Blocks.FileService.Infrastructure.Storage
 
             foreach (var areaPath in _areaPaths.Values)
             {
+                RejectLinks(areaPath);
                 Directory.CreateDirectory(areaPath);
             }
         }
@@ -92,11 +105,7 @@ namespace Blocks.FileService.Infrastructure.Storage
                 throw new BusinessException("Vùng lưu trữ không hợp lệ", 400);
             }
 
-            if (segments == null || segments.Length == 0)
-            {
-                return areaRoot;
-            }
-
+            ArgumentNullException.ThrowIfNull(segments);
             var parts = new string[segments.Length + 1];
             parts[0] = areaRoot;
 
@@ -120,52 +129,53 @@ namespace Blocks.FileService.Infrastructure.Storage
                 throw new BusinessException("Đường dẫn tệp vượt quá ranh giới vùng lưu trữ", 400);
             }
 
-            if (File.Exists(fullPath))
+            RejectLinks(fullPath);
+            return fullPath;
+        }
+
+        private static void RejectLinks(string path)
+        {
+            for (var cur = path; !string.IsNullOrEmpty(cur); cur = Path.GetDirectoryName(cur))
             {
-                var fileInfo = new FileInfo(fullPath);
-                if (fileInfo.Attributes.HasFlag(FileAttributes.ReparsePoint) || fileInfo.LinkTarget != null)
+                var fi = new FileInfo(cur);
+                if (fi.LinkTarget != null || (fi.Exists && fi.Attributes.HasFlag(FileAttributes.ReparsePoint)))
                 {
-                    throw new BusinessException("Tệp đi qua symlink hoặc reparse point", 400);
+                    throw new BusinessException("Tệp hoặc thư mục đi qua symlink hoặc reparse point", 400);
                 }
-            }
-            else if (Directory.Exists(fullPath))
-            {
-                var dirInfo = new DirectoryInfo(fullPath);
-                if (dirInfo.Attributes.HasFlag(FileAttributes.ReparsePoint) || dirInfo.LinkTarget != null)
+                var di = new DirectoryInfo(cur);
+                if (di.LinkTarget != null || (di.Exists && di.Attributes.HasFlag(FileAttributes.ReparsePoint)))
                 {
-                    throw new BusinessException("Thư mục đi qua symlink hoặc reparse point", 400);
+                    throw new BusinessException("Tệp hoặc thư mục đi qua symlink hoặc reparse point", 400);
                 }
             }
 
-            return fullPath;
         }
 
         public string ResolveActiveKey(string key)
         {
-            if (string.IsNullOrWhiteSpace(key))
+            if (string.IsNullOrWhiteSpace(key) ||
+                key.StartsWith('/') ||
+                key.EndsWith('/') ||
+                key.Contains("//") ||
+                key.Contains('\\') ||
+                key.Contains(':') ||
+                key.Contains(".."))
             {
                 throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
             }
 
-            if (key.Contains('\\') || key.Contains(':') || key.Contains(".."))
+            var segments = key.Split('/');
+            foreach (var segment in segments)
             {
-                throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
+                ValidateSegment(segment);
             }
-
-            var segments = key.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length == 0)
-            {
-                throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
-            }
-
             // System/Avatar/<file-id>.<ext>
             if (segments.Length == 3 &&
                 string.Equals(segments[0], "System", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(segments[1], "Avatar", StringComparison.OrdinalIgnoreCase))
             {
                 var fileName = segments[2];
-                ValidateFileNameWithGuid(fileName);
-                return Resolve(StorageArea.Avatars, fileName);
+                return ResolveAvatar(fileName);
             }
 
             // System/Attachments/<related-id>/<file-id>.<ext>
@@ -174,7 +184,7 @@ namespace Blocks.FileService.Infrastructure.Storage
                 string.Equals(segments[1], "Attachments", StringComparison.OrdinalIgnoreCase))
             {
                 var relatedId = segments[2];
-                if (!Guid.TryParseExact(relatedId, "D", out _))
+                if (relatedId.Length != 36 || !Guid.TryParseExact(relatedId, "D", out var relatedGuid) || relatedGuid == Guid.Empty)
                 {
                     throw new BusinessException("Định danh liên kết không hợp lệ", 400);
                 }
@@ -200,14 +210,21 @@ namespace Blocks.FileService.Infrastructure.Storage
         public string ResolveAvatar(string fileName)
         {
             ValidateFileNameWithGuid(fileName);
+            if (Path.GetExtension(fileName).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".webp"))
+                throw new BusinessException("Định dạng ảnh đại diện không hợp lệ", 400);
             return Resolve(StorageArea.Avatars, fileName);
         }
 
         private static void ValidateSegment(string segment)
         {
-            if (string.IsNullOrWhiteSpace(segment))
+            if (string.IsNullOrWhiteSpace(segment) || segment != segment.Trim())
             {
                 throw new BusinessException("Thành phần đường dẫn không được rỗng", 400);
+            }
+
+            if (segment == "." || segment == "..")
+            {
+                throw new BusinessException("Thành phần đường dẫn không hợp lệ", 400);
             }
 
             if (segment.Contains('/') || segment.Contains('\\') || segment.Contains(':') ||
@@ -223,7 +240,8 @@ namespace Blocks.FileService.Infrastructure.Storage
             var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
             var ext = Path.GetExtension(fileName);
 
-            if (string.IsNullOrWhiteSpace(ext) || !Guid.TryParseExact(nameWithoutExt, "D", out _))
+            if (ext.Length < 2 || ext.Skip(1).Any(c => !char.IsAsciiLetterOrDigit(c)) ||
+                nameWithoutExt.Length != 36 || !Guid.TryParseExact(nameWithoutExt, "D", out var guid) || guid == Guid.Empty)
             {
                 throw new BusinessException("Tên tệp phải có định dạng GUID canonical hợp lệ", 400);
             }

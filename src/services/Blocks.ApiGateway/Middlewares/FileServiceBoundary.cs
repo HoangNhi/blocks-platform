@@ -24,22 +24,21 @@ namespace Blocks.ApiGateway.Middlewares
 
         public async Task InvokeAsync(HttpContext context)
         {
-            if (HttpMethods.IsOptions(context.Request.Method))
-            {
-                await _next(context);
-                return;
-            }
-
             var proxyFeature = context.GetReverseProxyFeature();
             var clusterId = proxyFeature.Cluster?.Config.ClusterId;
             var configuredFileClusterId = _configuration["FileProxy:ClusterId"];
 
-            var isFileCluster = !string.IsNullOrEmpty(configuredFileClusterId) &&
-                                string.Equals(clusterId, configuredFileClusterId, StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(configuredFileClusterId))
+            {
+                await BlockRequestAsync(context);
+                return;
+            }
 
             var path = context.Request.Path.Value ?? string.Empty;
             var hasFilePrefix = path.StartsWith("/File/", StringComparison.OrdinalIgnoreCase) ||
                                 string.Equals(path, "/File", StringComparison.OrdinalIgnoreCase);
+
+            var isFileCluster = string.Equals(clusterId, configuredFileClusterId, StringComparison.OrdinalIgnoreCase);
 
             if (hasFilePrefix && !isFileCluster)
             {
@@ -53,35 +52,38 @@ namespace Blocks.ApiGateway.Middlewares
                 return;
             }
 
-            var routeTransforms = proxyFeature.Route?.Config.Transforms;
-            if (routeTransforms != null)
-            {
-                foreach (var transform in routeTransforms)
-                {
-                    if (transform.TryGetValue("PathRemovePrefix", out var prefixVal))
-                    {
-                        if (!string.Equals(prefixVal, "/File", StringComparison.OrdinalIgnoreCase))
-                        {
-                            await BlockRequestAsync(context);
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        await BlockRequestAsync(context);
-                        return;
-                    }
-                }
-            }
-
-            var contentType = context.Request.ContentType ?? string.Empty;
-            if (contentType.StartsWith("application/grpc", StringComparison.OrdinalIgnoreCase))
+            if (!hasFilePrefix)
             {
                 await BlockRequestAsync(context);
                 return;
             }
 
-            var normalizedPath = hasFilePrefix ? path["/File".Length..] : path;
+            // ponytail: enforce single PathRemovePrefix=/File transform; upgrade if multi-hop proxy required
+            var routeTransforms = proxyFeature.Route?.Config.Transforms;
+            if (routeTransforms == null || routeTransforms.Count != 1)
+            {
+                await BlockRequestAsync(context);
+                return;
+            }
+
+            var transform = routeTransforms[0];
+            if (transform.Count != 1 ||
+                !transform.TryGetValue("PathRemovePrefix", out var prefixVal) ||
+                !string.Equals(prefixVal, "/File", StringComparison.OrdinalIgnoreCase))
+            {
+                await BlockRequestAsync(context);
+                return;
+            }
+
+            var contentType = context.Request.ContentType ?? string.Empty;
+            if (path.Contains("FileProto", StringComparison.OrdinalIgnoreCase) ||
+                contentType.StartsWith("application/grpc", StringComparison.OrdinalIgnoreCase))
+            {
+                await BlockRequestAsync(context);
+                return;
+            }
+
+            var normalizedPath = path["/File".Length..];
             if (!normalizedPath.StartsWith('/'))
             {
                 normalizedPath = "/" + normalizedPath;
