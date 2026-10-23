@@ -2,9 +2,9 @@
 
 Ngày: 2026-10-23
 
-Trạng thái: **Dự thảo chờ người dùng duyệt.** Người dùng đã chọn phạm vi toàn
-backend trong một spec; chưa duyệt thiết kế cụ thể, chưa cho phép triển khai.
-Tài liệu này không cấp quyền ghi DB, di chuyển file thật hoặc deploy.
+Trạng thái: **Người dùng đã duyệt ngày 2026-10-23 và yêu cầu viết implementation
+plan.** Chưa cho phép triển khai code/package. Tài liệu này không cấp quyền ghi
+DB, di chuyển file thật hoặc deploy.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -76,7 +76,7 @@ storage, auth, provider, dữ liệu và ranh giới dịch vụ vẫn giữ:
 
 ## 3. Chính sách phiên bản
 
-Các quyết định kỹ thuật dưới đây là **đề xuất của người viết**, chờ duyệt cùng spec:
+Các quyết định kỹ thuật dưới đây do người viết đề xuất trong bản spec đã được duyệt:
 
 - Dùng stable mới nhất **tạo thành graph tương thích**, không preview/RC,
   floating version, .NET 11 hoặc EF Core 11. Không chạy nâng major hàng loạt.
@@ -413,7 +413,8 @@ lập plan**. Đã rà validation ordering/child traversal, SDK/Docker/AppHost,
 dependency graph và phân biệt kiểm chứng cô lập với các cổng môi trường.
 Review này không thay việc người dùng duyệt spec và không chứng minh runtime.
 
-Kiểm chứng tài liệu: 6 liên kết nội bộ tồn tại; tất cả package trực tiếp của
+Kiểm chứng lúc viết spec: 6 liên kết nội bộ tồn tại; tất cả package trực tiếp của
 10 `.csproj` đã nằm trong inventory; kiểm tra whitespace bằng Git trước commit.
-Chỉ thêm spec này. Chưa thay product code/package; chưa restore/build/test hoặc
-truy cập DB. Chờ người dùng duyệt, sau đó mới viết implementation plan.
+Lần viết spec chỉ thêm tài liệu này. Chưa thay product code/package; chưa restore/build/test hoặc
+truy cập DB. Người dùng đã duyệt; implementation plan tại
+[kế hoạch nâng backend](../plans/2026-10-23-dotnet10-platform-package-upgrade.md).
