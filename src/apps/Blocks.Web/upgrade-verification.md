@@ -271,4 +271,39 @@ The following 15 new characterization tests were authored and verified on curren
 - **Full Audit (`npm audit --json`):** Exit code 1 (8 vulnerabilities: 1 low, 2 moderate, 5 high).
   - Residual dev vulnerabilities: `@babel/core` (low), `@humanfs/node` (moderate), `baseline-browser-mapping` (moderate), `brace-expansion` (high), `cross-spawn` (high), `nanoid` (high), `undici` (high).
 
+---
+
+## 7. Task 4: DayPicker 10 Migration Verification
+
+### 7.1 Environment & Metadata
+- **Package:** `react-day-picker`: `^9.13.0` -> `^10.0.2` (installed: `10.0.2`)
+- **Node.js:** `v24.20.0`
+- **npm:** `11.1.1`
+
+### 7.2 Migration Diagnostics & Code Fixes
+- **Diagnostics upon DayPicker 10 installation:**
+  - `src/components/ui/calendar.tsx(91,9): error TS2353`: Object literal may only specify known properties, and 'table' does not exist in type 'Partial<ClassNames>'.
+  - `src/components/ui/datepicker.tsx(58,13): error TS2322`: Property 'fromYear' does not exist on type DayPickerProps.
+  - `datepicker.test.tsx`: failed `preserves_default_and_custom_year_bounds` assertions because `fromYear`/`toYear` were ignored by DayPicker 10.
+- **Code Adaptations:**
+  - `datepicker.tsx`: Translated `fromYear={fromYear}` and `toYear={toYear}` to `startMonth={fromYear ? new Date(fromYear, 0) : undefined}` and `endMonth={toYear ? new Date(toYear, 11) : undefined}`. Public `DatePicker` API and props remained identical.
+  - `calendar.tsx`: Replaced obsolete `table` class name with `month_grid: cn("w-full border-collapse", defaultClassNames.month_grid)`. Preserved Vietnamese locale (`vi`), `formatMonthDropdown`, custom slots (`Root`, `Chevron`, `DayButton`, `WeekNumber`), and styling tokens.
+  - `datepicker.test.tsx` & `calendar.test.tsx`: All existing assertions passed with 0 test edits required.
+
+### 7.3 TDD Verification Evidence
+- **Step 1 RED Command:** `npm --prefix src/apps/Blocks.Web test -- src/PackageUpgrade.test.ts`
+  - Result: Exit code 1; `AssertionError: expected '^9.13.0' to be '^10.0.2'` in `daypicker_range_matches_approved_matrix`.
+- **Step 2 Compilation Failure:** `npm --prefix src/apps/Blocks.Web run build`
+  - Result: Exit code 2 (TS2353 on `table` and TS2322 on `fromYear`).
+- **Step 2 Test Failure:** `npm --prefix src/apps/Blocks.Web test -- src/components/ui/datepicker.test.tsx src/components/ui/calendar.test.tsx`
+  - Result: Exit code 1 (2 failed tests in `datepicker.test.tsx` on year bounds).
+- **Step 5 Focused GREEN Command:** `npm --prefix src/apps/Blocks.Web test -- src/components/ui/datepicker.test.tsx src/components/ui/calendar.test.tsx`
+  - Result: Exit code 0; 2 test files passed, 5 tests passed.
+
+### 7.4 Common Green Gate Results
+1. `npm --prefix src/apps/Blocks.Web ls --all`: Exit code 0, 0 unmet peer dependencies for react-day-picker.
+2. `npm --prefix src/apps/Blocks.Web run build`: Exit code 0 (`tsc -b && vite build` completed in ~9.5s).
+3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (10 problems, 0 errors, 10 warnings, identical to baseline).
+4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 92 tests passed).
+
 

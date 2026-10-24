@@ -55,8 +55,8 @@ export function DatePicker({
             defaultMonth={value}
             required={required}
             captionLayout="dropdown"
-            fromYear={fromYear}
-            toYear={toYear}
+            startMonth={fromYear ? new Date(fromYear, 0) : undefined}
+            endMonth={toYear ? new Date(toYear, 11) : undefined}
             onSelect={(date: Date | undefined) => {
               if (disabled) {
                 return;
