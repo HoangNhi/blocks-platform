@@ -1,8 +1,8 @@
 # Platform Dead Code Cleanup
 
 Date: 2026-10-24
-Status: Proposed; awaiting design approval. No product code changes authorized
-by this document yet.
+Status: Design approved by the user on 2026-10-24. Implementation plan review
+and execution-method selection remain pending; product code is unchanged.
 
 ## Intent And Scope
 
@@ -66,4 +66,5 @@ the removed validator accurately.
 - Record baseline failures separately. Do not run database-backed checks or
   claim deployment/external-consumer verification from these isolated checks.
 
-After design approval, write an implementation plan before editing product code.
+Implementation plan:
+`docs/superpowers/plans/2026-10-24-platform-dead-code-cleanup.md`.
