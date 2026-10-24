@@ -205,7 +205,12 @@ The following 15 new characterization tests were authored and verified on curren
 
 ## 6. Task 3: Runtime, Form, Query, And UI Packages Upgrade Verification
 
-### 6.1 Task 3 Matrix Applied
+### 6.1 Environment & Execution Metadata
+- **Node.js Execution Version:** `node v24.11.1`
+- **npm Execution Version:** `npm 11.1.1`
+- **Dependency Overrides:** None (`overrides` absent from `package.json`).
+
+### 6.2 Task 3 Matrix Applied
 - `@hookform/resolvers`: `^5.2.2` -> `^6.0.0`
 - `@radix-ui/react-accordion`: `^1.2.12` -> `^1.3.1`
 - `@radix-ui/react-avatar`: `^1.1.11` -> `^1.3.1`
@@ -240,17 +245,6 @@ The following 15 new characterization tests were authored and verified on curren
 - `zod`: `^4.3.6` -> `^4.6.7`
 - `@types/react`: `^19.2.7` -> `^19.3.0`
 - `@types/react-dom`: `^19.2.3` -> `^19.3.0`
-
-### 6.2 Peer Dependency Resolution & Overrides
-- `@hookform/resolvers@6.0.0` introduces optional peer dependencies `@typeschema/main@>=0.13.7` (which peers `@typeschema/effect@0.14.0` -> `effect@^3.6.5`) and `effect@^4.0.0`. npm 11 attempts to resolve optional peers simultaneously, triggering ERESOLVE on `effect@^4.0.0` vs `effect@^3.6.5`.
-- Resolved cleanly without bypass flags (`--force` or `--legacy-peer-deps`) via scoped override:
-  ```json
-  "overrides": {
-    "@hookform/resolvers": {
-      "effect": "^3.6.5"
-    }
-  }
-  ```
 
 ### 6.3 TDD Verification Evidence
 - **Step 1 RED Command:** `npm --prefix src/apps/Blocks.Web test -- src/PackageUpgrade.test.ts`

@@ -1,7 +1,7 @@
 import test, { describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,11 @@ describe('Production Server Characterization', () => {
   let indexHtml;
 
   before(async () => {
+    if (!existsSync(indexHtmlPath)) {
+      throw new Error(
+        `Production build artifact not found at ${indexHtmlPath}. Run 'npm run build' before executing server check.`
+      );
+    }
     indexHtml = readFileSync(indexHtmlPath, 'utf8');
     const port = await getFreePort();
     baseUrl = `http://127.0.0.1:${port}`;
@@ -80,7 +85,12 @@ describe('Production Server Characterization', () => {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    await waitForServerReady(baseUrl, child);
+    try {
+      await waitForServerReady(baseUrl, child);
+    } catch (err) {
+      await terminateChild(child);
+      throw err;
+    }
   });
 
   after(async () => {

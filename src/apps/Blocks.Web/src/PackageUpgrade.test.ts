@@ -172,6 +172,7 @@ describe("PackageUpgrade", () => {
 
     expect(rootLock.devDependencies).toEqual(pkg.devDependencies);
     expect(rootLock.dependencies).toEqual(pkg.dependencies);
+    expect(pkg.overrides).toBeUndefined();
   });
 
   it("dev_port_and_alias_contract_are_preserved", async () => {

@@ -74,10 +74,5 @@
     "typescript-eslint": "^8.72.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
-  },
-  "overrides": {
-    "@hookform/resolvers": {
-      "effect": "^3.6.5"
-    }
   }
 }
