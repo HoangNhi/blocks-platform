@@ -1987,6 +1987,15 @@ void RunContractChecks()
 {
     Console.WriteLine("Running contract checks...");
 
+    var clock = typeof(Blocks.Shared.Common.DateTimeHelper);
+    var shared = clock.Assembly;
+    Assert(clock.GetProperty("VietnamNow", BindingFlags.Public | BindingFlags.Static) == null, "unused VietnamNow removed");
+    Assert(shared.GetType("Blocks.Shared.DTOs.Base.DeleteListRequestValidator") == null, "unused DeleteListRequestValidator removed");
+    Assert(shared.GetType("Blocks.Shared.DTOs.Base.GetByIdDeleteRequestValidator") == null, "unused GetByIdDeleteRequestValidator removed");
+    Assert(clock.GetField("VietnamTimeZone", BindingFlags.Public | BindingFlags.Static)?.FieldType == typeof(TimeZoneInfo), "timezone field retained");
+    Assert(typeof(Blocks.Shared.DTOs.Base.DeleteListRequest).GetProperty("Ids")?.PropertyType == typeof(List<Guid>), "delete DTO contract retained");
+    Assert(typeof(Blocks.Shared.DTOs.Base.GetByIdRequest).GetProperty("Id")?.PropertyType == typeof(Guid?), "get-by-id DTO contract retained");
+
     // --- 1. SystemProto Service Identity and Methods ---
     var systemDescriptor = SystemReflection.Descriptor;
     var service = systemDescriptor.Services.Single();

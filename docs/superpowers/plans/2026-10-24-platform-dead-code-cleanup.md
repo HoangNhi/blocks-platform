@@ -47,14 +47,14 @@
 - Consumes: existing `void RunContractChecks()`, `void Assert(bool condition, string name)`, and `ValidationChecks.RunAsync()`.
 - Produces: unchanged retained DTO/timezone APIs; three removed public members; unchanged HTTP and validation behavior.
 
-- [ ] **Step 1: Record baseline**
+- [x] **Step 1: Record baseline**
 
 Check `git status --short`; read the spec, File Map sources, and each harness mode before running it.
 Run SystemService `contract` and `validation` checks against unchanged code and record exit codes.
 Reserve the full consumer matrix for Step 5.
 Separate existing failures from regressions; do not fix unrelated problems.
 
-- [ ] **Step 2: Add failing contract assertions**
+- [x] **Step 2: Add failing contract assertions**
 
 Insert these assertions in `RunContractChecks()` before the existing protobuf checks.
 Use the existing `System.Reflection` import and `Assert` helper; do not introduce a test mode or helper class.
@@ -74,7 +74,7 @@ Run `dotnet run --project test/SystemService.CleanupChecks -- contract`.
 Expected: exit 1 with `Assertion failed: unused VietnamNow removed`, not a compilation or infrastructure error.
 The other absence checks become observable as the preceding removals are made in Step 3.
 
-- [ ] **Step 3: Delete the three unused members**
+- [x] **Step 3: Delete the three unused members**
 
 Remove `public static DateTime VietnamNow` only; rerun `contract` and expect
 `unused DeleteListRequestValidator removed` to fail.
@@ -84,7 +84,7 @@ Remove `GetByIdDeleteRequestValidator` and its `using FluentValidation`; rerun
 and expect exit 0 with all existing contract assertions still passing.
 Keep retained DTO declarations, defaults, nullability, and timezone lookup unchanged.
 
-- [ ] **Step 4: Keep the existing validation characterization accurate**
+- [x] **Step 4: Keep the existing validation characterization accurate**
 
 In `ValidationChecks.cs`, rename `unregistered_shared_validator_stays_inactive()`
 and its call to `empty_delete_list_preserves_baseline()`.
@@ -95,7 +95,7 @@ Run `dotnet run --project test/SystemService.CleanupChecks -- validation`;
 expect exit 0 and `PASS SystemService validation characterization checks`.
 Keep all existing converter, JWT-header, authorization-order, and active-validator checks.
 
-- [ ] **Step 5: Verify all affected consumers**
+- [x] **Step 5: Verify all affected consumers**
 
 Run sequentially from the repository root:
 
@@ -121,13 +121,40 @@ Expected: each command exits 0; FileService reports 0 failures.
 Record warnings and NOT RUN cases separately, never as passed assertions.
 These checks do not authorize AppHost startup against application data or prove deployment compatibility.
 
-- [ ] **Step 6: Review and commit the scoped change**
+- [x] **Step 6: Review and commit the scoped change**
 
 Inspect `git diff --check` and `git diff --stat`; confirm no product changes
 outside the three Shared files and no dropped behavior assertions.
 Record results in this plan and request one focused independent read-only review.
 Stage only the five File Map files and this plan; exclude generated output and unrelated changes.
 Commit with `git commit -m "refactor: remove unused Shared members"`.
+
+## Execution Results
+
+- **Step 1 Baseline**: `git status --short` clean; SystemService `contract` exit 0; SystemService `validation` exit 0 (`PASS SystemService validation characterization checks`).
+- **Step 2 TDD Red**: Contract assertions added; `dotnet run --project test/SystemService.CleanupChecks -- contract` failed with exit 1 and `Assertion failed: unused VietnamNow removed`.
+- **Step 3 TDD Green progression**:
+  - Removed `DateTimeHelper.VietnamNow` -> failed with exit 1 and `Assertion failed: unused DeleteListRequestValidator removed`.
+  - Removed `DeleteListRequestValidator` and `using FluentValidation;` -> failed with exit 1 and `Assertion failed: unused GetByIdDeleteRequestValidator removed`.
+  - Removed `GetByIdDeleteRequestValidator` and `using FluentValidation;` -> passed with exit 0 (`All contract checks passed!`).
+- **Step 4 Validation Characterization**: Renamed test and call to `empty_delete_list_preserves_baseline()`, updated message to `"empty delete list preserves baseline success"`; `dotnet run --project test/SystemService.CleanupChecks -- validation` passed with exit 0 (`PASS SystemService validation characterization checks`).
+- **Step 5 Full Consumer Matrix**:
+  - `dotnet build src/platform/Blocks.Shared/Blocks.Shared.csproj`: Exit 0 (0 warnings, 0 errors).
+  - `dotnet build src/services/Blocks.ApiGateway/Blocks.ApiGateway.csproj`: Exit 0 (0 warnings, 0 errors).
+  - `dotnet build src/services/Blocks.SystemService/Blocks.SystemService.csproj`: Exit 0 (0 warnings, 0 errors).
+  - `dotnet build src/services/Blocks.CatalogService/Blocks.CatalogService.csproj`: Exit 0 (4 baseline warnings, 0 errors).
+  - `dotnet build src/services/Blocks.FileService/Blocks.FileService.csproj`: Exit 0 (2 baseline warnings, 0 errors).
+  - `dotnet build src/platform/Blocks.AppHost/Blocks.AppHost.csproj`: Exit 0 (1 baseline ASPIRE010 warning, 0 errors).
+  - `dotnet run --project test/SystemService.CleanupChecks -- contract`: Exit 0 (`All contract checks passed!`).
+  - `dotnet run --project test/SystemService.CleanupChecks -- runtime`: Exit 0 (`All runtime checks passed (no database connection).`).
+  - `dotnet run --project test/SystemService.CleanupChecks -- validation`: Exit 0 (`PASS SystemService validation characterization checks`).
+  - `dotnet run --project test/CatalogService.CleanupChecks -- contract`: Exit 0 (`PASS contract checks`).
+  - `dotnet run --project test/CatalogService.CleanupChecks -- runtime`: Exit 0 (`PASS runtime checks`).
+  - `dotnet run --project test/CatalogService.CleanupChecks -- validation`: Exit 0 (`PASS CatalogService validation characterization checks`).
+  - `dotnet run --project test/FileService.RemovalChecks -- gateway`: Exit 0 (`FileService checks: 0 failure(s), 0 NOT RUN.`).
+  - `dotnet run --project test/FileService.RemovalChecks -- boundary`: Exit 0 (`FileService checks: 0 failure(s), 0 NOT RUN.`).
+  - `& ./test/Backend.Upgrade.Check.ps1 -Check all`: Exit 0 (`All checks passed.`).
+- **Step 6 Self-Review**: Diff scoped strictly to the 5 File Map files (2 deletions in Shared, 2 test updates in SystemService.CleanupChecks) and this plan. No dropped behavior assertions, no whitespace errors.
 
 ## Execution Handoff
 

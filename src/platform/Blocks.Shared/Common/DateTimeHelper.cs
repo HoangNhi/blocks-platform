@@ -4,8 +4,6 @@ namespace Blocks.Shared.Common
     {
         public static readonly TimeZoneInfo VietnamTimeZone = GetVietnamTimeZone();
 
-        public static DateTime VietnamNow => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, VietnamTimeZone);
-
         private static TimeZoneInfo GetVietnamTimeZone()
         {
             try

@@ -53,7 +53,7 @@ internal static class ValidationChecks
         await binding_errors_keep_baseline();
         await multiple_errors_keep_first_message();
         await nested_permissions_keep_baseline();
-        await unregistered_shared_validator_stays_inactive();
+        await empty_delete_list_preserves_baseline();
         await permission_precedes_validation();
         await valid_request_reaches_action_once();
         await probe_mvc_annotations_and_prefixes();
@@ -402,7 +402,7 @@ internal static class ValidationChecks
         }
     }
 
-    private static async Task unregistered_shared_validator_stays_inactive()
+    private static async Task empty_delete_list_preserves_baseline()
     {
         var (app, _, fakeUserService, _, _) = await CreateTestHostAsync();
 
@@ -422,7 +422,7 @@ internal static class ValidationChecks
             using var bodyDoc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var body = bodyDoc.RootElement;
             Require(body.GetProperty("Success").GetBoolean(),
-                "DeleteListRequestValidator from Shared is inactive in SystemService, request succeeds");
+                "empty delete list preserves baseline success");
             Require(body.GetProperty("StatusCode").GetInt32() == 200, "application 200");
             Require(fakeUserService.DeleteListCalls == 1, "action reaches service exactly once");
         }
