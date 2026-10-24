@@ -2,17 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Calendar } from "./calendar";
 
-const origToLocaleString = Date.prototype.toLocaleString;
-Date.prototype.toLocaleString = function (this: Date, locale?: any, options?: any) {
-  if (
-    (locale === "vi" || (Array.isArray(locale) && locale.includes("vi"))) &&
-    options?.month === "short"
-  ) {
-    return `thg ${this.getMonth() + 1}`;
-  }
-  return origToLocaleString.call(this, locale, options);
-};
-
 describe("Calendar", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -36,7 +25,7 @@ describe("Calendar", () => {
     );
 
     const normalizedMonthText = (container.textContent || "").toLowerCase();
-    expect(normalizedMonthText).toMatch(/thg\.?\s*10/i);
+    expect(normalizedMonthText).toMatch(/(thg\.?\s*10|tháng\s*10)/i);
 
     const day24Button = screen.getByRole("button", {
       name: (_content, element) =>

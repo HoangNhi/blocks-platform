@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import axios, { type InternalAxiosRequestConfig, type AxiosResponse, type GenericAbortSignal } from "axios";
 import api, { API_BASE_URL } from "./api";
 import * as cookies from "./cookies";
@@ -6,11 +6,16 @@ import { API_ENDPOINTS } from "@/config";
 
 describe("api client blob handling and refresh", () => {
   const axiosInstance = (api as any).axiosInstance;
+  const originalAdapter = axiosInstance.defaults.adapter;
 
   beforeEach(() => {
     vi.restoreAllMocks();
     global.URL.createObjectURL = vi.fn();
     global.URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    axiosInstance.defaults.adapter = originalAdapter;
   });
 
   it("blob_403_rejects_without_image", async () => {
