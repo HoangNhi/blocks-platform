@@ -1,135 +1,105 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HomePage from "./HomePage.tsx";
-import { useDashboardCycles } from "@/features/business/routes/Dashboard/hooks/useDashboardCycles";
+import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
+import type { User } from "@/features/system/types/user.types";
+import type { AuthContextType } from "@/features/system/types/auth.types";
 
-vi.mock("@/features/business/routes/Dashboard/hooks/useDashboardCycles", () => ({
-  useDashboardCycles: vi.fn(),
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: vi.fn(),
 }));
 
-vi.mock("@/features/business/routes/Dashboard/components/CycleChartSlide", () => ({
-  default: ({ cycle }: { cycle: { CycleName: string } }) => <div>{cycle.CycleName}</div>,
-}));
+const createMockUser = (overrides?: Partial<User>): User => ({
+  Id: "u1",
+  Username: "testuser",
+  Fullname: "Test User",
+  Email: "test@example.com",
+  RoleId: "r1",
+  RoleName: "User",
+  IsActived: true,
+  IsEdit: false,
+  ...overrides,
+});
 
-afterEach(() => {
-  vi.clearAllMocks();
+const createMockAuth = (
+  user: User | null = null,
+  permissions: AuthContextType["permissions"] = [],
+): AuthContextType => ({
+  user,
+  systemGroup: [],
+  menu: [],
+  permissions,
+  roleName: user?.RoleName ?? null,
+  isExternalReviewer: false,
+  isAuthenticated: !!user,
+  loading: false,
+  login: vi.fn(),
+  logout: vi.fn(),
+  getPermission: vi.fn(),
+  refreshProfile: vi.fn(),
 });
 
 describe("HomePage", () => {
-  it("renders overview cards and multiple cycles without crashing", async () => {
-    vi.mocked(useDashboardCycles).mockReturnValue({
-      data: {
-        Summary: {
-          ActiveCyclesCount: 2,
-          EvidenceCount: 12,
-          ActionPlansCount: 5,
-          IncompleteActionPlansCount: 3,
-          OverdueActionPlansCount: 1,
-          NearDueActionPlansCount: 2,
-        },
-        Cycles: [
-          {
-            CycleId: "cycle-1",
-            CycleName: "Chu kỳ 1",
-            CycleStatus: 1,
-            Deadline: "2026-05-01T00:00:00Z",
-            StandardSetName: "Bộ tiêu chuẩn A",
-            ChartType: 0,
-            Stats: {
-              AvgScore: 4.5,
-              EvidenceCount: 6,
-              CriteriaEvaluated: 10,
-              CriteriaTotal: 12,
-              ProgressPercent: 83,
-            },
-            ChartSeries: [],
-            TopCriteria: [],
-            BottomCriteria: [],
-          },
-          {
-            CycleId: "cycle-2",
-            CycleName: "Chu kỳ 2",
-            CycleStatus: 2,
-            Deadline: "2026-06-01T00:00:00Z",
-            StandardSetName: "Bộ tiêu chuẩn B",
-            ChartType: 1,
-            Stats: {
-              AvgScore: 3.5,
-              EvidenceCount: 6,
-              CriteriaEvaluated: 9,
-              CriteriaTotal: 11,
-              ProgressPercent: 82,
-            },
-            ChartSeries: [],
-            TopCriteria: [],
-            BottomCriteria: [],
-          },
-        ],
-      },
-      isLoading: false,
-      isError: false,
-    } as never);
+  beforeEach(() => {
+    vi.spyOn(api, "get").mockResolvedValue({ Success: true, StatusCode: 200 } as never);
+    vi.spyOn(api, "post").mockResolvedValue({ Success: true, StatusCode: 200 } as never);
+  });
 
-    const { container } = render(<HomePage />);
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    expect(screen.getByText("Chu kỳ hoạt động")).toBeInTheDocument();
-    expect(screen.getByText("Kế hoạch hành động")).toBeInTheDocument();
-    expect(screen.getByText("Cảnh báo kế hoạch")).toBeInTheDocument();
-    expect(screen.getByText(/1 quá hạn · 2 trong 30 ngày/)).toBeInTheDocument();
-    expect(screen.getByText("Chu kỳ 1")).toBeInTheDocument();
-    expect(screen.getByText("Chu kỳ 2")).toBeInTheDocument();
+  it("renders_authenticated_welcome", () => {
+    const mockUser = createMockUser();
+    vi.mocked(useAuth).mockReturnValue(createMockAuth(mockUser));
 
-    await waitFor(() => {
-      expect(screen.getAllByRole("button")).toHaveLength(4);
+    render(<HomePage />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Xin chào, Test User");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: "null user", user: null },
+    {
+      label: "empty fullname",
+      user: createMockUser({ Id: "u2", Username: "user2", Fullname: "" }),
+    },
+    {
+      label: "whitespace fullname",
+      user: createMockUser({ Id: "u3", Username: "user3", Fullname: "   " }),
+    },
+  ])("handles_missing_or_blank_fullname ($label)", ({ user }) => {
+    vi.mocked(useAuth).mockReturnValue(createMockAuth(user));
+
+    render(<HomePage />);
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Xin chào");
+    expect(heading.textContent).not.toContain("undefined");
+    expect(heading.textContent).not.toContain("null");
+    expect(heading.textContent).not.toContain(",");
+  });
+
+  it("does_not_fetch_or_link_to_privileged_features", () => {
+    const mockUser = createMockUser({
+      Id: "u4",
+      Username: "restricted",
+      Fullname: "Restricted User",
+      Email: "restricted@example.com",
+      RoleId: "r2",
+      RoleName: "Guest",
     });
-
-    const carouselViewport = container.querySelector(".snap-x");
-    expect(carouselViewport?.className).toContain("[scrollbar-width:none]");
-    expect(carouselViewport?.className).toContain("[&::-webkit-scrollbar]:hidden");
-  });
-
-  it("hiển thị trạng thái loading", () => {
-    vi.mocked(useDashboardCycles).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isError: false,
-    } as never);
+    vi.mocked(useAuth).mockReturnValue(createMockAuth(mockUser, []));
 
     render(<HomePage />);
-    expect(screen.getAllByText("—")).toHaveLength(4);
-  });
 
-  it("hiển thị thông báo lỗi khi isError", () => {
-    vi.mocked(useDashboardCycles).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-    } as never);
-
-    render(<HomePage />);
-    expect(screen.getByText("Không thể tải dữ liệu. Vui lòng thử lại.")).toBeInTheDocument();
-  });
-
-  it("hiển thị thông báo chưa tham gia chu kỳ khi cycles rỗng", () => {
-    vi.mocked(useDashboardCycles).mockReturnValue({
-      data: {
-        Summary: {
-          ActiveCyclesCount: 0,
-          EvidenceCount: 0,
-          ActionPlansCount: 0,
-          IncompleteActionPlansCount: 0,
-          OverdueActionPlansCount: 0,
-          NearDueActionPlansCount: 0,
-        },
-        Cycles: [],
-      },
-      isLoading: false,
-      isError: false,
-    } as never);
-
-    render(<HomePage />);
-    expect(
-      screen.getByText("Bạn chưa tham gia chu kỳ đánh giá nào đang hoạt động."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Xin chào, Restricted User");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
   });
 });
