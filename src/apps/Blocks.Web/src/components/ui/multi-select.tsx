@@ -547,9 +547,10 @@ const MultipleSelector = ({
   );
 
   /** Avoid Creatable Selector freezing or lagging when paste a long string. */
-  const commandFilter = React.useCallback(() => {
-    if (commandProps?.filter) {
-      return commandProps.filter;
+  const customFilter = commandProps?.filter;
+  const commandFilter = React.useMemo(() => {
+    if (customFilter) {
+      return customFilter;
     }
 
     if (creatable) {
@@ -558,9 +559,9 @@ const MultipleSelector = ({
       };
     }
 
-    // Using default filter in `cmdk`. We don&lsquo;t have to provide it.
+    // Using default filter in `cmdk`. We don't have to provide it.
     return undefined;
-  }, [creatable, commandProps?.filter]);
+  }, [creatable, customFilter]);
 
   return (
     <Command
@@ -578,8 +579,8 @@ const MultipleSelector = ({
         commandProps?.shouldFilter !== undefined
           ? commandProps.shouldFilter
           : !onSearch
-      } // When onSearch is provided, we don&lsquo;t want to filter the options. You can still override it.
-      filter={commandFilter()}
+      } // When onSearch is provided, we don't have to provide it.
+      filter={commandFilter}
     >
       <div
         className={cn(

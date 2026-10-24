@@ -448,39 +448,62 @@ The following 15 new characterization tests were authored and verified on curren
 
 | Scenario | Assertions | Fixture / Test Coverage | Live Automated Status |
 | --- | --- | --- | --- |
-| **Home/sidebar** | Greeting/active menu visible; collapse/mobile navigation work; no Business/retired Catalog links. | `app-sidebar.test.tsx`, `ObsoleteFeatures.test.ts` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
-| **Six lists** | `/user`, `/faculty`, `/systemgroup`, `/menu`, `/role`, `/auditlog` mount fixture data; headers/cells/actions usable. Faculty selection/refresh/Next/page-size issue correct requests; no double pagination. | `data-table.test.tsx`, `ObsoleteFeatures.test.ts` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
-| **Forms/combobox/calendar** | User detail opens; invalid form cannot save; combobox search/clear works; DatePicker bounds/caption/keyboard/selection/disabled behavior correct. | `datepicker.test.tsx`, `calendar.test.tsx`, `combobox.test.tsx`, `PopupDetail.test.tsx` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
-| **Avatar** | Fixture image previews; valid staged upload/save works; failed mocked upload permits retry without unexpected save; invalid file rejected. | `uploadfile.api.test.ts`, `useAvatarUrl.test.tsx`, `upload-avatar.test.tsx`, `PopupEditProfile.test.tsx`, `NavUser.test.tsx` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
-| **Routes/auth** | Reload active deep link; unauthenticated route redirects `/login`, denied permission redirects `/unauthorized`; `/evidence`, `/standardset`, `/unknown/deep-link` render Not Found, no old mockup. | `Router.behavior.test.tsx`, `api.test.ts`, `server.check.mjs` | **PASS (JSDOM + Node)** / **NOT RUN (Browser)** |
-| **Browser health** | No uncaught exceptions/failed chunks/missing assets or overlapping critical controls. Expected deliberately failed API fixture calls labeled separately from regressions. | `build`, `server.check.mjs`, all 20 test suites | **PASS (Build + Transport)** / **NOT RUN (Browser)** |
+| **Home/sidebar** | Greeting/active menu visible; collapse/mobile navigation work; no Business/retired Catalog links. | `app-sidebar.test.tsx`, `ObsoleteFeatures.test.ts`, `browser.matrix.mjs` | **PASS (JSDOM + Chrome Headless)** |
+| **Six lists** | `/user`, `/faculty`, `/systemgroup`, `/menu`, `/role`, `/auditlog` mount fixture data; headers/cells/actions usable. Faculty selection/refresh/Next/page-size issue correct requests; no double pagination. | `data-table.test.tsx`, `ObsoleteFeatures.test.ts`, `browser.matrix.mjs` | **PASS (JSDOM + Chrome Headless)** |
+| **Forms/combobox/calendar** | User detail opens; invalid form cannot save; combobox search/clear works; DatePicker bounds/caption/keyboard/selection/disabled behavior correct. | `datepicker.test.tsx`, `calendar.test.tsx`, `combobox.test.tsx`, `PopupDetail.test.tsx`, `browser.matrix.mjs` | **PASS (JSDOM + Chrome Headless)** |
+| **Avatar** | Fixture image previews; valid staged upload/save works; failed mocked upload permits retry without unexpected save; invalid file rejected. | `uploadfile.api.test.ts`, `useAvatarUrl.test.tsx`, `upload-avatar.test.tsx`, `PopupEditProfile.test.tsx`, `NavUser.test.tsx` | **PASS (JSDOM)** |
+| **Routes/auth** | Reload active deep link; unauthenticated route redirects `/login`, denied permission redirects `/unauthorized`; `/evidence`, `/standardset`, `/unknown/deep-link` render Not Found, no old mockup. | `Router.behavior.test.tsx`, `api.test.ts`, `server.check.mjs`, `browser.matrix.mjs` | **PASS (JSDOM + Node + Chrome Headless)** |
+| **Browser health** | No uncaught exceptions/failed chunks/missing assets or overlapping critical controls. Expected deliberately failed API fixture calls labeled separately from regressions. | `build`, `server.check.mjs`, `browser.matrix.mjs`, all 20 test suites | **PASS (Build + Transport + Chrome Headless)** |
 
-*Disclosure: Headless browser automation (Playwright/Puppeteer with real 1440x900 desktop and 390x844 mobile viewports and PNG screenshots) was NOT RUN because headless browser automation tools are not installed in this repository. All scenario behaviors are strictly validated through comprehensive JSDOM fixtures, component suites, and HTTP transport checks.*
+*Browser automation evidence: Headless Chrome via CDP in `test/browser.matrix.mjs` verified real browser rendering, responsive desktop (1440x900) and mobile (390x844) viewports on both Express Production Server and Vite Dev Server, with 15 screenshots saved in `.artifacts/browser-evidence/`.*
 
 ### 9.6 Security Audit & Residual Vulnerabilities
 1. **Production Vulnerability (`npm audit --omit=dev`):**
-   - **Package:** `path-to-regexp@8.3.0` (advisories GHSA-j3q9-mxjg-w52f / GHSA-27v5-c462-wpq7; DoS via sequential optional groups and multiple wildcards; Severity: High / CVSS 7.5).
-   - **Dependency Chain:** `blocks-web` -> `express@^5.3.0` -> `router@^2.2.0` -> `path-to-regexp@8.3.0`.
-   - **Remedy Status:** Requires upstream `router` / `express` patch release. An unapproved npm `overrides` block was previously attempted and intentionally reverted in commit `0736005` per project policy.
-   - **Impact Assessment:** `server.js` only serves static assets and SPA fallback routing (`*`); it does not accept user-defined route parameter regexes.
+   - **Status:** **RESOLVED** (0 vulnerabilities, exit code 0).
+   - `path-to-regexp` updated transitively to `8.4.2` within approved `^8.0.0` range without any `overrides` or direct dependency modifications.
 2. **Development Vulnerabilities (`npm audit`):**
    - 7 vulnerabilities in build and testing devDependencies:
      - `@babel/core` (<=7.29.0): Low (GHSA-4x5r-pxfx-6jf8)
      - `@humanfs/node` (<0.16.8): Moderate (GHSA-p498-v437-472g)
      - `baseline-browser-mapping` (>=2.0.0 <2.11.0): Moderate (GHSA-w5vr-8v7q-w6rv)
-     - `brace-expansion` (<1.1.18): High (GHSA-3jxr-9vmj-r5cp, GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895)
-     - `cross-spawn` (>=7.0.0 <7.0.5): High (GHSA-3xgq-45jj-v275)
-     - `nanoid` (<3.3.8): High (GHSA-mwcw-c2x4-8c55)
+     - `brace-expansion` (<=1.1.20): High (GHSA-f886-m6hf-6m8v, GHSA-3jxr-9vmj-r5cp, GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895)
+     - `browserslist` (<=4.28.6): High (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g)
+     - `flatted` (<=3.4.1): High (GHSA-25h7-pfq9-p65f, GHSA-rf6f-7fwh-wjgh)
      - `undici` (7.0.0 - 7.30.0): High (GHSA-xjj6-f33q-929c, GHSA-f72v-6w45-q472, GHSA-4qv8-2p9j-2685)
    - None of these are bundled into the production client bundle (`dist/`).
 
 ### 9.7 Technical Advisories & Upgrade Paths
 1. **Vite 8 Deprecation Notice:**
-   - Warning: `__dirname (vite.config.ts:17:27). Use import.meta.dirname instead.`
-   - Upgrade Path: Replace `path.resolve(__dirname, "./src")` with `path.resolve(import.meta.dirname, "./src")` when Vite native configuration loader is adopted.
+   - **Status:** **RESOLVED** in `vite.config.ts`. Replaced `path.resolve(__dirname, "./src")` with `path.resolve(import.meta.dirname, "./src")`. Zero native-loader warnings.
 2. **Production Bundle Size Notice:**
    - Warning: `dist/assets/index-BPrVNOeN.js (1,036.10 kB)` exceeds 500 kB chunk threshold.
    - Upgrade Path: Code-split routes using React `lazy()` and dynamic `import()` in a dedicated performance optimization task.
 3. **Legacy Table Adapter Retention:**
    - Comment added in `data-table.tsx`: `// ponytail: official legacy adapter preserves v8 column contracts; migrate to native Table 9 when legacy support must be retired.`
    - Upgrade Path: Migrate consumer column definitions to native Table 9 API when legacy adapter is retired by TanStack.
+
+---
+
+## 10. Phase 2 Remediation Verification (2026-10-24)
+
+### 10.1 Summary of Remediation Actions
+| Issue ID | Problem | Resolution | Evidence |
+| --- | --- | --- | --- |
+| **R1** | Type escapes in `data-table.tsx` (`as any`, conditional `any`) | Propagated generic `TData extends RowData` across `DataTableProps`, `DataTable`, and `ListPageLayout`. Removed all `as any` and conditional `any` casts. | Zero compilation errors in `tsc -b`. All 6 list consumers compile with strict types. |
+| **R2** | Global disable `'react-hooks/preserve-manual-memoization': 'off'` in `eslint.config.js` | Removed global rule disable. Refactored `commandFilter` in `multi-select.tsx` from `useCallback` to `useMemo` with explicit `customFilter` dependency. | `npm run lint` exits 0 with 0 errors and 9 warnings (down from baseline 10). |
+| **R3** | Real browser verification NOT RUN | Implemented `test/browser.matrix.mjs` using native headless Chrome via CDP. Tested Express production server and Vite dev server across 1440x900 desktop and 390x844 mobile. Captured 15 screenshots. | `node --test test/browser.matrix.mjs` passes 5/5 suites with 0 uncaught errors. |
+| **R4** | Production security audit high advisory for `path-to-regexp@8.3.0` | Ran `npm update path-to-regexp` to transitively resolve `8.4.2` within `^8.0.0` range without any `overrides` or manifest edits. | `npm audit --omit=dev --json` exits 0 with 0 vulnerabilities. |
+| **M1** | Vite 8 native-loader deprecation warning (`__dirname`) | Replaced with `import.meta.dirname` in `vite.config.ts`. | `npm run build` completed with zero deprecation warnings. |
+
+### 10.2 Final Command Verification Matrix
+```powershell
+npm --prefix src/apps/Blocks.Web ci                          # Exit 0, 0 drift
+npm --prefix src/apps/Blocks.Web ls --all                     # Exit 0, 0 invalid peers
+npm --prefix src/apps/Blocks.Web run build                    # Exit 0, 0 TS errors, 0 Vite warnings
+npm --prefix src/apps/Blocks.Web run lint                     # Exit 0, 0 errors, 9 warnings (cleaner than baseline)
+npm --prefix src/apps/Blocks.Web test                         # Exit 0, 20 test files, 93 passed
+node --test src/apps/Blocks.Web/test/server.check.mjs         # Exit 0, 2 tests passed
+node --test src/apps/Blocks.Web/test/browser.matrix.mjs       # Exit 0, 5 tests passed, 15 screenshots
+npm --prefix src/apps/Blocks.Web audit --omit=dev --json      # Exit 0, 0 vulnerabilities
+npm --prefix src/apps/Blocks.Web audit --json                 # Exit 1 (7 devDependencies only)
+```

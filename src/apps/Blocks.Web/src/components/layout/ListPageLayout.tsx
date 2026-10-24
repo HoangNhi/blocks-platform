@@ -9,9 +9,9 @@ import {
     InputGroupButton,
     InputGroupInput,
 } from "@/components/ui/input-group";
-import type { RowSelectionState, OnChangeFn } from "@tanstack/react-table";
+import type { RowSelectionState, OnChangeFn, RowData } from "@tanstack/react-table";
 
-interface ListPageLayoutProps<TData> {
+interface ListPageLayoutProps<TData extends RowData> {
     columns: any[];
     data: TData[];
     totalRow: number;
@@ -46,7 +46,7 @@ interface ListPageLayoutProps<TData> {
     compactToolbar?: boolean;
 }
 
-export function ListPageLayout<TData>({
+export function ListPageLayout<TData extends RowData>({
     columns,
     data,
     totalRow,

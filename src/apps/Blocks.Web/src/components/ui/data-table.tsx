@@ -28,13 +28,13 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type ColumnDef<TData, TValue = unknown> = LegacyColumnDef<
-  TData extends RowData ? TData : any,
+export type ColumnDef<TData extends RowData, TValue = unknown> = LegacyColumnDef<
+  TData,
   TValue
 >;
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+interface DataTableProps<TData extends RowData, _TValue = unknown> {
+  columns: ColumnDef<TData, unknown>[];
   data: TData[];
   totalRow?: number;
   rowSelection?: RowSelectionState;
@@ -50,7 +50,7 @@ interface DataTableProps<TData, TValue> {
   meta?: any;
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends RowData, _TValue = unknown>({
   columns,
   data,
   totalRow,
@@ -65,14 +65,14 @@ export function DataTable<TData, TValue>({
   getRowId,
   getRowClassName,
   meta,
-}: DataTableProps<TData, TValue>) {
+}: DataTableProps<TData, _TValue>) {
   // ponytail: official legacy adapter preserves v8 column contracts; migrate to native Table 9 when legacy support must be retired.
-  const table = useLegacyTable<TData extends RowData ? TData : any>({
-    data: data as any,
-    columns: columns as any,
+  const table = useLegacyTable<TData>({
+    data,
+    columns,
     getCoreRowModel: getCoreRowModel(),
     onRowSelectionChange: setRowSelection,
-    getRowId: getRowId as any,
+    getRowId,
     state: {
       rowSelection,
     },
