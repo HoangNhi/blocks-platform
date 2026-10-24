@@ -256,4 +256,91 @@ describe("api client blob handling and refresh", () => {
     controller.abort();
     expect(retrySignal?.aborted).toBe(true);
   });
+
+  it("concurrent_soft_401_requests_share_refresh", async () => {
+    vi.spyOn(cookies, "getRefreshToken").mockReturnValue("existing-refresh-token");
+    const saveTokensSpy = vi.spyOn(cookies, "saveTokens").mockImplementation(() => {});
+
+    let resolveRefresh!: (value: any) => void;
+    const refreshPromise = new Promise((resolve) => {
+      resolveRefresh = resolve;
+    });
+
+    const refreshPostSpy = vi.spyOn(axios, "post").mockImplementation(async () => {
+      return refreshPromise;
+    });
+
+    const calls: { url?: string; auth?: any }[] = [];
+
+    axiosInstance.defaults.adapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
+      const auth = config.headers?.Authorization;
+      calls.push({ url: config.url, auth });
+
+      if (!auth || auth !== "Bearer refreshed-jwt-token") {
+        // Soft 401 on initial call (without new token)
+        return {
+          data: {
+            Success: false,
+            StatusCode: 401,
+            Message: "Token expired",
+          },
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "application/json" },
+          config,
+        };
+      }
+
+      // Successful retry with refreshed token
+      return {
+        data: {
+          Success: true,
+          StatusCode: 200,
+          Data: `retried-data-for-${config.url}`,
+        },
+        status: 200,
+        statusText: "OK",
+        headers: { "content-type": "application/json" },
+        config,
+      };
+    };
+
+    // Trigger both calls simultaneously
+    const promiseA = api.get<string>("/resource-a");
+    const promiseB = api.get<string>("/resource-b");
+
+    // Allow asynchronous dispatch to adapter and refresh initiation
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Resolve the single refresh call
+    resolveRefresh({
+      data: {
+        Success: true,
+        StatusCode: 200,
+        Data: {
+          AccessToken: "refreshed-jwt-token",
+          RefreshToken: "new-refresh-token",
+        },
+      },
+    });
+
+    const [resA, resB] = await Promise.all([promiseA, promiseB]);
+
+    // Refresh was called exactly once
+    expect(refreshPostSpy).toHaveBeenCalledTimes(1);
+    expect(refreshPostSpy).toHaveBeenCalledWith(
+      `${API_BASE_URL}${API_ENDPOINTS.System.Auth.REFRESH_TOKEN}`,
+      { RefreshToken: "existing-refresh-token" }
+    );
+    expect(saveTokensSpy).toHaveBeenCalledWith("refreshed-jwt-token", "new-refresh-token");
+
+    // Both requests resolved with retried data
+    expect(resA.Data).toBe("retried-data-for-/resource-a");
+    expect(resB.Data).toBe("retried-data-for-/resource-b");
+
+    // Total 4 calls through adapter: 2 initial soft-401s, 2 retries with refreshed token
+    expect(calls.length).toBe(4);
+    const retryCalls = calls.filter((c) => c.auth === "Bearer refreshed-jwt-token");
+    expect(retryCalls.length).toBe(2);
+  });
 });
