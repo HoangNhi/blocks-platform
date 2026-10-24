@@ -33,7 +33,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [openGroupId, setOpenGroupId] = React.useState<string | null>(null);
 
   const filteredMenu = React.useMemo(() => {
-    const retiredKeys = new Set(["filetype", "stakeholder", "standard", "standardset"]);
+    const retiredKeys = new Set([
+      "filetype",
+      "stakeholder",
+      "standard",
+      "standardset",
+      "cycle",
+      "evidence",
+      "evidencecyclemap",
+      "surveytemplate",
+      "surveycampaign",
+      "criterionevaluation",
+      "sar",
+      "internalreview",
+      "externalreview",
+      "actionplan",
+      "taskexecution",
+    ]);
     return (
       menu?.filter((item) => {
         const ctrl = item.Controller?.toLowerCase();

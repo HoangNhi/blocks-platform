@@ -273,4 +273,183 @@ describe("AppSidebar menu filtering and empty groups", () => {
     expect(() => renderSidebar([], [], "/")).not.toThrow();
     expect(screen.getByText("TỔNG QUAN")).toBeInTheDocument();
   });
+
+  it("cached_business_menus_are_hidden_at_each_level", () => {
+    const retiredKeys = [
+      "filetype", "stakeholder", "standard", "standardset",
+      "cycle", "evidence", "evidencecyclemap", "surveytemplate",
+      "surveycampaign", "criterionevaluation", "sar", "internalreview",
+      "externalreview", "actionplan", "taskexecution",
+    ];
+
+    const originalPermissions = Object.freeze([
+      Object.freeze({ PermissionId: "p1", Name: "VIEW_FACULTY" }),
+      Object.freeze({ PermissionId: "p2", Name: "VIEW_USER" }),
+    ]);
+
+    const systemGroup: SystemGroup[] = Object.freeze([
+      Object.freeze({ Id: "g-catalog", Name: "Danh mục", Sort: 1, IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "sub-catalog-mixed", Name: "Nhóm con hỗn hợp", Sort: 1, ParentId: "g-catalog", IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "g-retired-only", Name: "Nhóm chỉ có nghiệp vụ cũ", Sort: 2, IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "g-root-retired-subgroup", Name: "Gốc chỉ có nhóm con nghiệp vụ cũ", Sort: 3, IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "sub-retired-only", Name: "Nhóm con nghiệp vụ cũ", Sort: 1, ParentId: "g-root-retired-subgroup", IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "g-empty", Name: "Gốc hoàn toàn rỗng", Sort: 4, IsEdit: false, IsActived: true }),
+      Object.freeze({ Id: "g-system", Name: "Hệ thống", Sort: 5, IsEdit: false, IsActived: true }),
+    ]) as unknown as SystemGroup[];
+
+    // Distribute all 15 retired keys across lower, upper, and mixed casing
+    const retiredSpecs: Array<{ key: (typeof retiredKeys)[number]; controller: string; groupId: string }> = [
+      // Direct in mixed group (g-catalog)
+      { key: "filetype", controller: "filetype", groupId: "g-catalog" },
+      { key: "stakeholder", controller: "STAKEHOLDER", groupId: "g-catalog" },
+      { key: "standard", controller: "Standard", groupId: "g-catalog" },
+      { key: "evidencecyclemap", controller: "evidenceCycleMap", groupId: "g-catalog" },
+      { key: "surveytemplate", controller: "surveytemplate", groupId: "g-catalog" },
+      { key: "externalreview", controller: "EXTERNALREVIEW", groupId: "g-catalog" },
+      { key: "actionplan", controller: "actionPlan", groupId: "g-catalog" },
+      // Child in mixed group (sub-catalog-mixed)
+      { key: "cycle", controller: "cycle", groupId: "sub-catalog-mixed" },
+      { key: "evidence", controller: "EVIDENCE", groupId: "sub-catalog-mixed" },
+      { key: "taskexecution", controller: "TaskExecution", groupId: "sub-catalog-mixed" },
+      // Direct in retired-only group (g-retired-only)
+      { key: "surveycampaign", controller: "surveyCampaign", groupId: "g-retired-only" },
+      { key: "criterionevaluation", controller: "CRITERIONEVALUATION", groupId: "g-retired-only" },
+      // Child in retired-only subgroup (sub-retired-only under g-root-retired-subgroup)
+      { key: "standardset", controller: "standardSet", groupId: "sub-retired-only" },
+      { key: "sar", controller: "sar", groupId: "sub-retired-only" },
+      { key: "internalreview", controller: "InternalReview", groupId: "sub-retired-only" },
+    ];
+
+    const retiredMenuItems = retiredSpecs.map((spec, index) =>
+      Object.freeze({
+        Id: `ret-${index + 1}`,
+        Name: `Retired-${spec.key}`,
+        Controller: spec.controller,
+        SystemGroupId: spec.groupId,
+        Sort: index + 1,
+        CanView: true,
+        CanAdd: false,
+        CanUpdate: false,
+        CanDelete: false,
+        CanApprove: false,
+        CanAnalyze: false,
+        IsShowMenu: true,
+        IsEdit: false,
+        IsActived: true,
+      })
+    );
+
+    const retainedMenuItems = [
+      Object.freeze({
+        Id: "m-faculty",
+        Name: "Phòng ban",
+        Controller: "faculty",
+        SystemGroupId: "g-catalog",
+        Sort: 1,
+        CanView: true,
+        CanAdd: true,
+        CanUpdate: true,
+        CanDelete: true,
+        CanApprove: false,
+        CanAnalyze: false,
+        IsShowMenu: true,
+        IsEdit: false,
+        IsActived: true,
+      }),
+      Object.freeze({
+        Id: "m-hidden",
+        Name: "Menu ẩn không retire",
+        Controller: "hidden-feature",
+        SystemGroupId: "g-catalog",
+        Sort: 2,
+        CanView: true,
+        CanAdd: false,
+        CanUpdate: false,
+        CanDelete: false,
+        CanApprove: false,
+        CanAnalyze: false,
+        IsShowMenu: false,
+        IsEdit: false,
+        IsActived: true,
+      }),
+      Object.freeze({
+        Id: "m-sub-child",
+        Name: "Khoa con",
+        Controller: "sub-faculty",
+        SystemGroupId: "sub-catalog-mixed",
+        Sort: 1,
+        CanView: true,
+        CanAdd: true,
+        CanUpdate: true,
+        CanDelete: true,
+        CanApprove: false,
+        CanAnalyze: false,
+        IsShowMenu: true,
+        IsEdit: false,
+        IsActived: true,
+      }),
+      Object.freeze({
+        Id: "m-user",
+        Name: "Người dùng",
+        Controller: "user",
+        SystemGroupId: "g-system",
+        Sort: 1,
+        CanView: true,
+        CanAdd: true,
+        CanUpdate: true,
+        CanDelete: true,
+        CanApprove: false,
+        CanAnalyze: false,
+        IsShowMenu: true,
+        IsEdit: false,
+        IsActived: true,
+      }),
+    ];
+
+    const menu: Menu[] = Object.freeze([...retainedMenuItems, ...retiredMenuItems]) as unknown as Menu[];
+
+    const authState = {
+      menu,
+      systemGroup,
+      permissions: originalPermissions,
+      user: null,
+    };
+    vi.mocked(useAuth).mockReturnValue(authState as any);
+
+    renderSidebar(menu, systemGroup, "/faculty");
+
+    // 1. Open mixed root group "Danh mục"
+    fireEvent.click(screen.getByRole("button", { name: "Danh mục" }));
+
+    // Retained Faculty is active
+    const facultyLink = screen.getByRole("link", { name: "Phòng ban" });
+    expect(facultyLink).toHaveAttribute("href", "/faculty");
+    expect(facultyLink).toHaveAttribute("data-active", "true");
+
+    // Retained hidden-feature menu (IsShowMenu=false) remains rendered
+    expect(screen.getByRole("link", { name: "Menu ẩn không retire" })).toBeInTheDocument();
+
+    // Open mixed child subgroup "Nhóm con hỗn hợp"
+    fireEvent.click(screen.getByRole("button", { name: "Nhóm con hỗn hợp" }));
+    expect(screen.getByRole("link", { name: "Khoa con" })).toBeInTheDocument();
+
+    // Every retired business menu link must be hidden
+    for (const key of retiredKeys) {
+      expect(screen.queryByRole("link", { name: `Retired-${key}` })).not.toBeInTheDocument();
+    }
+
+    // 2. Retired-only groups and subgroups must disappear
+    expect(screen.queryByText("Nhóm chỉ có nghiệp vụ cũ")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gốc chỉ có nhóm con nghiệp vụ cũ")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nhóm con nghiệp vụ cũ")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gốc hoàn toàn rỗng")).not.toBeInTheDocument();
+
+    // 3. For retained User, explicitly click its group
+    fireEvent.click(screen.getByRole("button", { name: "Hệ thống" }));
+    expect(screen.getByRole("link", { name: "Người dùng" })).toHaveAttribute("href", "/user");
+    expect(authState.permissions).toEqual(originalPermissions);
+
+    // 4. Empty arrays do not throw
+    expect(() => renderSidebar([], [], "/")).not.toThrow();
+  });
 });
