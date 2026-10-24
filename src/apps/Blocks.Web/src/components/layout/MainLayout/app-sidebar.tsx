@@ -26,6 +26,24 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+const RETIRED_KEYS = new Set([
+  "filetype",
+  "stakeholder",
+  "standard",
+  "standardset",
+  "cycle",
+  "evidence",
+  "evidencecyclemap",
+  "surveytemplate",
+  "surveycampaign",
+  "criterionevaluation",
+  "sar",
+  "internalreview",
+  "externalreview",
+  "actionplan",
+  "taskexecution",
+]);
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const pathname = location.pathname.replace("/", "");
@@ -33,27 +51,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [openGroupId, setOpenGroupId] = React.useState<string | null>(null);
 
   const filteredMenu = React.useMemo(() => {
-    const retiredKeys = new Set([
-      "filetype",
-      "stakeholder",
-      "standard",
-      "standardset",
-      "cycle",
-      "evidence",
-      "evidencecyclemap",
-      "surveytemplate",
-      "surveycampaign",
-      "criterionevaluation",
-      "sar",
-      "internalreview",
-      "externalreview",
-      "actionplan",
-      "taskexecution",
-    ]);
     return (
       menu?.filter((item) => {
         const ctrl = item.Controller?.toLowerCase();
-        return !ctrl || !retiredKeys.has(ctrl);
+        return !ctrl || !RETIRED_KEYS.has(ctrl);
       }) || []
     );
   }, [menu]);
