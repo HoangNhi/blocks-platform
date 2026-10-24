@@ -70,8 +70,10 @@
 - `Blocks.BusinessService` and `Blocks.CollabService` are absent from the repository.
   `Blocks.AppHost.csproj` and `Blocks.slnx` build cleanly without them.
   Do not reintroduce references to absent services unless requested.
-- Frontend `src/features/business/` still exists. Its presence does not mean the
-  matching backend is available; do not delete those screens or invent a backend.
+- Frontend obsolete business UI, supporting viewers, and rich-text editing were
+  intentionally removed. Active frontend domains are System, Catalog (Faculty),
+  and File (avatar). Do not reintroduce Business/Collab routes, screens, or
+  dependencies.
 - SystemService's direct BusinessService dependency was deliberately removed.
   Do not reintroduce it to work around other stale references.
 - The frontend README is the Vite starter README, not a project setup guide.

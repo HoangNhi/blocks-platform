@@ -178,4 +178,88 @@ describe("ObsoleteFeatures", () => {
     expect(content).toContain(".animate-in");
     expect(content).toContain("@keyframes fadeIn");
   });
+
+  it("approved_dead_packages_are_absent_from_manifest_and_lockfile", () => {
+    const pkgPath = resolve(webDir, "package.json");
+    const lockPath = resolve(webDir, "package-lock.json");
+
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+
+    const deadPackages = [
+      "@sereneinserenade/tiptap-comment-extension",
+      "@tiptap/extension-collaboration",
+      "@tiptap/extension-collaboration-cursor",
+      "@tiptap/extension-image",
+      "@tiptap/extension-link",
+      "@tiptap/extension-table",
+      "@tiptap/extension-table-cell",
+      "@tiptap/extension-table-header",
+      "@tiptap/extension-table-of-contents",
+      "@tiptap/extension-table-row",
+      "@tiptap/extension-text-align",
+      "@tiptap/extension-underline",
+      "@tiptap/react",
+      "@tiptap/starter-kit",
+      "docx-preview",
+      "pdfjs-dist",
+      "recharts",
+      "xlsx",
+      "y-websocket",
+      "yjs",
+    ];
+
+    for (const name of deadPackages) {
+      expect(pkg.dependencies?.[name], `package.json should not contain ${name}`).toBeUndefined();
+      expect(
+        lock.packages?.[""]?.dependencies?.[name],
+        `package-lock.json root should not contain ${name}`
+      ).toBeUndefined();
+    }
+
+    // Exact Vite alias and override remain
+    expect(pkg.devDependencies?.vite).toBe("npm:rolldown-vite@7.2.5");
+    expect(pkg.overrides?.vite).toBe("npm:rolldown-vite@7.2.5");
+    expect(lock.packages?.[""]?.devDependencies?.vite).toBe("npm:rolldown-vite@7.2.5");
+    expect(lock.packages?.["node_modules/vite"]?.name).toBe("rolldown-vite");
+    expect(lock.packages?.["node_modules/vite"]?.version).toBe("7.2.5");
+
+    // Retained dependencies remain
+    const retainedDependencies = [
+      "uuid",
+      "date-fns",
+      "react-day-picker",
+      "cmdk",
+      "radix-ui",
+      "@radix-ui/react-accordion",
+      "@radix-ui/react-avatar",
+      "@radix-ui/react-checkbox",
+      "@radix-ui/react-collapsible",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-label",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-progress",
+      "@radix-ui/react-radio-group",
+      "@radix-ui/react-scroll-area",
+      "@radix-ui/react-select",
+      "@radix-ui/react-separator",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-tooltip",
+      "@tanstack/react-query",
+      "@tanstack/react-table",
+      "axios",
+      "js-cookie",
+      "jwt-decode",
+    ];
+
+    for (const name of retainedDependencies) {
+      expect(pkg.dependencies?.[name], `package.json should retain ${name}`).toBeDefined();
+      expect(
+        lock.packages?.[""]?.dependencies?.[name],
+        `package-lock.json should retain ${name}`
+      ).toBeDefined();
+    }
+  });
 });
