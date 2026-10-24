@@ -13,7 +13,7 @@ import type {
 import type { GetListPagingRequest } from "@/types/base/base.types";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
-import type { RowSelectionState } from "@tanstack/react-table";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 
 export const useRole = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -208,7 +208,8 @@ export const useRole = () => {
     pageRequest,
     rowSelection,
     setPageRequest,
-    setRowSelection,
+    setRowSelection: setRowSelection as OnChangeFn<RowSelectionState> &
+      ((selection: Record<string, boolean>) => void),
     getList,
     showPopupDetail,
     showPopupPermission,

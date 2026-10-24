@@ -1,11 +1,14 @@
 import {
-  type ColumnDef,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
   type RowSelectionState,
   type OnChangeFn,
+  type RowData,
 } from "@tanstack/react-table";
+import {
+  type LegacyColumnDef,
+  useLegacyTable,
+  getCoreRowModel,
+} from "@tanstack/react-table/legacy";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeftIcon,
@@ -24,6 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+type ColumnDef<TData, TValue = unknown> = LegacyColumnDef<
+  TData extends RowData ? TData : any,
+  TValue
+>;
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -58,12 +66,13 @@ export function DataTable<TData, TValue>({
   getRowClassName,
   meta,
 }: DataTableProps<TData, TValue>) {
-  const table = useReactTable({
-    data,
-    columns,
+  // ponytail: official legacy adapter preserves v8 column contracts; migrate to native Table 9 when legacy support must be retired.
+  const table = useLegacyTable<TData extends RowData ? TData : any>({
+    data: data as any,
+    columns: columns as any,
     getCoreRowModel: getCoreRowModel(),
     onRowSelectionChange: setRowSelection,
-    getRowId,
+    getRowId: getRowId as any,
     state: {
       rowSelection,
     },

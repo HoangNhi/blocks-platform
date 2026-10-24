@@ -306,4 +306,38 @@ The following 15 new characterization tests were authored and verified on curren
 3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (10 problems, 0 errors, 10 warnings, identical to baseline).
 4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 92 tests passed).
 
+---
+
+## 8. Task 5: Table 9 Legacy Adapter Migration Verification
+
+### 8.1 Environment & Metadata
+- **Package:** `@tanstack/react-table`: `^8.21.3` -> `^9.3.1` (installed: `9.3.1`)
+- **Node.js:** `v24.20.0`
+- **npm:** `11.1.1`
+
+### 8.2 Migration Diagnostics & Code Fixes
+- **Diagnostics upon Table 9 upgrade:**
+  - `useReactTable` v8 APIs and column contracts in Table 9 moved to the official `@tanstack/react-table/legacy` adapter.
+  - Export inspection:
+    - `@tanstack/react-table/legacy` exports `useLegacyTable`, `getCoreRowModel`, `LegacyColumnDef`, `LegacyRow`, `LegacyCell`, `LegacyColumn`, `LegacyHeader`, `LegacyHeaderGroup`, `LegacyReactTable`, `legacyCreateColumnHelper`.
+    - `@tanstack/react-table` root exports `flexRender`, `RowSelectionState`, `OnChangeFn`, `RowData`, `Updater`.
+  - Type changes:
+    - `RowSelectionState` changed from `Record<string, boolean>` in Table 8 to `Record<string, true>` in Table 9.
+    - `useListPage.ts` interface expects `setRowSelection: (selection: Record<string, boolean>) => void`.
+    - Consumer hooks (`useFaculty`, `useMenu`, `useRole`, `useSystemGroup`, `useUser`) and `AuditLogPage` adapt `setRowSelection` as `OnChangeFn<RowSelectionState> & ((selection: Record<string, boolean>) => void)` to satisfy both `useListPage` and `ListPageLayout` / `DataTable` without broad casts.
+  - `DataTableProps<TData, TValue>` and `DataTable<TData, TValue>` props retained exactly with `ColumnDef<TData, TValue>[]` mapping to `LegacyColumnDef<TData extends RowData ? TData : any, TValue>`.
+  - Comment added to `data-table.tsx`: `// ponytail: official legacy adapter preserves v8 column contracts; migrate to native Table 9 when legacy support must be retired.`
+
+### 8.3 TDD Verification Evidence
+- **Step 1 RED Command:** `npm --prefix src/apps/Blocks.Web test -- src/PackageUpgrade.test.ts`
+  - Result: Fails with `AssertionError: expected '^8.21.3' to be '^9.3.1'` in `table_range_matches_approved_matrix`.
+- **Step 5 Focused GREEN Command:** `npm --prefix src/apps/Blocks.Web test -- src/components/ui/data-table.test.tsx`
+  - Result: Exit code 0; 1 test file passed, 4 tests passed (`renders_faculty_columns_and_empty_state`, `keeps_selection_by_id_after_reorder_and_select_all`, `server_pagination_emits_requests_without_reslicing_rows`, `retains_meta_row_class_and_action_row_identity`).
+
+### 8.4 Common Green Gate Results
+1. `npm --prefix src/apps/Blocks.Web ls --all`: Exit code 0, 0 unmet peer dependencies.
+2. `npm --prefix src/apps/Blocks.Web run build`: Exit code 0 (`tsc -b && vite build` completed in ~11.5s).
+3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (9 problems, 0 errors, 9 warnings; 1 previous warning on `useReactTable` eliminated).
+4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 93 tests passed).
+
 

@@ -6,7 +6,7 @@ import { ListPageLayout } from "@/components/layout/ListPageLayout";
 import { useListPage } from "@/hooks/useListPage";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/datepicker";
-import type { RowSelectionState } from "@tanstack/react-table";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 
 const IS_SUCCESS_OPTIONS = [
   { Value: "true", Text: "Thành công" },
@@ -27,7 +27,9 @@ export default function AuditLogPage() {
     isFetching,
   } = useAuditLog();
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [rowSelection, setRowSelectionState] = useState<RowSelectionState>({});
+  const setRowSelection = setRowSelectionState as OnChangeFn<RowSelectionState> &
+    ((selection: Record<string, boolean>) => void);
 
   const listPage = useListPage({
     data,

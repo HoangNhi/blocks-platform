@@ -10,7 +10,7 @@ import type { Menu } from "@/features/system/types/menu.types";
 import type { GetListPagingRequest } from "@/types/base/base.types";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
-import type { RowSelectionState } from "@tanstack/react-table";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 
 export const useMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -166,7 +166,8 @@ export const useMenu = () => {
     pageRequest,
     rowSelection,
     setPageRequest,
-    setRowSelection,
+    setRowSelection: setRowSelection as OnChangeFn<RowSelectionState> &
+      ((selection: Record<string, boolean>) => void),
     getList,
     showPopupDetail,
     onOpenChange,

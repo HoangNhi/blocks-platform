@@ -1,4 +1,7 @@
-import { type ColumnDef, type Row } from "@tanstack/react-table";
+import {
+  type LegacyColumnDef as ColumnDef,
+  type LegacyRow as Row,
+} from "@tanstack/react-table/legacy";
 
 import { MoreHorizontal } from "lucide-react";
 

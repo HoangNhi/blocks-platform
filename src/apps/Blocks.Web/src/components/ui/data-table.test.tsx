@@ -4,7 +4,8 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { DataTable } from "./data-table";
 import { getColumns } from "@/features/catalog/routes/Faculty/columns";
 import type { Faculty } from "@/features/catalog/types/faculty.types";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { RowSelectionState } from "@tanstack/react-table";
+import type { LegacyColumnDef as ColumnDef } from "@tanstack/react-table/legacy";
 
 function TableHarness({
   columns,

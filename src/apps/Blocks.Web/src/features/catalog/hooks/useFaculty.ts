@@ -10,7 +10,7 @@ import type { Faculty } from "@/features/catalog/types/faculty.types";
 import type { GetListPagingRequest } from "@/types/base/base.types";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
-import type { RowSelectionState } from "@tanstack/react-table";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 
 export const useFaculty = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -146,7 +146,8 @@ export const useFaculty = () => {
     pageRequest,
     rowSelection,
     setPageRequest,
-    setRowSelection,
+    setRowSelection: setRowSelection as OnChangeFn<RowSelectionState> &
+      ((selection: Record<string, boolean>) => void),
     getList,
     showPopupDetail,
     onOpenChange,

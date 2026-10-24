@@ -180,6 +180,11 @@ describe("PackageUpgrade", () => {
     expect(pkg.dependencies["react-day-picker"]).toBe("^10.0.2");
   });
 
+  it("table_range_matches_approved_matrix", () => {
+    const pkg = JSON.parse(readFileSync(resolve(webDir, "package.json"), "utf8"));
+    expect(pkg.dependencies["@tanstack/react-table"]).toBe("^9.3.1");
+  });
+
   it("dev_port_and_alias_contract_are_preserved", async () => {
     const originalDevPort = process.env.VITE_DEV_PORT;
     try {

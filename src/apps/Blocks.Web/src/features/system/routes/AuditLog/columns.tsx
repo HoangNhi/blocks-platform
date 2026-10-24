@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { LegacyColumnDef as ColumnDef } from "@tanstack/react-table/legacy";
 import type { AuditLog } from "@/types/auditlog.types";
 import { Button } from "@/components/ui/button";
 import { Eye, CheckCircle2, XCircle } from "lucide-react";
