@@ -31,7 +31,6 @@ const createMockAuth = (
   menu: [],
   permissions,
   roleName: user?.RoleName ?? null,
-  isExternalReviewer: false,
   isAuthenticated: !!user,
   loading: false,
   login: vi.fn(),

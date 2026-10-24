@@ -27,7 +27,6 @@ import { menuService } from "@/features/system/api/menu.api";
 import { roleService } from "@/features/system/api/role.api";
 import { userService } from "@/features/system/api/user.api";
 import type { MenuGetListPaging } from "@/features/system/types/menu.types";
-import { EXT_ROLE_ID } from "@/constants/roles";
 // import { useLocation } from "react-router-dom";
 
 import { AuthContext } from "./auth-context-definition";
@@ -424,7 +423,6 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     menu,
     permissions,
     roleName,
-    isExternalReviewer: user?.RoleId === EXT_ROLE_ID,
     isAuthenticated: !!user,
     loading,
     login,

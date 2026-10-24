@@ -120,4 +120,64 @@ describe("PopupEditProfile", () => {
     expect(mockReset).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
+
+  it("staged_replacement_keeps_folder_and_save_failure_state", async () => {
+    mockUpload.mockResolvedValue({
+      kind: "staged",
+      folderUpload: "staged-folder-uuid-123",
+    });
+    const saveChange = vi.fn().mockResolvedValue(false);
+    const onOpenChange = vi.fn();
+
+    render(
+      <PopupEditProfile
+        user={user}
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        saveChange={saveChange}
+      />
+    );
+
+    const submitBtn = screen.getByRole("button", { name: "Lưu" });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(saveChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          AvatarAction: "replace",
+          FolderUpload: "staged-folder-uuid-123",
+        }),
+        false
+      );
+    });
+
+    expect(mockReset).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("upload_failure_prevents_profile_save", async () => {
+    mockUpload.mockRejectedValue(new Error("upload failed"));
+    const saveChange = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <PopupEditProfile
+        user={user}
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        saveChange={saveChange}
+      />
+    );
+
+    const submitBtn = screen.getByRole("button", { name: "Lưu" });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(mockUpload).toHaveBeenCalled();
+    });
+
+    expect(saveChange).not.toHaveBeenCalled();
+    expect(mockReset).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
 });

@@ -69,7 +69,6 @@ describe("NavUser", () => {
       systemGroup: null,
       menu: null,
       permissions: null,
-      isExternalReviewer: false,
       login: vi.fn(),
       getPermission: vi.fn(),
     });

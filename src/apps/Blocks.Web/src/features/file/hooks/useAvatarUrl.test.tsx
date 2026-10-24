@@ -48,7 +48,6 @@ describe("useAvatarUrl", () => {
       menu: null,
       permissions: null,
       roleName: "Admin",
-      isExternalReviewer: false,
       loading: false,
       isAuthenticated: !!user,
       login: vi.fn(),

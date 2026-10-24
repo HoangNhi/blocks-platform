@@ -1,13 +1,8 @@
 /// <reference types="node" />
 // @vitest-environment node
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import ts from "typescript";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 function routePaths(source: string): string[] {
   const sourceFile = ts.createSourceFile(
@@ -43,7 +38,7 @@ function routePaths(source: string): string[] {
   return paths;
 }
 
-describe("Router catalog routes and business catalog dependencies", () => {
+describe("Router catalog routes and retained faculty", () => {
   const retiredPaths = ["/filetype", "/stakeholder", "/standard", "/standardset"];
 
   it("router_removes_retired_catalog_routes_and_keeps_faculty", () => {
@@ -58,29 +53,5 @@ describe("Router catalog routes and business catalog dependencies", () => {
       "/", "/login", "/user", "/faculty", "/systemgroup",
       "/menu", "/role", "/auditlog", "/unauthorized", "*",
     ].sort());
-  });
-
-  it("business_catalog_dependencies_remain", () => {
-    const catalogDir = resolve(__dirname, "features/catalog");
-    const requiredFiles = [
-      resolve(catalogDir, "api/filetype.api.ts"),
-      resolve(catalogDir, "api/standard.api.ts"),
-      resolve(catalogDir, "api/standardset.api.ts"),
-      resolve(catalogDir, "types/filetype.types.ts"),
-      resolve(catalogDir, "types/standard.types.ts"),
-      resolve(catalogDir, "types/standardset.types.ts"),
-      resolve(catalogDir, "types/stakeholder.types.ts"),
-      resolve(catalogDir, "hooks/useFileTypeOptions.ts"),
-      resolve(catalogDir, "hooks/useStandardSetOptions.ts"),
-      resolve(catalogDir, "hooks/useMultiStandardSets.ts"),
-      resolve(catalogDir, "hooks/useStandardsWithCriteria.ts"),
-      resolve(catalogDir, "components/MultiStandardSetPanel.tsx"),
-      resolve(catalogDir, "components/StandardCriteriaTable.tsx"),
-      resolve(__dirname, "constants/catalog.constants.ts"),
-    ];
-
-    for (const file of requiredFiles) {
-      expect(existsSync(file), `Expected ${file} to exist`).toBe(true);
-    }
   });
 });

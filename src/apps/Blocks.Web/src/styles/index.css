@@ -26,11 +26,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -61,11 +56,6 @@
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-primary: oklch(0.208 0.042 265.755);
@@ -95,11 +85,6 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.208 0.042 265.755);
   --sidebar-foreground: oklch(0.984 0.003 247.858);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -120,36 +105,6 @@
   }
 }
 
-/* Custom scrollbar for criterion and file requirement lists */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #f8fafc;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* TipTap Editor Styles */
-.ProseMirror .tableWrapper { overflow-x: auto; }
-.ProseMirror table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-.ProseMirror td,
-.ProseMirror th { border: 1px solid #cbd5e1; padding: 6px 10px; min-width: 1em; position: relative; vertical-align: top; }
-.ProseMirror th { background-color: #f1f5f9; font-weight: 600; text-align: left; }
-.ProseMirror .selectedCell::after { background: rgba(59,130,246,0.15); content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
-.ProseMirror .column-resize-handle { background-color: #93c5fd; bottom: -2px; position: absolute; right: -2px; pointer-events: none; top: 0; width: 3px; }
-.ProseMirror.resize-cursor { cursor: col-resize; }
-.ProseMirror a { color: #2563eb; text-decoration: underline; cursor: pointer; }
-.ProseMirror a:hover { color: #1d4ed8; }
-
 /* Fade-in animation for criterion cards and file requirements */
 .animate-in {
   animation: fadeIn 0.3s ease-out forwards;
@@ -164,50 +119,4 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Collaboration Cursor styling for Tiptap */
-.collaboration-cursor__caret {
-  border-left: 2px solid;
-  margin-left: -1px;
-  position: relative;
-  pointer-events: none;
-  word-break: normal;
-}
-
-.collaboration-cursor__label {
-  position: absolute;
-  top: -1.6em;
-  left: -1px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: normal;
-  padding: 2px 6px;
-  border-radius: 4px 4px 4px 0;
-  color: #fff;
-  white-space: nowrap;
-  user-select: none;
-}
-
-/* TipTap editor list styles */
-.ProseMirror ul,
-.ProseMirror ol {
-  padding-left: 1.5rem;
-  margin: 0.5rem 0;
-}
-
-.ProseMirror ul {
-  list-style-type: disc;
-}
-
-.ProseMirror ol {
-  list-style-type: decimal;
-}
-
-.ProseMirror li {
-  margin: 0.25rem 0;
-}
-
-.ProseMirror li > p {
-  margin: 0;
 }

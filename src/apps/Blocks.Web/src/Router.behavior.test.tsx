@@ -1,6 +1,3 @@
-// ponytail: temporary type import preserves TS inference for legacy InternalReviewPage until Task 4 purges features/business.
-import type SarPage from "./features/business/routes/Sar/SarPage";
-export type _UnusedSarPage = typeof SarPage;
 import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Outlet } from "react-router-dom";
@@ -21,7 +18,6 @@ interface MockAuthState {
   systemGroup: never[];
   menu: never[];
   roleName: null;
-  isExternalReviewer: boolean;
   login: ReturnType<typeof vi.fn>;
   logout: ReturnType<typeof vi.fn>;
   refreshProfile: ReturnType<typeof vi.fn>;
@@ -36,7 +32,6 @@ const mockAuthState: MockAuthState = {
   systemGroup: [],
   menu: [],
   roleName: null,
-  isExternalReviewer: false,
   login: vi.fn(),
   logout: vi.fn(),
   refreshProfile: vi.fn(),
