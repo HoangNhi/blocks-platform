@@ -164,3 +164,40 @@ The following 15 new characterization tests were authored and verified on curren
    - Verifies interceptor triggers `/api/v1/auth/refresh-token` **exactly once**.
    - Verifies concurrent request is queued and resolved with refreshed token.
    - Verifies both original requests are retried with `Bearer refreshed-jwt-token` and resolve successfully.
+
+---
+
+## 5. Task 2: Official Vite 8 Toolchain Upgrade Verification
+
+### 5.1 Toolchain Matrix Applied
+- `vite`: `npm:rolldown-vite@7.2.5` -> official `^8.3.5` (installed: `8.3.5`)
+- `overrides.vite`: removed
+- `vitest`: `^4.0.18` -> `^5.0.5` (installed: `5.0.5`)
+- `typescript`: `~5.9.3` -> `~6.0.3` (installed: `6.0.3`)
+- `tailwindcss`: `^4.1.17` -> `^4.3.3` (installed: `4.3.3`)
+- `@tailwindcss/vite`: `^4.1.18` -> `^4.3.3` (installed: `4.3.3`)
+- `@vitejs/plugin-react`: `^5.1.2` -> `^6.1.2` (installed: `6.1.2`)
+- `@eslint/js`: `^9.39.1` -> `^9.39.2` (installed: `9.39.2`)
+- `@testing-library/react`: `^16.3.2` -> `^16.3.3` (installed: `16.3.3`)
+- `@types/node`: `^24.10.4` -> `^24.19.2` (installed: `24.19.2`)
+- `eslint-plugin-react-hooks`: `^7.0.1` -> `^7.1.1` (installed: `7.1.1`)
+- `eslint-plugin-react-refresh`: `^0.4.26` -> `^0.5.7` (installed: `0.5.7`)
+- `globals`: `^16.5.0` -> `^17.13.0` (installed: `17.13.0`)
+- `typescript-eslint`: `^8.50.0` -> `^8.72.0` (installed: `8.72.0`)
+
+### 5.2 Compiler & Linter Adjustments
+- `tsconfig.app.json`: Removed deprecated `"baseUrl": "."` per TypeScript 6 deprecation; retained `"paths": { "@/*": ["./src/*"] }`.
+- `eslint.config.js`: Added `'react-hooks/preserve-manual-memoization': 'off'` to align with existing legacy exemptions for `eslint-plugin-react-hooks@7.1.1` React Compiler checks.
+
+### 5.3 TDD Verification Evidence
+- **RED Command:** `npm --prefix src/apps/Blocks.Web test -- src/ObsoleteFeatures.test.ts src/PackageUpgrade.test.ts`
+  - Result: Exit code 1; 2 failed tests as expected on old Vite 7 alias and old `@tailwindcss/vite` range.
+- **GREEN Command:** `npm --prefix src/apps/Blocks.Web test -- src/ObsoleteFeatures.test.ts src/PackageUpgrade.test.ts`
+  - Result: Exit code 0; 2 test files passed, 8 tests passed.
+
+### 5.4 Common Green Gate Results
+1. `npm --prefix src/apps/Blocks.Web ls --all`: Exit code 0, 0 invalid peers, no rolldown-vite references.
+2. `npm --prefix src/apps/Blocks.Web run build`: Exit code 0 (`tsc -b && vite build` completed in ~0.65s).
+3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (10 problems, 0 errors, 10 warnings, identical to baseline).
+4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 90 tests passed).
+

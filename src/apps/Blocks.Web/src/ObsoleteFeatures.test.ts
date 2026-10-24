@@ -217,12 +217,15 @@ describe("ObsoleteFeatures", () => {
       ).toBeUndefined();
     }
 
-    // Exact Vite alias and override remain
-    expect(pkg.devDependencies?.vite).toBe("npm:rolldown-vite@7.2.5");
-    expect(pkg.overrides?.vite).toBe("npm:rolldown-vite@7.2.5");
-    expect(lock.packages?.[""]?.devDependencies?.vite).toBe("npm:rolldown-vite@7.2.5");
-    expect(lock.packages?.["node_modules/vite"]?.name).toBe("rolldown-vite");
-    expect(lock.packages?.["node_modules/vite"]?.version).toBe("7.2.5");
+    // Official Vite 8 assertions
+    expect(pkg.devDependencies?.vite).toBe("^8.3.5");
+    expect(lock.packages?.[""]?.devDependencies?.vite).toBe("^8.3.5");
+    expect(pkg.overrides?.vite).toBeUndefined();
+    expect(lock.packages?.["node_modules/vite"]?.version).toMatch(/^8\./);
+
+    const installedVitePath = resolve(webDir, "node_modules/vite/package.json");
+    const installedVite = JSON.parse(readFileSync(installedVitePath, "utf8"));
+    expect(installedVite.name).toBe("vite");
 
     // Retained dependencies remain
     const retainedDependencies = [
