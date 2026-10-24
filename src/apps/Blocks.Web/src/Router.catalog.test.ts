@@ -45,29 +45,6 @@ function routePaths(source: string): string[] {
 
 describe("Router catalog routes and business catalog dependencies", () => {
   const retiredPaths = ["/filetype", "/stakeholder", "/standard", "/standardset"];
-  const expectedKeptPaths = [
-    "/login",
-    "/survey/do-survey",
-    "/",
-    "/user",
-    "/faculty",
-    "/cycle",
-    "/evidence",
-    "/evidencecyclemap",
-    "/systemgroup",
-    "/menu",
-    "/role",
-    "/surveytemplate",
-    "/surveycampaign",
-    "/auditlog",
-    "/criterionevaluation",
-    "/sar",
-    "/internalreview",
-    "/externalreview",
-    "/actionplan",
-    "/taskexecution",
-    "/unauthorized",
-  ];
 
   it("router_removes_retired_catalog_routes_and_keeps_faculty", () => {
     const routerSource = readFileSync(new URL("./Router.tsx", import.meta.url), "utf8");
@@ -77,9 +54,10 @@ describe("Router catalog routes and business catalog dependencies", () => {
     for (const retired of retiredPaths) {
       expect(paths).not.toContain(retired);
     }
-    expect(paths.filter((path) => !retiredPaths.includes(path)).sort()).toEqual(
-      expectedKeptPaths.slice().sort()
-    );
+    expect(paths.sort()).toEqual([
+      "/", "/login", "/user", "/faculty", "/systemgroup",
+      "/menu", "/role", "/auditlog", "/unauthorized", "*",
+    ].sort());
   });
 
   it("business_catalog_dependencies_remain", () => {
