@@ -201,3 +201,80 @@ The following 15 new characterization tests were authored and verified on curren
 3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (10 problems, 0 errors, 10 warnings, identical to baseline).
 4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 90 tests passed).
 
+---
+
+## 6. Task 3: Runtime, Form, Query, And UI Packages Upgrade Verification
+
+### 6.1 Task 3 Matrix Applied
+- `@hookform/resolvers`: `^5.2.2` -> `^6.0.0`
+- `@radix-ui/react-accordion`: `^1.2.12` -> `^1.3.1`
+- `@radix-ui/react-avatar`: `^1.1.11` -> `^1.3.1`
+- `@radix-ui/react-checkbox`: `^1.3.3` -> `^1.4.1`
+- `@radix-ui/react-collapsible`: `^1.1.12` -> `^1.2.1`
+- `@radix-ui/react-dialog`: `^1.1.15` -> `^1.3.1`
+- `@radix-ui/react-dropdown-menu`: `^2.1.16` -> `^2.2.1`
+- `@radix-ui/react-label`: `^2.1.8` -> `^2.1.17`
+- `@radix-ui/react-popover`: `^1.1.15` -> `^1.3.1`
+- `@radix-ui/react-progress`: `^1.1.8` -> `^1.2.1`
+- `@radix-ui/react-radio-group`: `^1.3.8` -> `^1.5.1`
+- `@radix-ui/react-scroll-area`: `^1.2.10` -> `^1.4.0`
+- `@radix-ui/react-select`: `^2.2.6` -> `^2.4.1`
+- `@radix-ui/react-separator`: `^1.1.8` -> `^1.2.0`
+- `@radix-ui/react-slot`: `^1.2.4` -> `^1.5.0`
+- `@radix-ui/react-tabs`: `^1.1.13` -> `^1.2.1`
+- `@radix-ui/react-tooltip`: `^1.2.8` -> `^1.4.1`
+- `@tanstack/react-query`: `^5.90.12` -> `^5.104.5`
+- `axios`: `^1.13.2` -> `^1.20.0`
+- `date-fns`: `^4.1.0` -> `^4.4.0`
+- `express`: `^5.2.1` -> `^5.3.0`
+- `js-cookie`: `^3.0.5` -> `^3.0.8`
+- `lucide-react`: `^0.556.0` -> `^1.61.0`
+- `radix-ui`: `^1.4.3` -> `^1.8.1`
+- `react`: `^19.2.3` -> `^19.3.1`
+- `react-dom`: `^19.2.3` -> `^19.3.1`
+- `react-hook-form`: `^7.71.2` -> `^7.91.0`
+- `react-router-dom`: `^7.11.0` -> `^7.18.4`
+- `sonner`: `^2.0.7` -> `^2.0.8`
+- `tailwind-merge`: `^3.4.0` -> `^3.7.0`
+- `uuid`: `^13.0.0` -> `^14.0.3`
+- `zod`: `^4.3.6` -> `^4.6.7`
+- `@types/react`: `^19.2.7` -> `^19.3.0`
+- `@types/react-dom`: `^19.2.3` -> `^19.3.0`
+
+### 6.2 Peer Dependency Resolution & Overrides
+- `@hookform/resolvers@6.0.0` introduces optional peer dependencies `@typeschema/main@>=0.13.7` (which peers `@typeschema/effect@0.14.0` -> `effect@^3.6.5`) and `effect@^4.0.0`. npm 11 attempts to resolve optional peers simultaneously, triggering ERESOLVE on `effect@^4.0.0` vs `effect@^3.6.5`.
+- Resolved cleanly without bypass flags (`--force` or `--legacy-peer-deps`) via scoped override:
+  ```json
+  "overrides": {
+    "@hookform/resolvers": {
+      "effect": "^3.6.5"
+    }
+  }
+  ```
+
+### 6.3 TDD Verification Evidence
+- **Step 1 RED Command:** `npm --prefix src/apps/Blocks.Web test -- src/PackageUpgrade.test.ts`
+  - Result: Exit code 1; `AssertionError: expected '^5.2.2' to be '^6.0.0'` in `runtime_ranges_match_approved_matrix`.
+- **Step 3 Baseline Server Check:** `node --test src/apps/Blocks.Web/test/server.check.mjs`
+  - Result: Exit code 0; 2 passed (`serves_root_and_deep_links_as_same_spa`, `serves_referenced_assets_with_correct_content_types`).
+- **Step 5 Protected Behavior Suites Command:**
+  `npm --prefix src/apps/Blocks.Web test -- src/lib/api.test.ts src/Router.behavior.test.tsx src/components/layout/MainLayout/app-sidebar.test.tsx src/features/file/api/uploadfile.api.test.ts src/features/file/hooks/useAvatarUrl.test.tsx src/components/ui/upload-avatar.test.tsx src/components/layout/MainLayout/PopupEditProfile.test.tsx src/components/layout/MainLayout/NavUser.test.tsx src/features/system/routes/User/PopupDetail.test.tsx`
+  - Result: Exit code 0; 9 test files passed, 49 tests passed.
+- **Step 6 Production Server Check:** `node --test src/apps/Blocks.Web/test/server.check.mjs`
+  - Result: Exit code 0; 2 passed against upgraded Express 5.3.0 build.
+
+### 6.4 Common Green Gate Results
+1. `npm --prefix src/apps/Blocks.Web run build`: Exit code 0 (`tsc -b && vite build` completed in ~1.50s).
+2. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (10 problems, 0 errors, 10 warnings, identical to baseline).
+3. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 91 tests passed).
+4. `node --test src/apps/Blocks.Web/test/server.check.mjs`: Exit code 0 (1 suite, 2 tests passed).
+
+### 6.5 Security Audit Findings
+- **Production Audit (`npm audit --omit=dev --json`):** Exit code 1.
+  - Residual Advisory: `path-to-regexp` (versions `>=8.0.0 <8.4.0`, installed `8.3.0`), High severity (GHSA-j3q9-mxjg-w52f / GHSA-27v5-c462-wpq7).
+  - Dependency Path: `blocks-web` -> `express@^5.3.0` -> `router@^2.2.0` -> `path-to-regexp@8.3.0`.
+  - Fix status: Requires upstream update to `router`/`express` or explicit override once patch is available.
+- **Full Audit (`npm audit --json`):** Exit code 1 (8 vulnerabilities: 1 low, 2 moderate, 5 high).
+  - Residual dev vulnerabilities: `@babel/core` (low), `@humanfs/node` (moderate), `baseline-browser-mapping` (moderate), `brace-expansion` (high), `cross-spawn` (high), `nanoid` (high), `undici` (high).
+
+
