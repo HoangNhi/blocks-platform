@@ -340,4 +340,147 @@ The following 15 new characterization tests were authored and verified on curren
 3. `npm --prefix src/apps/Blocks.Web run lint`: Exit code 0 (9 problems, 0 errors, 9 warnings; 1 previous warning on `useReactTable` eliminated).
 4. `npm --prefix src/apps/Blocks.Web test`: Exit code 0 (20 test files passed, 93 tests passed).
 
+---
 
+## 9. Task 6: Final Clean Install, Matrix Parity, Server Contracts & Browser Matrix Verification
+
+### 9.1 Clean Install & Dependency Tree Parity
+- **Command:** `npm --prefix src/apps/Blocks.Web ci`
+  - **Exit Code:** `0`
+  - **Output:** Added 451 packages, audited 452 packages in 49s.
+  - **Working Tree Integrity:** `git status --short` confirmed 0 modifications to `package.json` or `package-lock.json`. Clean install produced 100% byte-for-byte lockfile reproducibility.
+- **Command:** `npm --prefix src/apps/Blocks.Web ls --all`
+  - **Exit Code:** `0`
+  - **Dependency Integrity:** 0 unmet peer dependencies, 0 invalid aliases, 0 obsolete package references (no `rolldown-vite` or retired dependencies).
+  - **Direct Top-Level Packages:** Exactly 59 packages (41 runtime dependencies, 18 devDependencies).
+
+### 9.2 Complete 59-Package Upgraded & Resolved Inventory
+
+| Group | Package | Manifest Range | Resolved Version | Status |
+| --- | --- | --- | --- | --- |
+| React Core | `react` | `^19.3.1` | `19.3.1` | Verified |
+| React Core | `react-dom` | `^19.3.1` | `19.3.1` | Verified |
+| React Core (types) | `@types/react` | `^19.3.0` | `19.3.0` | Verified |
+| React Core (types) | `@types/react-dom` | `^19.3.0` | `19.3.0` | Verified |
+| Toolchain | `vite` | `^8.3.5` | `8.3.5` | Verified |
+| Toolchain | `@vitejs/plugin-react` | `^6.1.2` | `6.1.2` | Verified |
+| Toolchain | `typescript` | `~6.0.3` | `6.0.3` | Verified |
+| Toolchain | `vitest` | `^5.0.5` | `5.0.5` | Verified |
+| Toolchain | `@testing-library/react` | `^16.3.3` | `16.3.3` | Verified |
+| Toolchain | `@testing-library/jest-dom` | `^6.9.1` | `6.9.1` | Verified |
+| Toolchain | `eslint` | `^9.39.2` | `9.39.2` | Verified |
+| Toolchain | `@eslint/js` | `^9.39.2` | `9.39.5` | Verified |
+| Toolchain | `typescript-eslint` | `^8.72.0` | `8.72.0` | Verified |
+| Toolchain | `eslint-plugin-react-hooks` | `^7.1.1` | `7.1.1` | Verified |
+| Toolchain | `eslint-plugin-react-refresh` | `^0.5.7` | `0.5.7` | Verified |
+| Toolchain | `globals` | `^17.13.0` | `17.13.0` | Verified |
+| Styling | `tailwindcss` | `^4.3.3` | `4.3.3` | Verified |
+| Styling | `@tailwindcss/vite` | `^4.3.3` | `4.3.3` | Verified |
+| Styling | `class-variance-authority` | `0.7.1` | `0.7.1` | Verified |
+| Styling | `clsx` | `2.1.1` | `2.1.1` | Verified |
+| Styling | `tailwind-merge` | `^3.7.0` | `3.7.0` | Verified |
+| Styling | `tw-animate-css` | `^1.4.0` | `1.4.0` | Verified |
+| Radix UI | `@radix-ui/react-accordion` | `^1.3.1` | `1.3.1` | Verified |
+| Radix UI | `@radix-ui/react-avatar` | `^1.3.1` | `1.3.1` | Verified |
+| Radix UI | `@radix-ui/react-checkbox` | `^1.4.1` | `1.4.1` | Verified |
+| Radix UI | `@radix-ui/react-collapsible` | `^1.2.1` | `1.2.1` | Verified |
+| Radix UI | `@radix-ui/react-dialog` | `^1.3.1` | `1.3.1` | Verified |
+| Radix UI | `@radix-ui/react-dropdown-menu` | `^2.2.1` | `2.2.1` | Verified |
+| Radix UI | `@radix-ui/react-label` | `^2.1.17` | `2.1.17` | Verified |
+| Radix UI | `@radix-ui/react-popover` | `^1.3.1` | `1.3.1` | Verified |
+| Radix UI | `@radix-ui/react-progress` | `^1.2.1` | `1.2.1` | Verified |
+| Radix UI | `@radix-ui/react-radio-group` | `^1.5.1` | `1.5.1` | Verified |
+| Radix UI | `@radix-ui/react-scroll-area` | `^1.4.0` | `1.4.0` | Verified |
+| Radix UI | `@radix-ui/react-select` | `^2.4.1` | `2.4.1` | Verified |
+| Radix UI | `@radix-ui/react-separator` | `^1.2.0` | `1.2.0` | Verified |
+| Radix UI | `@radix-ui/react-slot` | `^1.5.0` | `1.5.0` | Verified |
+| Radix UI | `@radix-ui/react-tabs` | `^1.2.1` | `1.2.1` | Verified |
+| Radix UI | `@radix-ui/react-tooltip` | `^1.4.1` | `1.4.1` | Verified |
+| Radix UI | `radix-ui` | `^1.8.1` | `1.8.1` | Verified |
+| Data & State | `@tanstack/react-query` | `^5.104.5` | `5.104.5` | Verified |
+| Data & State | `@tanstack/react-table` | `^9.3.1` | `9.3.1` | Verified |
+| Forms & Validation | `react-hook-form` | `^7.91.0` | `7.91.0` | Verified |
+| Forms & Validation | `@hookform/resolvers` | `^6.0.0` | `6.0.0` | Verified |
+| Forms & Validation | `zod` | `^4.6.7` | `4.6.7` | Verified |
+| Utilities | `axios` | `^1.20.0` | `1.20.0` | Verified |
+| Utilities | `date-fns` | `^4.4.0` | `4.4.0` | Verified |
+| Utilities | `react-day-picker` | `^10.0.2` | `10.0.2` | Verified |
+| Utilities | `cmdk` | `^1.1.1` | `1.1.1` | Verified |
+| Utilities | `lucide-react` | `^1.61.0` | `1.61.0` | Verified |
+| Utilities | `js-cookie` | `^3.0.8` | `3.0.8` | Verified |
+| Utilities | `jwt-decode` | `^4.0.0` | `4.0.0` | Verified |
+| Utilities | `next-themes` | `^0.4.6` | `0.4.6` | Verified |
+| Utilities | `sonner` | `^2.0.8` | `2.0.8` | Verified |
+| Utilities | `uuid` | `^14.0.3` | `14.0.3` | Verified |
+| Routing & Server | `react-router-dom` | `^7.18.4` | `7.18.4` | Verified |
+| Routing & Server | `express` | `^5.3.0` | `5.3.0` | Verified |
+| Dev & Types | `@types/node` | `^24.19.2` | `24.19.2` | Verified |
+| Dev & Types | `@types/js-cookie` | `^3.0.6` | `3.0.6` | Verified |
+| Dev & Types | `jsdom` | `^28.1.0` | `28.1.0` | Verified |
+
+*Total: 59 packages verified, 0 unapproved overrides, 0 missing dependencies.*
+
+### 9.3 Automated Verification Commands & Gate Summary
+
+| Command | Exit Code | Duration | Outcome / Result | Gate Status |
+| --- | --- | --- | --- | --- |
+| `npm --prefix src/apps/Blocks.Web ci` | `0` | ~49s | 451 packages installed, 0 lockfile drift | PASS |
+| `npm --prefix src/apps/Blocks.Web ls --all` | `0` | ~3s | 0 unmet peers, 0 invalid aliases | PASS |
+| `npm --prefix src/apps/Blocks.Web run build` | `0` | ~0.94s | `tsc -b && vite build` completed; index.html: 0.52 kB, css: 93.63 kB, js: 1,036.10 kB | PASS |
+| `npm --prefix src/apps/Blocks.Web run lint` | `0` | ~3.8s | 9 warnings across 2 files (1 combobox, 8 AuthContext); 0 errors; 0 new warnings | PASS |
+| `npm --prefix src/apps/Blocks.Web test` | `0` | ~14.8s | 20 test files passed, 93 tests passed, 0 failures | PASS |
+| `node --test src/apps/Blocks.Web/test/server.check.mjs` | `0` | ~1.9s | 1 suite, 2 tests passed (root/deep links & static assets content-types) | PASS |
+| Dev server port test (`3000` & `5173` `--strictPort`) | `0` | ~2.5s | Both ports served SPA HTML with HTTP 200; clean process teardown | PASS |
+| `npm --prefix src/apps/Blocks.Web audit --omit=dev --json` | `1` | ~3.2s | 1 high vulnerability (`path-to-regexp@8.3.0` via `express@5.3.0`) | NON-ZERO (Residual Risk) |
+| `npm --prefix src/apps/Blocks.Web audit --json` | `1` | ~3.5s | 8 vulnerabilities (1 low, 2 mod, 5 high; 7 in dev deps + 1 prod) | NON-ZERO (Residual Risk) |
+
+### 9.4 Server & Port Contract Verification
+1. **Development Server (`VITE_DEV_PORT`):**
+   - **Default / 3000 Port Contract:** Started `vite --strictPort` with `VITE_DEV_PORT=3000`. Port 3000 responded with HTTP 200 and served root HTML with `<div id="root">`.
+   - **Aspire / 5173 Port Contract:** Started `vite --strictPort` with `VITE_DEV_PORT=5173`. Port 5173 responded with HTTP 200 and served root HTML with `<div id="root">`.
+   - **Contract Preservation:** Unit tests (`PackageUpgrade.test.ts:dev_port_and_alias_contract_are_preserved`) and runtime child process invocations confirm non-interference with Aspire AppHost orchestration.
+2. **Production Express Server (`server.js`):**
+   - Verified via `test/server.check.mjs` against compiled `dist/` bundle on dynamically allocated free port.
+   - Verified serving `/`, `/user`, `/faculty`, and `/unknown/deep-link` all returning 200 with `text/html` and content matching `dist/index.html`.
+   - Verified referenced `.js` assets returning 200 with `javascript` content-type and `.css` assets returning 200 with `css` content-type.
+
+### 9.5 Browser Matrix Verification
+
+| Scenario | Assertions | Fixture / Test Coverage | Live Automated Status |
+| --- | --- | --- | --- |
+| **Home/sidebar** | Greeting/active menu visible; collapse/mobile navigation work; no Business/retired Catalog links. | `app-sidebar.test.tsx`, `ObsoleteFeatures.test.ts` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
+| **Six lists** | `/user`, `/faculty`, `/systemgroup`, `/menu`, `/role`, `/auditlog` mount fixture data; headers/cells/actions usable. Faculty selection/refresh/Next/page-size issue correct requests; no double pagination. | `data-table.test.tsx`, `ObsoleteFeatures.test.ts` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
+| **Forms/combobox/calendar** | User detail opens; invalid form cannot save; combobox search/clear works; DatePicker bounds/caption/keyboard/selection/disabled behavior correct. | `datepicker.test.tsx`, `calendar.test.tsx`, `combobox.test.tsx`, `PopupDetail.test.tsx` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
+| **Avatar** | Fixture image previews; valid staged upload/save works; failed mocked upload permits retry without unexpected save; invalid file rejected. | `uploadfile.api.test.ts`, `useAvatarUrl.test.tsx`, `upload-avatar.test.tsx`, `PopupEditProfile.test.tsx`, `NavUser.test.tsx` | **PASS (JSDOM)** / **NOT RUN (Browser)** |
+| **Routes/auth** | Reload active deep link; unauthenticated route redirects `/login`, denied permission redirects `/unauthorized`; `/evidence`, `/standardset`, `/unknown/deep-link` render Not Found, no old mockup. | `Router.behavior.test.tsx`, `api.test.ts`, `server.check.mjs` | **PASS (JSDOM + Node)** / **NOT RUN (Browser)** |
+| **Browser health** | No uncaught exceptions/failed chunks/missing assets or overlapping critical controls. Expected deliberately failed API fixture calls labeled separately from regressions. | `build`, `server.check.mjs`, all 20 test suites | **PASS (Build + Transport)** / **NOT RUN (Browser)** |
+
+*Disclosure: Headless browser automation (Playwright/Puppeteer with real 1440x900 desktop and 390x844 mobile viewports and PNG screenshots) was NOT RUN because headless browser automation tools are not installed in this repository. All scenario behaviors are strictly validated through comprehensive JSDOM fixtures, component suites, and HTTP transport checks.*
+
+### 9.6 Security Audit & Residual Vulnerabilities
+1. **Production Vulnerability (`npm audit --omit=dev`):**
+   - **Package:** `path-to-regexp@8.3.0` (advisories GHSA-j3q9-mxjg-w52f / GHSA-27v5-c462-wpq7; DoS via sequential optional groups and multiple wildcards; Severity: High / CVSS 7.5).
+   - **Dependency Chain:** `blocks-web` -> `express@^5.3.0` -> `router@^2.2.0` -> `path-to-regexp@8.3.0`.
+   - **Remedy Status:** Requires upstream `router` / `express` patch release. An unapproved npm `overrides` block was previously attempted and intentionally reverted in commit `0736005` per project policy.
+   - **Impact Assessment:** `server.js` only serves static assets and SPA fallback routing (`*`); it does not accept user-defined route parameter regexes.
+2. **Development Vulnerabilities (`npm audit`):**
+   - 7 vulnerabilities in build and testing devDependencies:
+     - `@babel/core` (<=7.29.0): Low (GHSA-4x5r-pxfx-6jf8)
+     - `@humanfs/node` (<0.16.8): Moderate (GHSA-p498-v437-472g)
+     - `baseline-browser-mapping` (>=2.0.0 <2.11.0): Moderate (GHSA-w5vr-8v7q-w6rv)
+     - `brace-expansion` (<1.1.18): High (GHSA-3jxr-9vmj-r5cp, GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895)
+     - `cross-spawn` (>=7.0.0 <7.0.5): High (GHSA-3xgq-45jj-v275)
+     - `nanoid` (<3.3.8): High (GHSA-mwcw-c2x4-8c55)
+     - `undici` (7.0.0 - 7.30.0): High (GHSA-xjj6-f33q-929c, GHSA-f72v-6w45-q472, GHSA-4qv8-2p9j-2685)
+   - None of these are bundled into the production client bundle (`dist/`).
+
+### 9.7 Technical Advisories & Upgrade Paths
+1. **Vite 8 Deprecation Notice:**
+   - Warning: `__dirname (vite.config.ts:17:27). Use import.meta.dirname instead.`
+   - Upgrade Path: Replace `path.resolve(__dirname, "./src")` with `path.resolve(import.meta.dirname, "./src")` when Vite native configuration loader is adopted.
+2. **Production Bundle Size Notice:**
+   - Warning: `dist/assets/index-BPrVNOeN.js (1,036.10 kB)` exceeds 500 kB chunk threshold.
+   - Upgrade Path: Code-split routes using React `lazy()` and dynamic `import()` in a dedicated performance optimization task.
+3. **Legacy Table Adapter Retention:**
+   - Comment added in `data-table.tsx`: `// ponytail: official legacy adapter preserves v8 column contracts; migrate to native Table 9 when legacy support must be retired.`
+   - Upgrade Path: Migrate consumer column definitions to native Table 9 API when legacy adapter is retired by TanStack.
