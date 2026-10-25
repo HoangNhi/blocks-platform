@@ -75,9 +75,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to="/">
-                <img src="/blocks.png" alt="Blocks" className="size-8 rounded-lg" />
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-medium">Blocks</span>
+                <img
+                  src="/blocks.png"
+                  alt="Blocks Studio"
+                  className="size-8 shrink-0 rounded-lg object-contain"
+                />
+                <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+                  <span className="font-medium">Blocks Studio</span>
                   <span className="">v1.0.0</span>
                 </div>
               </Link>

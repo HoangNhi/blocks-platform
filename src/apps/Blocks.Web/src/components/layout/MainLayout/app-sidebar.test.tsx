@@ -452,4 +452,19 @@ describe("AppSidebar menu filtering and empty groups", () => {
     // 4. Empty arrays do not throw
     expect(() => renderSidebar([], [], "/")).not.toThrow();
   });
+
+  it("renders_studio_brand_without_changing_menu_behavior", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      menu: [],
+      systemGroup: [],
+      permissions: [],
+      user: null,
+    } as any);
+
+    renderSidebar([], []);
+
+    expect(screen.getByText("Blocks Studio")).toBeInTheDocument();
+    expect(screen.getByAltText("Blocks Studio")).toHaveAttribute("src", "/blocks.png");
+    expect(screen.getByRole("link", { name: /Blocks Studio/ })).toHaveAttribute("href", "/");
+  });
 });
