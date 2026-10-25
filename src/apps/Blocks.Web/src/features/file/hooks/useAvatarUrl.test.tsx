@@ -13,6 +13,14 @@ vi.mock("@/features/file/api/uploadfile.api", () => ({
   },
 }));
 
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    API_BASE_URL: "https://localhost:7213",
+  };
+});
+
 describe("useAvatarUrl", () => {
   const mockUserA: User = {
     Id: "user-a",
