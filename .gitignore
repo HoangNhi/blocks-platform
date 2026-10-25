@@ -437,3 +437,4 @@ FodyWeavers.xsd
 !/.env.*.example
 !/services/assistant-service/.env.example
 .vscode/
+src/services/Blocks.FileService/Storage
