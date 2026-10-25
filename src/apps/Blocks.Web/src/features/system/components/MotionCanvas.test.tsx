@@ -428,6 +428,7 @@ describe("MotionCanvas", () => {
     window.dispatchEvent(new Event("resize"));
     window.dispatchEvent(new Event("pointermove"));
     window.dispatchEvent(new Event("pointerleave"));
+    document.dispatchEvent(new Event("pointerleave"));
     document.dispatchEvent(new Event("visibilitychange"));
     setReduced(true);
     stepFrame(32);
@@ -446,5 +447,83 @@ describe("MotionCanvas", () => {
 
     expect(() => render(<MotionCanvas />)).not.toThrow();
     expect(pending.size).toBe(0);
+  });
+
+  it("first_entry_uses_real_pointer_position", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    try {
+      const { ctx, stepFrame } = installCanvasMocks();
+      render(<MotionCanvas />);
+
+      const pointerX = window.innerWidth / 2 + 40;
+      const pointerY = window.innerHeight / 2;
+
+      ctx.lineTo.mockClear();
+
+      const moveEvent =
+        typeof PointerEvent !== "undefined"
+          ? new PointerEvent("pointermove", {
+              clientX: pointerX,
+              clientY: pointerY,
+              pointerType: "mouse",
+            })
+          : Object.assign(new Event("pointermove"), {
+              clientX: pointerX,
+              clientY: pointerY,
+              pointerType: "mouse",
+            });
+
+      window.dispatchEvent(moveEvent);
+
+      stepFrame(16);
+
+      expect(ctx.lineTo).toHaveBeenCalledWith(pointerX, pointerY);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("viewport_exit_clears_pointer_connections", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    try {
+      const { ctx, stepFrame } = installCanvasMocks();
+      render(<MotionCanvas />);
+
+      const pointerX = window.innerWidth / 2 + 40;
+      const pointerY = window.innerHeight / 2;
+
+      const moveEvent =
+        typeof PointerEvent !== "undefined"
+          ? new PointerEvent("pointermove", {
+              clientX: pointerX,
+              clientY: pointerY,
+              pointerType: "mouse",
+            })
+          : Object.assign(new Event("pointermove"), {
+              clientX: pointerX,
+              clientY: pointerY,
+              pointerType: "mouse",
+            });
+
+      window.dispatchEvent(moveEvent);
+      stepFrame(16);
+      expect(ctx.lineTo).toHaveBeenCalledWith(pointerX, pointerY);
+
+      ctx.lineTo.mockClear();
+
+      const leaveEvent =
+        typeof PointerEvent !== "undefined"
+          ? new PointerEvent("pointerleave", { bubbles: false })
+          : Object.assign(new Event("pointerleave", { bubbles: false }), {
+              bubbles: false,
+            });
+
+      document.dispatchEvent(leaveEvent);
+      stepFrame(32);
+
+      expect(ctx.lineTo).not.toHaveBeenCalledWith(pointerX, pointerY);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 });

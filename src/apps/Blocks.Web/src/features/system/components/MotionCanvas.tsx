@@ -197,6 +197,10 @@ export function MotionCanvas(): React.JSX.Element {
 
     const handlePointerMove = (e: PointerEvent) => {
       if (e.pointerType === "touch") return;
+      if (!mouse.active) {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+      }
       mouse.targetX = e.clientX;
       mouse.targetY = e.clientY;
       mouse.active = true;
@@ -239,6 +243,7 @@ export function MotionCanvas(): React.JSX.Element {
     window.addEventListener("resize", handleResize);
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerleave", handlePointerLeave);
+    document.addEventListener("pointerleave", handlePointerLeave);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     mql.addEventListener("change", handleMediaChange);
 
@@ -247,6 +252,7 @@ export function MotionCanvas(): React.JSX.Element {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerleave", handlePointerLeave);
+      document.removeEventListener("pointerleave", handlePointerLeave);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       mql.removeEventListener("change", handleMediaChange);
     };
