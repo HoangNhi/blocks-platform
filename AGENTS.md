@@ -1,190 +1,292 @@
-# Blocks AI Agent Guide
+# Agent Guide
 
-This file is the entry point for AI agents working in the Blocks workspace.
+## Scope And Starting Point
 
-Keep this file short. Approved product, service, API, UI, and technical context lives in repository `docs/`. Task records live only in Knowledge through `OBSIDIAN_VAULT_PATH`. Optional historical summaries in `.agent-context/generated/` never replace those records.
+- Read the relevant source before editing. Treat current `.csproj`, `package.json`,
+  configuration code, and callers as authoritative; docs may describe older states.
+- Check `git status --short` first. Preserve existing changes and untracked files.
+- Keep changes within the requested feature or service. Do not clean up unrelated
+  code, restore removed services, upgrade dependencies, or rewrite configuration.
+- Check relevant decisions in `docs/superpowers/` when working on an area they cover.
+  Historical task limits are not permanent repo-wide restrictions.
 
-## 1. Project Identity
+## Subagent Delegation
 
-Blocks is a .NET Aspire based workspace with backend services, frontend apps, shared code, and future plugin modules.
+- Proactively delegate substantial, self-contained work: code exploration, focused
+  review, test execution, and log analysis. Keep trivial changes and tightly
+  coupled steps in the main agent.
+- Schedule subagents by ready work, with no repository-defined concurrency cap
+  or requirement to start with one subagent. Proactively dispatch all useful,
+  independent tasks that have enough context and resolved dependencies; dispatch
+  newly ready tasks as their prerequisites complete.
+- Prioritize delivery speed and quality over minimizing subagent token use.
+  Keep the main-agent context focused, but do not reduce useful parallelism
+  solely to save tokens. Do not create duplicate or artificial tasks just to
+  increase agent count. Respect actual tool and runtime limits; this policy
+  does not override them.
+- Give each worker a narrow objective, relevant paths, constraints, and expected
+  output. Prefer fresh context with a concise brief over inheriting the full
+  conversation when supported. Restate essential safety and scope constraints.
+- Request concise findings, file/line references, checks run, and unresolved risks.
+  Keep raw logs and full file dumps out of the main agent's context.
+- Do not duplicate delegated work. Inspect relevant evidence and changed code
+  rather than repeating the entire investigation. Reuse workers for follow-up
+  when supported.
+- Keep parallel edits in non-overlapping files. Coordinate checks that share
+  build outputs, databases, ports, or other mutable resources to avoid contention.
+  The main agent owns scheduling, integration, conflict resolution, final
+  verification, and the user-facing response. Avoid nested delegation.
+- Prefer native subagent tools when available and compatible with the configured
+  model. Discover available tools and supported models; do not assume every
+  configured model alias works with native spawning.
+- Preserve configured model and provider choices. Do not silently switch models
+  or providers to work around failures, or change machine configuration.
+- If native delegation fails, report the exact blocker and do not repeat the
+  same failing request. A documented non-interactive CLI worker may be used as
+  a fallback when permitted by the runtime. Treat it as a separate process,
+  not a native subagent, and disclose the fallback.
+- Give CLI workers the same narrow brief and request a concise final report.
+  Preserve permission, sandbox, and data-access constraints; never bypass them
+  to enable delegation. Do not allow recursive delegation from CLI workers.
+- If neither mechanism is usable, continue directly and disclose the limitation.
 
-Current code layout:
+## Repository Map
 
-- `platform/apphost/Blocks.AppHost/`: Aspire orchestration.
-- `platform/service-defaults/Blocks.ServiceDefaults/`: shared Aspire service defaults.
-- `services/system-service/Blocks.SystemService/`: core backend service.
-- `services/file-service/Blocks.FileService/`: file backend service.
-- `apps/web/Blocks.Web/`: React/Vite frontend app.
-- `platform/shared/Blocks.Shared/`: shared .NET contracts/common code.
-- `plugins/`: future plugin modules.
-- `docs/`: approved repository knowledge, specifications, decisions, audits, and runbooks.
+| Path | Responsibility |
+| --- | --- |
+| `Blocks.slnx` | Backend solution; does not include the frontend project. |
+| `src/apps/Blocks.Web/` | React 19, TypeScript, Vite, Tailwind CSS, Radix UI, TanStack Query. |
+| `src/services/Blocks.ApiGateway/` | YARP reverse proxy; targets `net10.0`. |
+| `src/services/Blocks.SystemService/` | Authentication, users, roles, menus, permissions, audit; EF Core with PostgreSQL; targets `net10.0`. |
+| `src/services/Blocks.CatalogService/` | Departments (Faculty); EF Core 10 with Oracle MySQL provider; targets `net10.0`. |
+| `src/services/Blocks.FileService/` | Uploads, avatars, original-file previews; no watermarking or Office conversion; targets `net10.0`. |
+| `src/platform/Blocks.AppHost/` | Aspire orchestration; targets `net10.0`. |
+| `src/platform/Blocks.ServiceDefaults/` | Shared hosting, discovery, resilience, telemetry defaults; targets `net10.0`. |
+| `src/platform/Blocks.Shared/` | Shared DTOs, validation, exceptions, gRPC helpers; targets `net10.0`. |
+| `test/` | Backend regression checks; inspect each check before running. |
 
-The scalable source layout is now active. Keep new code in the matching top-level area.
+## Current Checkout Limits
 
-Local smoke-test credentials must be resolved from configured local secret store or environment. Never place credential values in this file, Obsidian, Skills, or committed test artifacts.
+- `Blocks.BusinessService` and `Blocks.CollabService` are absent from the repository.
+  `Blocks.AppHost.csproj` and `Blocks.slnx` build cleanly without them.
+  Do not reintroduce references to absent services unless requested.
+- Frontend obsolete business UI, supporting viewers, and rich-text editing were
+  intentionally removed. Active frontend domains are System, Catalog (Faculty),
+  and File (avatar). Do not reintroduce Business/Collab routes, screens, or
+  dependencies.
+- SystemService's direct BusinessService dependency was deliberately removed.
+  Do not reintroduce it to work around other stale references.
+- The frontend README is the Vite starter README, not a project setup guide.
 
-## 2. Repository Docs Are Source Of Truth
+## Backend Changes
 
-Before coding, identify the active service, app, plugin, or cross-service task.
+- Follow the nearest feature: `Controllers/`, `Services/CoreFeature/`,
+  `DTOs/CoreFeature/`, `Entities/`, and `Infrastructure/`. Reuse local validation,
+  AutoMapper profiles, and dependency registration patterns.
+- Preserve the response envelope: `Success`, `StatusCode`, `Data`, `Message`.
+  HTTP 200 can carry an application error; inspect both transport and body.
+  Use the existing `BusinessException` and middleware flow for business failures.
+- Preserve authentication, permission checks, audit hooks, and soft-delete
+  conventions. Do not bypass them to make a request or test pass.
+- Before changing HTTP routes, DTO fields, or protobuf contracts, find callers in
+  other services and the frontend. No caller found in this repo does not prove
+  no external consumer exists.
+- Protobuf contracts live in each service's `Protos/` and are linked by consumer
+  `.csproj` files. Edit source contracts, not generated files under `obj/`.
+  Preserve existing protobuf field numbers.
+- Changes under `Blocks.Shared` or `Blocks.ServiceDefaults` require checks of
+  affected consumers, not only a build of the shared project.
 
-Read context from:
+## Database MCP And Database-First Workflow
 
-- `docs/README.md`
-- `docs/runbooks/local-development.md` for build, test, and command map across areas
-- `agents/protocol/context-routing.md` for routing protocol and task context guidelines
-- the relevant `docs/architecture/services/<service>.md` document
-- relevant approved decisions and runbooks under `docs/`
-- `.agent-context/generated/<area>-context.md` when bounded historical context was generated
-- the exact owner-approved Knowledge task specification, plan, and execution record
+- Prefer the local DBHub MCP server `blocks_dbhub` for database inspection and
+  explicitly requested SQL changes. Sources are `blocks_system_dev` for
+  SystemService PostgreSQL and `blocks_catalog_dev` for CatalogService MySQL.
+  Verify the selected source and database before executing SQL.
+- Local setup uses `.codex/config.toml` for the STDIO server and its working
+  directory, `.codex/dbhub.toml` for sources/tools, and `.codex/.env` for
+  `BLOCKS_SYSTEM_POSTGRES_DSN` and `BLOCKS_CATALOG_MYSQL_DSN`. This MCP setup does
+  not require .NET user secrets. These local files are ignored by Git; never
+  copy their secret values into tracked files, command output, or chat.
+- Start with `search_objects` and narrowly scoped `SELECT` queries. Limit rows
+  and avoid sensitive columns. Connection checks are read-only and do not
+  establish that DDL/DML permissions work.
+- Both sources are configured with `readonly = false`; this enables writes but
+  does not authorize unrequested changes. Apply DDL/DML only within explicitly
+  requested scope. Confirm destructive changes separately and verify backups
+  before changes that could lose data. Do not assume MySQL DDL can be rolled back.
+- Database-first means reviewing and recording SQL changes in Git, applying
+  authorized changes to the intended development database, then scaffolding the
+  affected service. DBHub does not scaffold C# code; use the existing EF tooling
+  with the project's actual provider and EF version.
+- Inspect existing entities, context, and scaffold options first. Use
+  `--no-onconfiguring` to avoid generating connection strings. Review the files
+  that `--force` would overwrite, preserve custom/partial code, and never purge
+  an entity directory. Review the generated diff and build/test the affected
+  service afterward.
+- If DBHub tools are unavailable, report that limitation. A local STDIO client
+  or database driver may use the same local configuration for the authorized
+  check; do not change credentials or permissions to bypass a connection error.
 
-For non-trivial active tasks, read the provided specification, plan, and execution state before broad search. Repository docs remain authoritative over generated or external context.
+## Frontend Changes
 
-For cross-service work, read:
+- Keep domain code in `src/features/<domain>/{api,hooks,routes,types}`.
+  Reuse `src/components/ui/`, layout components, and nearby feature patterns.
+- Use the existing API client in `src/lib/api.ts` and endpoint constants in
+  `src/config/constants.ts`; preserve token handling and the response envelope.
+- Follow TanStack Query query keys and mutation invalidation patterns.
+  Reuse existing forms, Zod validation, and Lucide icons where applicable.
+- The `@/` alias resolves to frontend `src/`. Match nearby code style and preserve
+  Vietnamese UI text and accessibility.
+- Keep Vitest tests close to the affected code. Shared test setup lives in
+  `src/test/setup.ts`; inspect `vitest.config.ts` for test configuration.
 
-- `docs/architecture/overview.md`
-- the exact Knowledge task specification and plan; generated context is supplemental
+## Commands And Verification
 
-Current TradeLab repository context lives in `docs/architecture/plugins/tradelab.md` and `docs/runbooks/tradelab-research-prompt.md`. Use generated `tradelab` context only when historical notes are relevant.
+Run these PowerShell commands from the repository root.
 
-Current assistant context lives in `docs/architecture/services/assistant-service.md`. Read the exact Knowledge task specification before broader search.
+Build the affected backend project directly, for example:
 
-For TradeLab phase/status questions such as what remains, how many steps are left, or whether a named plan is done, use the bounded TradeLab status summarizer or the named plan/review first. Treat AppHost/browser checks as not applicable unless the user asks for runtime evidence or fresh runtime state decides the answer.
+```powershell
+dotnet build src/services/Blocks.SystemService/Blocks.SystemService.csproj
+```
 
-Current agent workflow context lives in `agents/protocol/`, `agents/adapters/`, and `docs/runbooks/agent-context.md`. Generated external context is supplemental.
+Use the actual target project's `.csproj`; ApiGateway requires an SDK supporting
+`net10.0`. Runtime checks also need the relevant database, JWT configuration, and
+service endpoints. A successful build does not prove those integrations work.
 
-For workflow-review or transcript-review tasks, use extractor summaries before raw session JSONL. Prefer targeted indexes, README files, latest task reviews, and bounded `rg` searches before broad vault scans.
-### Agent Workflow Rules
-- Before coding, fetch/prune and compare upstream.
-- Run `git pull --ff-only` only when working tree is clean.
-- For UI tasks, inspect reference images and screenshots first.
-- Detailed Claude workflow lives in `agents/adapters/claude.md`.
-- No fake telemetry; show `Unknown` or `Not configured` if not verified.
+Frontend setup and checks:
 
-## Portable Protocol and Knowledge-only tasks
+```powershell
+npm --prefix src/apps/Blocks.Web ci
+npm --prefix src/apps/Blocks.Web run build
+npm --prefix src/apps/Blocks.Web run lint
+npm --prefix src/apps/Blocks.Web test
+```
 
-Repository protocol in `agents/protocol/`, `agents/manifests/` and `agents/tools/` overrides runtime skills/plugins. Read `agents/adapters/<runtime>.md` for Codex, Claude or Antigravity. When Superpowers is invoked, follow its relevant skill without overriding repo gates; conflicting task paths require stopping and explaining the conflict.
+Run `ci` when dependencies need installation; keep `package-lock.json` intact.
+For a focused test, append its frontend-relative path after `test --`.
+Frontend dev server: `npm --prefix src/apps/Blocks.Web run dev`.
+Vite uses `VITE_DEV_PORT`, defaulting to port 3000; AppHost overrides it to 5173.
+The API client uses `VITE_API_URL` with a local fallback; verify configuration
+before attempting end-to-end checks.
 
-- Every development task, including bugfixes, requires Knowledge access, exact owner-approved task path and execution approval. Missing any requirement is `BLOCKED`; do not guess another task, broaden worker access or create repository fallbacks.
-- Resolve only that task through `OBSIDIAN_VAULT_PATH`. Read `spec.md`, `plan.md`, and current `execution.md` before broad search. Execution owns state; generated history never replaces it.
-- Keep task specs, plans, execution, review, mockups and durable evidence in Knowledge only; evidence belongs in `evidence/<run-id>/` of that exact task. Include `mockup-ui.md` for UI and `notes.md` when useful.
-- Scaffold with `agents/tools/new-task.ps1 -TaskPath <vault-relative-path>`; scaffolding neither approves execution nor permits overwriting an existing task.
-- Repository docs retain approved product behavior, architecture, contracts, decisions and runbooks. Extract durable product knowledge before moving task history; do not replace it with private links. CI may publish sanitized product results, not task records.
-- Ordinary build/test/CI is Knowledge-independent; read-only product documentation does not authorize development. New features, UX, API or architecture changes with missing context must stop before coding.
+Backend target framework, package pins, and container definitions regression check:
 
-## 4. Task Classification
+```powershell
+& ./test/Backend.Upgrade.Check.ps1 -Check all
+```
 
-Classify every task before coding:
+Checks target framework (`net10.0`), SDK/global.json, package pins, Dockerfile definitions, and AppHost structure without starting services.
 
-- Backend service task
-- Frontend app task
-- Plugin task
-- Cross-service task
-- Documentation/Obsidian task
-- Refactor/migration task
-- Bugfix
+Standalone published artifact and Linux container smoke checks:
 
-Frontend-facing work must be triaged:
+```powershell
+& ./test/Backend.ArtifactChecks.ps1 -PublishRoot <absolute-path> [-ImageTagPrefix <prefix>]
+```
 
-- L1: small visual/copy/layout fix, can proceed after reading source.
-- L2: new UI, new flow, new state, modal, form, dashboard, navigation, or major UX change. Must stop and follow `docs/architecture/services/web.md` and `agents/protocol/verification.md` before coding.
+Requires absolute path to publish directory. Validates `.runtimeconfig.json` major 10, `/health`, `/alive`, missing JWT application 401 envelopes, Swagger 3.0, and non-root container execution (`app` / UID 1654).
 
-For UI/runtime closeout, AppHost/browser evidence must be `PASS`, `NOT APPLICABLE`, or `BLOCKED` with exact reason and next rerun action. For UI functional testing and browser-based runtime verification, prefer `browser-use` first so the agent performs visible user-like actions on the real interface. Use another browser tool only when `browser-use` is unavailable or failing in the current environment, and report the fallback reason plus substitute tool in the final response. Do not treat tests/build alone as complete runtime evidence when AppHost/browser state matters.
+Existing SystemService source-level regression check:
 
-`blocks-ui-workflow` is the repo-owned authority for Blocks Web UI workflow. When runtime-supported frontend skills are available, route:
+```powershell
+& ./test/SystemService.BusinessDependency.Check.ps1
+```
 
-- default implementation to `frontend-ui-engineering`
-- audit, polish, or redesign to `impeccable`
-- marketing or expressive surfaces to `taste-skill`
-- visual direction or concept exploration to `ui-ux-pro-max`
+This checks source references and file existence, not authentication behavior.
 
-Use one primary specialist by default and at most one optional secondary specialist. Choose specialists by phase, not by invoking every frontend skill on the same task.
+FileService DB-free checks use a `net10.0` harness; production FileService targets `net10.0`.
+The harness covers production DI, filesystem fixtures, real local HTTP/gRPC listeners,
+Gateway boundaries, and upgrade regression characterization:
 
-Before implementation for L2 UI work, state the routing decision:
+```powershell
+dotnet run --project test/FileService.RemovalChecks
+dotnet run --project test/FileService.RemovalChecks -- paths
+dotnet run --project test/FileService.RemovalChecks -- sessions
+dotnet run --project test/FileService.RemovalChecks -- lifecycle
+dotnet run --project test/FileService.RemovalChecks -- transport
+dotnet run --project test/FileService.RemovalChecks -- gateway
+dotnet run --project test/FileService.RemovalChecks -- boundary
+dotnet run --project test/FileService.RemovalChecks -- migration
+dotnet run --project test/FileService.RemovalChecks -- upgrade
+```
 
-- primary specialist
-- optional secondary specialist
-- why this routing fits the task
-- why the other frontend specialists are being skipped
+These isolated checks do not prove deployment firewall rules, real domain object
+permissions, external consumer compatibility, or production data migration.
+FileService requires an absolute private `FileStorage:RootPath`; never point a
+test at application storage. Gateway deployment must inventory its actual
+`FileProxy:ClusterId`, destinations, aliases and transforms. Use
+`docs/operations/fileservice-storage-cutover.md` for rollout gates, not as
+authorization to migrate or delete real data.
 
-Final completion is still owned by the repo workflow gates. No specialist skill replaces browser-use verification, shell and navigation checks, accessibility review, or the experience-quality signoff.
+Existing CatalogService source-level regression check:
 
-If a polish or verification pass finds UI defects, ownership returns to `frontend-ui-engineering` until the issue is fixed and the relevant checks are rerun. Repo rules win on conflict.
+```powershell
+& ./test/CatalogService.Removal.Check.ps1
+```
 
-## 5. Plugin Rules
+The CatalogService cleanup harness targets `net10.0`. Its DB-free checks are:
 
-Future plugins should use this shape unless a task says otherwise:
+```powershell
+dotnet run --project test/CatalogService.CleanupChecks -- contract
+dotnet run --project test/CatalogService.CleanupChecks -- runtime
+dotnet run --project test/CatalogService.CleanupChecks -- validation
+```
 
-- Backend-only plugin: `plugins/<plugin-name>/service/`
-- Plugin with UI: backend in `plugins/<plugin-name>/service/`; UI in `apps/web/Blocks.Web/src/plugins/<plugin-name>/` unless explicitly designed as standalone.
-- Optional shared plugin contracts: `plugins/<plugin-name>/contracts/`
+The `contract` mode checks Oracle Faculty mapping, SQL translation/parameters,
+connection guards and validation without opening a database connection. The
+`runtime` mode checks production DI/model resolution, health, JWT raw claims,
+401/403 application envelopes, retired routes and six-route Swagger.
+The `validation` mode verifies FluentValidation 12 integration, single error envelope,
+empty/malformed payloads, and audit retry behavior.
 
-Do not create `web/` or `contracts/` folders for a plugin unless there is an actual need.
+Catalog provider integration requires separate authorization for an empty,
+isolated localhost MySQL database named `blocks_catalogservice_upgrade_test`:
 
-## 6. Coding Rules
+```powershell
+dotnet run --project test/CatalogService.CleanupChecks -- provider
+```
 
-Keep changes minimal and scoped.
+Only `CATALOGSERVICE_UPGRADE_TEST_CONNECTION` supplies its connection. No fallback
+to application config. The fixture creates/drops only its owned `faculty` table;
+preexisting objects are refused. Never run it against application data. Provider
+comparison, real permission/audit E2E and owner license approval remain rollout gates.
 
-Do not:
+The SystemService cleanup harness targets `net10.0`. Its DB-free checks are:
 
-- hardcode secrets
-- change database schema without explicit request
-- change API contract without checking Obsidian context
-- introduce large dependencies without explaining why
-- rewrite unrelated files
-- update long-term Obsidian context unless the user asks
+```powershell
+dotnet run --project test/SystemService.CleanupChecks -- contract
+dotnet run --project test/SystemService.CleanupChecks -- runtime
+dotnet run --project test/SystemService.CleanupChecks -- validation
+dotnet run --project test/SystemService.CleanupChecks -- platform
+dotnet run --project test/SystemService.CleanupChecks -- telemetry
+```
 
-Prefer:
+The `runtime` mode checks EF/Npgsql SQL generation, startup, the unauthorized
+HTTP response envelope, and Swagger without opening a database connection.
+The `validation` mode verifies FluentValidation 12 integration, single error envelope,
+nested permissions, unregistered validator pass-through, and filter ordering.
+The `platform` mode checks ServiceDefaults registration, OpenTelemetry tracer/meter,
+Polly retry/timeout resilience pipelines, and graceful cancellation without retry.
+The `telemetry` mode checks OpenTelemetry trace export and flush against an isolated
+collector receiver; it requires `SYSTEMSERVICE_CLEANUP_TEST_OTLP_ENDPOINT` pointing
+to an absolute http localhost URI with an explicit port and no credentials.
+The `auth` mode also checks audit persistence through production DI. It requires
+`SYSTEMSERVICE_CLEANUP_TEST_CONNECTION` pointing to an isolated localhost database
+named `blocks_systemservice_cleanup_test`; it creates and drops a unique test
+schema. Never point it at a real application database.
 
-- existing project patterns
-- service layer for API calls
-- typed request/response contracts
-- small focused components
-- clear error handling
-- tests or a clear explanation when tests cannot be run
+Add or update focused regression tests for behavior changes. Record baseline
+failures separately, and report exactly which checks ran, passed, failed, or
+could not run. Do not claim full-system success from isolated checks.
 
-Deployment and branch rules:
+## Data And Secrets
 
-- Production branch is `main`; production PRs, CI/CD targets, and deployment checks use `main` unless user explicitly changes branch strategy.
-- For this lab-style deployment, apply requested non-secret production settings directly in the owning service's `appsettings.Production.json` before introducing external secret infrastructure.
-- Secret values remain outside committed configuration and documentation.
-
-PowerShell/path hygiene:
-
-- Resolve candidate paths with `rg --files`, `Get-ChildItem`, or `Test-Path` before reading guessed files.
-- Do not use wildcards with `-LiteralPath`; resolve matches first, then read exact paths.
-- Avoid long quoted one-liners when a short command or focused script is less error-prone.
-
-Blocks Web UI is shadcn-first:
-
-- Prefer installed shadcn/ui primitives from `apps/web/Blocks.Web/src/components/ui/`.
-- If shadcn has the needed primitive but it is not installed, add the official shadcn component instead of hand-writing a duplicate.
-- Build domain-specific components by composing shadcn/ui primitives and project tokens.
-- Use other UI libraries or custom primitives only when shadcn and existing project components do not cover the need, and explain why.
-
-Database table convention:
-
-- New mutable domain/config tables should include `created_at`, `created_by`, `updated_at`, `updated_by`, `is_active`, and `is_deleted`.
-- API/frontend models may expose those fields as `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `isActive`, and `isDeleted`.
-- Use `is_active`, not `is_actived`.
-- Append-only event, log, history, result, and market-data fact tables may omit active/delete/update fields when immutability matters. Document the exception in the relevant Obsidian spec or plan.
-
-## 7. After Implementation
-
-Final response must include:
-
-- Summary
-- Files Changed
-- Context Used
-- Testing
-- Notes
-
-Also mention:
-
-- Obsidian updates that should be made
-- missing context
-- conflicts between code and Obsidian notes
-- tests that were not run
-## Performance Guard
-
-- **Batch-read rule**: Cache file reads in a session, avoid duplicate reads.
-- **Token-budget guard**: Stop a skill if total token usage exceeds 2 M per week.
+- Never expose or commit credentials, connection strings, JWT keys, or tokens.
+  Use existing local configuration or .NET user secrets; do not copy secrets
+  from configuration files into documentation, logs, or test fixtures.
+- Do not run migrations, seed data, destructive SQL, or tests against a real
+  database without explicit authorization. Use isolated test data.
+- Leave generated output (`bin/`, `obj/`, `node_modules/`, `dist/`) out of changes.
+  Review the final diff and keep this guide aligned when documented paths,
+  commands, or architectural boundaries change.

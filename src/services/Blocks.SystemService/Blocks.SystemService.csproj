@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Blocks.SystemService</RootNamespace>
+    <UserSecretsId>653689e4-0bcc-4a26-bed1-37fde1379670</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="16.2.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.84.0" />
+    <PackageReference Include="Grpc.AspNetCore.Web" Version="2.84.0" />
+    <PackageReference Include="Grpc.Net.Client.Web" Version="2.84.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Stax.AutoDependencyInjectionRegistration" Version="4.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\system.proto" GrpcServices="Server" />
+    <Protobuf Include="Protos\audit.proto" GrpcServices="Server" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\platform\Blocks.ServiceDefaults\Blocks.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\platform\Blocks.Shared\Blocks.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Configs\" />
+    <Folder Include="DTOs\CoreFeature\Permission\Requests\" />
+    <Folder Include="Entities\" />
+    <Folder Include="Infrastructure\" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Protobuf Include="..\Blocks.FileService\Protos\file.proto" GrpcServices="Client" Link="Protos\file.proto" />
+	</ItemGroup>
+</Project>
