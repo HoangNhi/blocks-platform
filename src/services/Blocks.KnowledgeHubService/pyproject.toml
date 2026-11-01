@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knowledgehub"
+version = "0.1.0"
+description = "Blocks KnowledgeHub Document Intelligence Service"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.1",
+    "PyJWT==2.15.1",
+    "grpcio==1.85.0",
+    "protobuf==7.36.2"
+]
+
+[dependency-groups]
+dev = [
+    "grpcio-tools==1.85.0",
+    "httpx==0.28.1"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

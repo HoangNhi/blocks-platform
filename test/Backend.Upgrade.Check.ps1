@@ -313,6 +313,7 @@ function Run-PackagesChecks {
         -ExpectedPins @{
             'Aspire.Hosting.AppHost'    = '13.6.3'
             'Aspire.Hosting.JavaScript' = '13.6.3'
+            'Aspire.Hosting.Python'     = '13.6.3'
         } `
         -ForbiddenPackages @('Aspire.Hosting.NodeJs', 'Aspire.Hosting.PostgreSQL')
 
@@ -351,12 +352,13 @@ function Run-AppHostChecks {
     $userSecretsId = $xml.Project.PropertyGroup.UserSecretsId | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -First 1
     Assert-Condition (-not [string]::IsNullOrWhiteSpace($userSecretsId)) "$appHostProjRel must keep non-empty UserSecretsId"
 
-    # Package references: Aspire.Hosting.AppHost 13.6.3, Aspire.Hosting.JavaScript 13.6.3; no NodeJs, no PostgreSQL
+    # Package references: Aspire.Hosting.AppHost 13.6.3, Aspire.Hosting.JavaScript 13.6.3, Aspire.Hosting.Python 13.6.3; no NodeJs, no PostgreSQL
     Assert-ProjectPackages `
         -ProjectRelPath $appHostProjRel `
         -ExpectedPins @{
             'Aspire.Hosting.AppHost'    = '13.6.3'
             'Aspire.Hosting.JavaScript' = '13.6.3'
+            'Aspire.Hosting.Python'     = '13.6.3'
         } `
         -ForbiddenPackages @('Aspire.Hosting.NodeJs', 'Aspire.Hosting.PostgreSQL')
 

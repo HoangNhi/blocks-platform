@@ -1,7 +1,7 @@
-# KnowledgeHub Part Briefs And Session Handoff
+﻿# KnowledgeHub Part Briefs And Session Handoff
 
-Date: 2026-10-27
-Status: Master, decomposition, and P00 integration contracts APPROVED by owner on 2026-10-27; P01 next.
+Date: 2026-11-01
+Status: P00 and P01 ACCEPTED; P02 ready for design.
 
 Master: `docs/superpowers/specs/2026-10-27-knowledgehub-master-design.md`.
 
@@ -15,7 +15,7 @@ plan is too large for a beginner to understand and verify incrementally.
 | Part | Scope | Prerequisites | Status |
 | --- | --- | --- | --- |
 | P00 | Integration decisions and contracts | Master approved | ACCEPTED |
-| P01 | Python runtime, Gateway, identity | P00 | NOT STARTED |
+| P01 | Python runtime, Gateway, identity | P00 | ACCEPTED |
 | P02 | Collections and React feature frame | P01 | NOT STARTED |
 | P03 | File lifecycle and document repository | P02 | NOT STARTED |
 | P04 | Durable worker and job lifecycle | P03 | NOT STARTED |
@@ -67,6 +67,17 @@ their implementation until those gates are resolved.
 and why IDs and file paths are not permissions.
 
 ## P01 - Python Runtime, Gateway, And Identity
+
+Spec: `docs/superpowers/specs/2026-10-27-knowledgehub-p01-runtime-gateway-identity-design.md` (APPROVED by owner on 2026-10-27).
+Plan: `docs/superpowers/plans/2026-10-27-knowledgehub-p01-runtime-gateway-identity.md` (revised 2026-11-01; owner remediation pending).
+Outcome: `docs/knowledgehub/outcomes/P01.md` (CHANGES REQUIRED; separates baseline passes from missing acceptance evidence).
+Owner selected AppHost-managed Python startup and agreed to move minimum
+`knowledgehub` VIEW setup through existing administration into P01.
+Owner implemented the P01 foundation; review found unresolved behavior and
+live acceptance gaps. On 2026-11-01 the owner approved service-local `.env`
+for the local JWT key instead of requiring AppHost secret injection. Endpoint
+orchestration, TLS, safe diagnostics and permission checks remain mandatory.
+Actual permission-data setup is not verified by the recorded evidence.
 
 **Goal:** a small Python API reachable through Blocks with real auth boundaries.
 
