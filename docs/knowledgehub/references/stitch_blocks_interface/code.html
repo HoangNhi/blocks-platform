@@ -1,0 +1,394 @@
+<!DOCTYPE html><html lang="vi" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_dashboard" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"surface":"#f8f9ff","surface-tint":"#0053db","surface-container":"#e5eeff","inverse-primary":"#b4c5ff","surface-container-lowest":"#ffffff","secondary-container":"#645efb","surface-container-highest":"#d3e4fe","primary-container":"#2563eb","background":"#f8f9ff","on-tertiary-fixed":"#23005c","on-tertiary-fixed-variant":"#5516be","on-secondary-container":"#fffbff","on-primary-fixed-variant":"#003ea8","tertiary-container":"#7d4ce7","tertiary":"#632ecd","inverse-on-surface":"#eaf1ff","on-secondary":"#ffffff","surface-variant":"#d3e4fe","on-tertiary":"#ffffff","error":"#ba1a1a","error-container":"#ffdad6","primary-fixed-dim":"#b4c5ff","on-secondary-fixed-variant":"#3323cc","on-error-container":"#93000a","inverse-surface":"#213145","surface-container-high":"#dce9ff","on-primary-fixed":"#00174b","on-background":"#0b1c30","on-surface":"#0b1c30","primary-fixed":"#dbe1ff","outline-variant":"#c3c6d7","secondary":"#4b41e1","tertiary-fixed-dim":"#d0bcff","secondary-fixed":"#e2dfff","on-surface-variant":"#434655","on-error":"#ffffff","on-secondary-fixed":"#0f0069","on-primary":"#ffffff","on-primary-container":"eeefff","tertiary-fixed":"#e9ddff","surface-container-low":"#eff4ff","surface-dim":"#cbdbf5","surface-bright":"#f8f9ff","outline":"#737686","secondary-fixed-dim":"#c3c0ff","on-tertiary-container":"#f6edff","primary":"#004ac6"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-lg":"1rem","margin-lg":"2rem","space-xs":"0.25rem","gutter-lg":"1.5rem","margin":"1rem","space-md":"0.75rem","gutter":"1rem","space-xl":"1.5rem","space-sm":"0.5rem","margin-md":"1.5rem"},"fontFamily":{"body-sm":["Inter"],"body-md":["Inter"],"code-lg":["JetBrains Mono"],"headline-sm":["Inter"],"code-sm":["JetBrains Mono"],"headline-md":["Inter"],"body-lg":["Inter"],"headline-xl-mobile":["Inter"],"headline-xl":["Inter"],"headline-lg":["Inter"],"code-md":["JetBrains Mono"],"label-caps":["JetBrains Mono"]},"fontSize":{"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"body-md":["13px",{"lineHeight":"20px","fontWeight":"400"}],"code-lg":["13px",{"lineHeight":"20px","fontWeight":"500"}],"headline-sm":["15px",{"lineHeight":"22px","letterSpacing":"-0.01em","fontWeight":"600"}],"code-sm":["11px",{"lineHeight":"16px","fontWeight":"400"}],"headline-md":["18px",{"lineHeight":"26px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-lg":["15px",{"lineHeight":"24px","fontWeight":"400"}],"headline-xl-mobile":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-xl":["36px",{"lineHeight":"44px","letterSpacing":"-0.025em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"code-md":["12px",{"lineHeight":"18px","fontWeight":"400"}],"label-caps":["10px",{"lineHeight":"14px","letterSpacing":"0.06em","fontWeight":"600"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-72 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between overflow-y-auto"><div class="flex flex-col"><div class="h-16 px-gutter flex items-center gap-space-sm bg-surface-container-lowest"><div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[20px]">view_in_ar</span></div><div class="flex items-center gap-space-xs"><span class="font-headline-sm text-headline-sm text-on-surface">Blocks</span><span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-code-sm text-code-sm">OS</span></div><div class="ml-auto"><span class="px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant font-label-caps text-label-caps">ENTERPRISE</span></div></div><nav class="px-space-md py-space-sm space-y-space-md" data-active-classes="bg-primary-container text-on-primary-container font-headline-sm rounded-lg"><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-caps text-label-caps text-outline">VẬN HÀNH HỆ THỐNG</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="tong-quan-he-thong" href="#"><span class="material-symbols-outlined text-[18px]">monitoring</span><span class="">Tổng quan hệ thống</span></a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-caps text-label-caps text-outline">QUẢN TRỊ ĐỊNH DANH</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="nguoi-dung" href="#"><span class="material-symbols-outlined text-[18px]">group</span><span class="">Người dùng</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="vai-tro" href="#"><span class="material-symbols-outlined text-[18px]">verified_user</span><span class="">Vai trò</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="nhom-he-thong" href="#"><span class="material-symbols-outlined text-[18px]">lan</span><span class="">Nhóm hệ thống</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="danh-muc-menu" href="#"><span class="material-symbols-outlined text-[18px]">menu_open</span><span class="">Danh mục menu</span></a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-caps text-label-caps text-outline">TRADELAB</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="strategy-lab" href="#"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span class="">Strategy Lab</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="backtest" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="">Backtest</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="live-bots" href="#"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span class="">Live Bots</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="ket-noi-ctrader" href="#"><span class="material-symbols-outlined text-[18px]">sync_alt</span><span class="">Kết nối cTrader</span></a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-caps text-label-caps text-outline">AI VIDEO PRODUCTION</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="ban-tin-tuan" href="#"><span class="material-symbols-outlined text-[18px]">video_library</span><span class="">Bản tin Tuần</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="kiem-duyet-video" href="#"><span class="material-symbols-outlined text-[18px]">fact_check</span><span class="">Kiểm duyệt Video</span></a></div><div class="space-y-space-xs"><div class="flex items-center justify-between px-space-sm py-1"><span class="font-label-caps text-label-caps text-primary">KNOWLEDGEHUB</span><span class="w-2 h-2 rounded-full bg-primary-container"></span></div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="khong-gian-tri-thuc" href="#"><span class="material-symbols-outlined text-[18px]">menu_book</span><span class="">Không gian Tri thức</span></a></div></nav></div><div class="p-space-md m-space-md rounded-xl bg-surface-container-low flex items-center justify-between"><div class="flex flex-col"><span class="font-label-caps text-label-caps text-outline">CLUSTER ENGINE</span><span class="font-code-sm text-code-sm text-on-surface">vn-north-prod-01</span></div><span class="w-2 h-2 rounded-full bg-secondary-container"></span></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-gutter"><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs font-body-sm text-body-sm text-outline"><span class="text-on-surface-variant font-medium">Blocks</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="text-on-surface-variant font-medium">KnowledgeHub</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="text-primary font-medium" id="headerBreadcrumbCurrent">Hỏi đáp AI Tri thức</span></div></div><div class="flex items-center gap-space-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-space-sm text-outline text-[18px]">search</span><input class="w-80 h-8 pl-8 pr-12 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm placeholder:text-outline shadow-[0_1px_4px_rgba(0,0,0,0.03)] focus:outline-none focus:ring-1 focus:ring-primary-container" placeholder="Tìm kiếm tri thức, lệnh hoặc tài liệu..." type="text"><div class="absolute right-2 flex items-center px-1.5 py-0.5 rounded bg-surface-container font-code-sm text-code-sm text-outline">⌘K</div></div><div class="flex items-center gap-space-xs"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Trợ lý AI"><span class="material-symbols-outlined text-[20px]">auto_awesome</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Thông báo"><span class="material-symbols-outlined text-[20px]">notifications</span></button></div><div class="h-6 w-px bg-surface-container-highest"></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col"><span class="font-headline-sm text-body-sm text-on-surface leading-tight">superadmin</span><span class="font-body-sm text-[11px] text-outline leading-tight">Quản trị viên</span></div></div></div></header><main class="relative pt-16 bg-surface h-screen flex flex-col overflow-hidden"><div class="flex flex-col w-full h-full"><div class="px-gutter-lg pt-4 pb-2 flex flex-col gap-space-sm max-w-7xl mx-auto w-full flex-shrink-0"><!-- Header Section with Collection Selector & Main Action --><div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md"><div class="flex flex-col gap-space-xs"><div class="flex items-center gap-space-xs font-body-sm text-body-sm text-outline"><span class="hover:text-on-surface cursor-pointer transition-colors">Blocks</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="hover:text-on-surface cursor-pointer transition-colors">KnowledgeHub</span><span class="material-symbols-outlined text-[14px]">chevron_right</span><span class="text-on-surface font-medium" id="pageSubTitleBreadcrumb">Hỏi đáp &amp; Nghiên cứu</span></div><div class="flex items-center gap-space-sm mt-0.5"><div class="relative group"><button class="flex items-center gap-space-sm text-left py-1 rounded-lg hover:bg-surface-container-high transition-colors -ml-1 pl-1 pr-2" id="collectionDropdownBtn"><span class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Bộ sưu tập: Backend Engineering</span><span class="material-symbols-outlined text-outline text-[20px] transition-transform duration-200" id="dropdownArrow" style="transform: rotate(0deg);">expand_more</span></button><div class="absolute left-0 top-full mt-1 w-72 bg-surface-container-lowest rounded-xl shadow-lg p-space-xs z-30 hidden" id="collectionDropdownMenu"><div class="px-space-sm py-1 font-label-caps text-label-caps text-outline">BỘ SƯU TẬP HIỆN CÓ</div><button class="w-full text-left px-space-sm py-2 rounded-lg bg-surface-container text-primary font-body-md text-body-md flex items-center justify-between"><span class="">Backend Engineering</span><span class="material-symbols-outlined text-[16px]">check</span></button><button class="w-full text-left px-space-sm py-2 rounded-lg text-on-surface hover:bg-surface-container-low font-body-md text-body-md flex items-center justify-between"><span class="">Financial ML Models</span><span class="font-code-sm text-code-sm text-outline">12 files</span></button><button class="w-full text-left px-space-sm py-2 rounded-lg text-on-surface hover:bg-surface-container-low font-body-md text-body-md flex items-center justify-between"><span class="">DevOps &amp; Cluster Ops</span><span class="font-code-sm text-code-sm text-outline">6 files</span></button><div class="my-1 h-px bg-surface-container"></div><button class="w-full text-left px-space-sm py-1.5 rounded-lg text-primary hover:bg-surface-container font-headline-sm text-body-sm flex items-center gap-space-xs"><span class="material-symbols-outlined text-[18px]">add_circle</span> Tạo bộ sưu tập mới</button></div></div><span class="px-2 py-0.5 rounded-full bg-surface-container text-outline font-code-sm text-code-sm font-medium" id="headerDocCountBadge">4 tài liệu</span></div></div><div class="flex items-center gap-space-sm self-start md:self-auto"></div></div><!-- Navigation Tabs --><div class="flex items-center gap-space-md border-b-0"><div class="flex items-center gap-space-xs p-1 rounded-xl bg-surface-container-low shadow-sm"><button class="flex items-center gap-space-xs px-4 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-body-md text-body-md transition-all" id="tabBtn01"><span class="material-symbols-outlined text-[18px]">folder_open</span><span class="">Tab 01: Kho tài liệu &amp; Import</span></button><button class="flex items-center gap-space-xs px-4 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-headline-sm text-body-md shadow-sm transition-all" id="tabBtn02"><span class="material-symbols-outlined text-[18px]">psychology_alt</span><span class="">Tab 02: Hỏi đáp &amp; Nghiên cứu</span></button></div></div></div><!-- TAB 01 CONTAINER --><div class="flex-col gap-space-xl hidden px-gutter-lg pb-6 max-w-7xl mx-auto w-full overflow-y-auto" id="tabContent01"><!-- Upload & Drop Zone Area --><div class="relative group bg-surface-container-low rounded-xl p-space-xl flex flex-col items-center justify-center text-center shadow-sm cursor-pointer hover:bg-surface-container transition-all duration-200" id="dropArea"><input accept=".pdf,.md,.txt" class="hidden" id="fileInput" multiple="" type="file"><div class="w-14 h-14 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center text-primary mb-space-sm group-hover:scale-105 transition-transform duration-200"><span class="material-symbols-outlined text-[28px]">cloud_upload</span></div><div class="flex flex-col items-center gap-1 max-w-md"><p class="font-headline-sm text-headline-sm text-on-surface">Kéo thả tài liệu PDF, Markdown hoặc TXT vào Bộ sưu tập này</p><p class="font-body-md text-body-sm text-outline">hoặc <span class="text-primary font-medium underline underline-offset-2">nhấp để duyệt file từ máy tính</span></p></div><div class="mt-space-md inline-flex items-center gap-space-xs px-3 py-1 rounded-full bg-surface-container-lowest text-outline font-code-sm text-code-sm shadow-sm"><span class="material-symbols-outlined text-[14px]">info</span><span class="">Hỗ trợ PDF dạng văn bản, Markdown, TXT tối đa 50MB</span></div><div class="mt-space-md w-full max-w-sm hidden" id="uploadFeedback"><div class="bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1.5 text-left"><div class="flex items-center justify-between font-body-sm text-body-sm"><span class="text-on-surface font-medium truncate">system-design-primer.md</span><span class="text-primary font-code-sm text-code-sm">45%</span></div><div class="w-full h-1 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-primary-container rounded-full transition-all duration-300" style="width: 45%;"></div></div></div></div></div><!-- Collection Documents Section --><div class="flex flex-col gap-space-md"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md"><div class="flex items-center gap-space-xs overflow-x-auto"><button class="filter-pill active px-3 py-1 rounded-full bg-on-surface text-on-primary font-body-sm text-body-sm flex items-center gap-1 shadow-sm transition-all" data-filter="all"><span class="">Tất cả</span><span class="font-code-sm text-code-sm opacity-80">(4)</span></button><button class="filter-pill px-3 py-1 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center gap-1 shadow-sm transition-all" data-filter="ready"><span class="">Sẵn sàng</span><span class="font-code-sm text-code-sm text-outline">(2)</span></button><button class="filter-pill px-3 py-1 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center gap-1 shadow-sm transition-all" data-filter="processing"><span class="">Đang xử lý</span><span class="font-code-sm text-code-sm text-outline">(1)</span></button><button class="filter-pill px-3 py-1 rounded-full bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center gap-1 shadow-sm transition-all" data-filter="error"><span class="">Lỗi đọc</span><span class="font-code-sm text-code-sm text-outline">(1)</span></button></div><div class="relative w-full sm:w-72"><span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-8 pl-8 pr-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm placeholder:text-outline shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-container" id="searchInput" placeholder="Tìm kiếm tài liệu..." type="text"></div></div><div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col"><div class="hidden md:grid grid-cols-12 gap-space-md px-space-lg py-2.5 bg-surface-container-low font-label-caps text-label-caps text-outline"><div class="col-span-6">TÀI LIỆU</div><div class="col-span-3">TRẠNG THÁI</div><div class="col-span-3 text-right">THAO TÁC</div></div><div class="doc-row grid grid-cols-1 md:grid-cols-12 gap-space-sm md:gap-space-md px-space-lg py-space-md items-center hover:bg-surface-container-low/60 transition-colors" data-status="ready" data-title="clean architecture.pdf"><div class="col-span-1 md:col-span-6 flex items-center gap-space-sm min-w-0"><div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary flex-shrink-0"><span class="material-symbols-outlined text-[20px]">picture_as_pdf</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-body-md text-on-surface truncate">Clean Architecture.pdf</span><span class="font-body-sm text-body-sm text-outline">340 trang • 8.4 MB</span></div></div><div class="col-span-1 md:col-span-3 flex items-center"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-code-sm text-code-sm font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Sẵn sàng</span></div><div class="col-span-1 md:col-span-3 flex items-center justify-end gap-space-xs"><button class="px-3 py-1 rounded-lg text-primary hover:bg-surface-container font-headline-sm text-body-sm transition-colors" onclick="openDocCitationModal('ddia')">Xem</button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/40 transition-colors" title="Xóa tài liệu"><span class="material-symbols-outlined text-[18px]">delete</span></button></div></div><div class="h-px bg-surface-container mx-space-lg"></div><div class="doc-row grid grid-cols-1 md:grid-cols-12 gap-space-sm md:gap-space-md px-space-lg py-space-md items-center hover:bg-surface-container-low/60 transition-colors" data-status="ready" data-title="designing data-intensive applications.pdf"><div class="col-span-1 md:col-span-6 flex items-center gap-space-sm min-w-0"><div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary flex-shrink-0"><span class="material-symbols-outlined text-[20px]">picture_as_pdf</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-body-md text-on-surface truncate">Designing Data-Intensive Applications.pdf</span><span class="font-body-sm text-body-sm text-outline">562 trang • 14.2 MB</span></div></div><div class="col-span-1 md:col-span-3 flex items-center"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-code-sm text-code-sm font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Sẵn sàng</span></div><div class="col-span-1 md:col-span-3 flex items-center justify-end gap-space-xs"><button class="px-3 py-1 rounded-lg text-primary hover:bg-surface-container font-headline-sm text-body-sm transition-colors" onclick="openDocCitationModal('ddia')">Xem</button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/40 transition-colors" title="Xóa tài liệu"><span class="material-symbols-outlined text-[18px]">delete</span></button></div></div><div class="h-px bg-surface-container mx-space-lg"></div><div class="doc-row grid grid-cols-1 md:grid-cols-12 gap-space-sm md:gap-space-md px-space-lg py-space-md items-center hover:bg-surface-container-low/60 transition-colors" data-status="processing" data-title="distributed systems patterns.pdf"><div class="col-span-1 md:col-span-6 flex items-center gap-space-sm min-w-0"><div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary-container flex-shrink-0"><span class="material-symbols-outlined text-[20px]">picture_as_pdf</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-body-md text-on-surface truncate">Distributed Systems Patterns.pdf</span><span class="font-body-sm text-body-sm text-outline">85 trang • 3.8 MB</span></div></div><div class="col-span-1 md:col-span-3 flex items-center"><div class="inline-flex items-center gap-1.5 text-primary-container font-code-sm text-code-sm font-medium"><span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span><span class="">Đang xử lý 72%</span></div></div><div class="col-span-1 md:col-span-3 flex items-center justify-end gap-space-xs"><button class="px-3 py-1 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container font-headline-sm text-body-sm transition-colors">Hủy</button></div></div><div class="h-px bg-surface-container mx-space-lg"></div><div class="doc-row grid grid-cols-1 md:grid-cols-12 gap-space-sm md:gap-space-md px-space-lg py-space-md items-center hover:bg-surface-container-low/60 transition-colors" data-status="error" data-title="postgresql 16 tuning notes.pdf"><div class="col-span-1 md:col-span-6 flex items-center gap-space-sm min-w-0"><div class="w-9 h-9 rounded-lg bg-error-container/50 flex items-center justify-center text-error flex-shrink-0"><span class="material-symbols-outlined text-[20px]">picture_as_pdf</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-body-md text-on-surface truncate">PostgreSQL 16 Tuning Notes.pdf</span><span class="font-body-sm text-body-sm text-outline">106 trang • 3.2 MB</span></div></div><div class="col-span-1 md:col-span-3 flex items-center"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 font-code-sm text-code-sm font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Lỗi đọc</span></div><div class="col-span-1 md:col-span-3 flex items-center justify-end gap-space-xs"><button class="px-3 py-1 rounded-lg text-primary hover:bg-surface-container font-headline-sm text-body-sm transition-colors">Thử lại</button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error-container/40 transition-colors" title="Xóa tài liệu"><span class="material-symbols-outlined text-[18px]">delete</span></button></div></div></div><div class="flex items-center justify-between text-outline font-body-sm text-body-sm px-space-xs py-1"><span class="">Hiển thị 4 trên 4 tài liệu được lưu trữ</span><div class="flex items-center gap-space-xs"><button class="w-7 h-7 rounded flex items-center justify-center hover:bg-surface-container-high transition-colors text-outline disabled:opacity-30" disabled=""><span class="material-symbols-outlined text-[16px]">chevron_left</span></button><span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-code-sm text-code-sm">1</span><button class="w-7 h-7 rounded flex items-center justify-center hover:bg-surface-container-high transition-colors text-outline disabled:opacity-30" disabled=""><span class="material-symbols-outlined text-[16px]">chevron_right</span></button></div></div></div></div><!-- TAB 02 CONTAINER: HỎI ĐÁP & NGHIÊN CỨU (Full Height 2-Column Split Workspace) --><div class="flex-col flex flex-1 min-h-0 w-full" id="tabContent02"><!-- Main Workspace: Session History Drawer + Chat Stage (Full Height) --><div class="flex w-full flex-1 min-h-0 overflow-hidden items-stretch relative"><!-- Chat Sessions Sidebar: Full Height with Right Border & Smooth Transition --><div class="flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out h-full border-r border-surface-container bg-surface-container-lowest overflow-hidden w-0 border-r-0 opacity-0" id="chatSessionsSidebar"><div class="p-space-md flex flex-col gap-space-sm border-b border-surface-container bg-surface-container-low/40 w-80"><div class="flex items-center justify-between"><div class="flex items-center gap-1.5 text-on-surface font-headline-sm text-body-md"><span class="material-symbols-outlined text-[18px] text-primary">history</span><span class="">Lịch sử phiên hỏi đáp</span></div><button class="w-7 h-7 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" id="collapseHistoryBtn" title="Thu gọn lịch sử phiên"><span class="material-symbols-outlined text-[18px]" id="collapseHistoryIcon">first_page</span></button></div><button class="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-primary-container text-on-primary font-headline-sm text-body-sm hover:bg-primary transition-all shadow-sm active:scale-[0.98]" id="newChatSessionBtn"><span class="material-symbols-outlined text-[18px]">add</span><span class="">+ Phiên hỏi đáp mới</span></button><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-outline text-[16px]">search</span><input class="w-full h-7 pl-7 pr-2.5 rounded-lg bg-surface-container text-on-surface text-body-sm placeholder:text-outline border-none focus:outline-none focus:ring-1 focus:ring-primary-container text-[12px]" id="searchSessionInput" placeholder="Tìm kiếm phiên..." type="text"></div></div><!-- Session Groups List (Scrollable Area stretching to bottom) --><div class="flex flex-col gap-space-md overflow-y-auto p-space-md flex-1 w-80" id="sessionListContainer"><div class="flex flex-col gap-1"><span class="font-label-caps text-label-caps text-outline px-2 py-0.5">HÔM NAY</span><div class="session-card group flex items-start justify-between p-2.5 rounded-xl cursor-pointer transition-all bg-surface-container-low/70 border-l-2 border-primary-container" data-session-id="session-1"><div class="flex flex-col gap-0.5 min-w-0 pr-2"><span class="font-headline-sm text-body-sm truncate leading-snug text-primary font-semibold">Eventual Consistency &amp; Trade-offs</span><span class="font-body-sm text-[11px] text-outline truncate">Các tài liệu này nói gì về eventual consistency...</span><div class="flex items-center gap-1.5 mt-1 text-[10px] text-outline font-code-sm"><span class="flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">chat_bubble</span> 2</span><span class="">•</span><span class="">10:24</span></div></div><button class="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-error hover:bg-error-container/40 rounded transition-all flex-shrink-0" onclick="event.stopPropagation(); deleteSession('session-1');" title="Xóa phiên"><span class="material-symbols-outlined text-[16px]">delete</span></button></div><div class="session-card group flex items-start justify-between p-2.5 rounded-xl transition-all cursor-pointer hover:bg-surface-container-low" data-session-id="session-2"><div class="flex flex-col gap-0.5 min-w-0 pr-2"><span class="font-body-md text-body-sm truncate leading-snug text-on-surface">Thiết kế Clean Architecture cho Go microservice</span><span class="font-body-sm text-[11px] text-outline truncate">Phân lớp domain, usecase và repository thế nào...</span><div class="flex items-center gap-1.5 mt-1 text-[10px] text-outline font-code-sm"><span class="flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">chat_bubble</span> 4</span><span class="">•</span><span class="">08:15</span></div></div><button class="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-error hover:bg-error-container/40 rounded transition-all flex-shrink-0" onclick="event.stopPropagation(); deleteSession('session-2');" title="Xóa phiên"><span class="material-symbols-outlined text-[16px]">delete</span></button></div></div><div class="flex flex-col gap-1"><span class="font-label-caps text-label-caps text-outline px-2 py-0.5">HÔM QUA</span><div class="session-card group flex items-start justify-between p-2.5 rounded-xl transition-all cursor-pointer hover:bg-surface-container-low" data-session-id="session-3"><div class="flex flex-col gap-0.5 min-w-0 pr-2"><span class="font-body-md text-body-sm truncate leading-snug text-on-surface">PostgreSQL Indexing &amp; Query Tuning</span><span class="font-body-sm text-[11px] text-outline truncate">Tối ưu B-Tree vs BRIN index khi bảng đạt 50 triệu rows...</span><div class="flex items-center gap-1.5 mt-1 text-[10px] text-outline font-code-sm"><span class="flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">chat_bubble</span> 6</span><span class="">•</span><span class="">16:40</span></div></div><button class="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-error hover:bg-error-container/40 rounded transition-all flex-shrink-0" onclick="event.stopPropagation(); deleteSession('session-3');" title="Xóa phiên"><span class="material-symbols-outlined text-[16px]">delete</span></button></div></div><div class="flex flex-col gap-1"><span class="font-label-caps text-label-caps text-outline px-2 py-0.5">7 NGÀY TRƯỚC</span><div class="session-card group flex items-start justify-between p-2.5 rounded-xl hover:bg-surface-container-low transition-all cursor-pointer" data-session-id="session-4"><div class="flex flex-col gap-0.5 min-w-0 pr-2"><span class="font-body-md text-body-sm text-on-surface truncate leading-snug">CAP Theorem vs PACELC Theorem</span><span class="font-body-sm text-[11px] text-outline truncate">So sánh chi tiết độ trễ latency trong điều kiện bình thường...</span><div class="flex items-center gap-1.5 mt-1 text-[10px] text-outline font-code-sm"><span class="flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">chat_bubble</span> 3</span><span class="">•</span><span class="">14/05</span></div></div><button class="opacity-0 group-hover:opacity-100 p-1 text-outline hover:text-error hover:bg-error-container/40 rounded transition-all flex-shrink-0" onclick="event.stopPropagation(); deleteSession('session-4');" title="Xóa phiên"><span class="material-symbols-outlined text-[16px]">delete</span></button></div></div></div></div><!-- Chat Workspace (Expands dynamically to fill remaining width & full height) --><div class="flex-1 flex flex-col min-w-0 transition-all duration-300 h-full overflow-hidden bg-surface" id="chatWorkspaceContainer"><div class="px-gutter-lg py-2.5 border-b border-surface-container flex items-center justify-between flex-shrink-0 bg-surface-container-lowest"><div class="flex items-center gap-2 min-w-0"><button class="p-1.5 rounded-lg border border-surface-container bg-surface-container-lowest text-outline hover:text-primary hover:bg-surface-container transition-all shadow-sm flex items-center justify-center gap-1" id="expandHistoryBtn" title="Mở danh sách lịch sử phiên"><span class="material-symbols-outlined text-[18px]">last_page</span><span class="text-xs font-medium font-body-sm text-on-surface-variant hidden md:inline">Lịch sử</span></button><div class="flex items-center gap-1.5 min-w-0"><span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span><span class="font-headline-sm text-headline-sm text-on-surface truncate" id="activeSessionTitleHeader">Eventual Consistency &amp; Trade-offs</span></div></div><div class="flex items-center gap-space-xs text-outline font-code-sm text-xs flex-shrink-0"><button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-surface-variant bg-surface-container-lowest border border-surface-container rounded-lg shadow-sm hover:bg-surface-container-low hover:text-primary transition-colors" id="openSourceFilterBtn" title="Chọn tài liệu làm nguồn truy vấn (Query Context Selection)"><span class="material-symbols-outlined text-[16px] text-primary">tune</span><span class="">Bối cảnh tài liệu</span><span class="px-1.5 py-0.5 rounded-full bg-surface-container text-primary font-code-sm text-[11px] font-semibold">2</span></button></div></div><!-- Conversation Thread Messages (Scrollable) --><div class="flex-1 overflow-y-auto px-gutter-lg py-space-md flex flex-col gap-space-lg" id="conversationThread"><div class="flex items-start gap-space-md max-w-3xl ml-auto justify-end"><div class="flex flex-col gap-1 items-end"><div class="flex items-center gap-space-xs text-outline font-body-sm text-[11px]"><span class="font-medium text-on-surface-variant">superadmin</span><span class="">•</span><span class="">Hôm nay 10:24</span></div><div class="p-space-md rounded-2xl rounded-tr-sm bg-primary text-on-primary font-body-md text-body-md shadow-sm leading-relaxed" id="currentUserMessageText">Các tài liệu này nói gì về eventual consistency và các đánh đổi trong hệ thống phân tán?</div></div><div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-shrink-0 mt-4 text-[16px] shadow-sm"><span class="material-symbols-outlined text-[18px]">person</span></div></div><div class="flex items-start gap-space-md max-w-4xl mr-auto w-full" id="currentAiMessageContainer"><div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-1 shadow-sm"><span class="material-symbols-outlined text-[18px]">smart_toy</span></div><div class="flex flex-col gap-space-md flex-1 min-w-0"><div class="flex items-center gap-space-xs text-outline font-body-sm text-[11px]"><span class="font-medium text-primary">KnowledgeHub AI</span><span class="">•</span><span class="font-code-sm text-code-sm">gpt-4o-rag</span></div><div class="p-space-lg rounded-2xl rounded-tl-sm bg-surface-container-lowest border border-surface-container shadow-sm space-y-space-md text-on-surface font-body-md text-body-md leading-relaxed" id="currentAiMessageBody"><p class="">Dựa trên tài liệu <strong class="text-primary font-medium">Designing Data-Intensive Applications</strong> và các nghiên cứu về hệ thống phân tán trong bộ sưu tập:</p><div class="space-y-space-xs pl-space-sm border-l-2 border-primary-container"><h4 class="font-headline-sm text-body-md text-on-surface">1. Khái niệm &amp; Bản chất của Eventual Consistency</h4><p class="text-on-surface-variant">Trong các hệ thống phân tán sử dụng mô hình bất đồng bộ (asynchronous replication), nếu không có ghi chép mới nào xảy ra, tất cả các bản sao (replicas) cuối cùng sẽ hội tụ về cùng một giá trị <button class="citation-badge inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded bg-primary-fixed text-primary font-code-sm text-code-sm font-semibold hover:bg-primary hover:text-on-primary transition-colors cursor-pointer" data-cite="1">[1]</button>. Tuy nhiên, từ "eventual" (cuối cùng) là một cam kết rất yếu vì nó không xác định khoảng trễ thời gian (replication lag) là vài mili-giây hay vài phút.</p></div><div class="space-y-space-xs pl-space-sm border-l-2 border-secondary-container"><h4 class="font-headline-sm text-body-md text-on-surface">2. Các Đánh đổi Trọng yếu (Trade-offs)</h4><ul class="list-disc pl-5 space-y-1 text-on-surface-variant"><li class=""><strong class="text-on-surface font-medium">Availability vs. Consistency:</strong> Chấp nhận tính nhất quán yếu để đảm bảo tính sẵn sàng cao và độ trễ thấp (latency) khi mạng phân vùng (theo CAP theorem) <button class="citation-badge inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded bg-primary-fixed text-primary font-code-sm text-code-sm font-semibold hover:bg-primary hover:text-on-primary transition-colors cursor-pointer" data-cite="2">[2]</button>.</li><li class=""><strong class="text-on-surface font-medium">Độ phức tạp tầng ứng dụng:</strong> Khi tầng lưu trữ không cam kết linearizability, lập trình viên phải tự xử lý xung đột ghi đồng thời (write skew, lost updates) hoặc implement các cơ chế như CRDTs hay Version Vectors.</li><li class=""><strong class="text-on-surface font-medium">Trải nghiệm người dùng:</strong> Người dùng có thể đọc thấy dữ liệu cũ ngay sau khi vừa cập nhật nếu đọc từ replica trễ lag (vi phạm "read-your-writes" consistency).</li></ul></div><div class="mt-space-md p-space-md rounded-xl bg-surface-container-low border border-surface-container flex flex-col gap-space-xs"><div class="flex items-center justify-between"><div class="flex items-center gap-space-xs text-primary font-headline-sm text-body-sm"><span class="material-symbols-outlined text-[16px]">menu_book</span><span class="">Trích dẫn nguồn [1] &amp; [2]</span></div><span class="font-code-sm text-code-sm text-outline">Trang 154-158</span></div><div class="font-body-sm text-body-sm text-on-surface-variant italic bg-surface-container-lowest p-2.5 rounded-lg border border-surface-container/60">"Asynchronous replication means that writes to the leader are acknowledged before they have been copied to followers. If the system is lightly loaded, replication lag is usually small, but if a network partition occurs or a node falls behind, eventual consistency offers no time bounds."</div><div class="flex items-center justify-between text-outline font-body-sm text-[11px] pt-1"><span class="">Nguồn: Designing Data-Intensive Applications.pdf</span><button class="text-primary hover:underline font-medium flex items-center gap-0.5 transition-colors" id="btnViewCitationLocation" onclick="openDocCitationModal('ddia')"> </button></div></div><div class="flex items-center justify-between pt-space-xs border-t border-surface-container text-outline font-body-sm text-body-sm"><div class="flex items-center gap-space-md"><button class="flex items-center gap-1 hover:text-primary transition-colors text-outline" id="copyAnswerBtn" title="Sao chép phản hồi"><span class="material-symbols-outlined text-[16px]">content_copy</span><span class="text-[12px]">Sao chép</span></button><button class="flex items-center gap-1 hover:text-primary transition-colors text-outline" id="regenerateAnswerBtn" title="Tạo lại câu trả lời"><span class="material-symbols-outlined text-[16px]">refresh</span><span class="text-[12px]">Tạo lại</span></button></div><span class="font-code-sm text-[11px]">Sinh trong 1.4s • 342 tokens</span></div></div></div></div></div><!-- Minimalist Prompt Input Bar pinned at bottom of chat column --><div class="px-gutter-lg pb-3 pt-2 bg-surface flex-shrink-0"><div class="bg-surface-container-lowest rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-surface-container p-2 flex flex-col gap-2"><input class="w-full px-3 py-2 text-on-surface font-body-md text-body-md placeholder:text-outline bg-transparent border-0 focus:outline-none" id="chatInputPrompt" placeholder="Hỏi thêm về các đánh đổi phân tán, so sánh giao thức hoặc tra cứu ngữ cảnh..."><div class="flex items-center justify-between pt-1 border-t border-surface-container/60 px-1"><div class="flex items-center gap-space-xs text-outline text-xs"><span class="material-symbols-outlined text-[16px] text-emerald-600">verified</span><span class="text-[11px]">Đối chiếu với 2 tài liệu sẵn sàng</span></div><div class="flex items-center gap-space-xs"><span class="text-outline font-code-sm text-[11px] hidden sm:inline">Nhấn Enter để gửi</span><button class="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center hover:bg-primary-container transition-colors shadow-sm" id="sendPromptBtn"><span class="material-symbols-outlined text-[18px]">send</span></button></div></div></div></div></div></div></div></div></main></div>
+<!-- Citation Viewer Modal (Trình xem trích dẫn vị trí gốc trong tài liệu) -->
+<div aria-labelledby="citationModalTitle" aria-modal="true" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-on-surface/40 backdrop-blur-sm transition-opacity duration-300 opacity-100 pointer-events-auto" id="citationViewerModal" role="dialog">
+<div class="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container overflow-hidden transform transition-transform duration-300 ease-out scale-100" id="citationModalCard">
+<!-- Header -->
+<div class="flex items-center justify-between px-space-lg py-3.5 border-b border-surface-container bg-surface-container-low/50">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-body-md text-on-surface truncate" id="citationModalTitle">Designing Data-Intensive Applications.pdf</h3>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-code-sm text-[11px] font-semibold flex-shrink-0">Trang 154-158</span>
+</div>
+<span class="text-outline font-body-sm text-[11px] truncate">Mã nguồn tham chiếu: DDIA-O'REILLY-2017 • Martin Kleppmann</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" id="closeCitationModalBtn" title="Đóng cửa sổ (Esc)">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- Sub-header Metadata Bar -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm px-space-lg py-2 bg-surface-container-lowest border-b border-surface-container text-xs">
+<div class="flex items-center gap-space-md flex-wrap">
+<div class="flex items-center gap-1.5 text-on-surface font-medium">
+<span class="material-symbols-outlined text-[16px] text-primary">bookmark</span>
+<span id="citationChapterTitle" class="">Chapter 5: Replication - Eventual Consistency &amp; Trade-offs</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container font-code-sm text-[11px] text-outline">
+<span class="">Chunk:</span> <strong class="text-on-surface font-semibold">#chunk-842</strong>
+</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-code-sm text-[11px] font-semibold border border-emerald-200">
+<span class="material-symbols-outlined text-[13px] text-emerald-600">target</span>
+<span class="">Vector Score: 0.94</span>
+</span>
+</div>
+</div>
+<!-- Book/Document Simulated Content Body (Scrollable) -->
+<div class="flex-1 overflow-y-auto p-space-lg md:p-space-xl bg-surface-bright space-y-space-lg font-serif text-[15px] leading-relaxed text-[#1e293b]" id="citationDocumentContent">
+<!-- Simulated Book Page Frame -->
+<div class="max-w-3xl mx-auto bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-[0_1px_6px_rgba(0,0,0,0.06)] border border-surface-container">
+<!-- Page Indicator & Header -->
+<div class="flex items-center justify-between text-[11px] font-code-sm text-outline pb-4 border-b border-surface-container mb-5 uppercase tracking-wider">
+<span class="">Part II: Distributed Data</span>
+<span class="">Page 154 • Replication Lag</span>
+</div>
+<h2 class="font-headline-lg text-headline-md font-sans text-on-surface mb-3 tracking-tight">Problems with Replication Lag</h2>
+<p class="mb-4 text-justify font-sans text-body-md text-on-surface-variant leading-relaxed">
+          Node failures are one reason for wanting replication. Other reasons are scalability (processing more requests than a single machine can handle) and latency (placing replicas geographically closer to users). If all data reads were served by the leader, the system could easily become bottlenecked. Therefore, for read-heavy workloads, a common approach is to create many followers and distribute read requests across them.
+        </p>
+<!-- Highlighted Main Citation Chunk -->
+<div class="my-5 p-4 rounded-xl bg-amber-50/90 border-l-4 border-amber-500 shadow-sm transition-all hover:bg-amber-100/70" id="targetCitationBlock">
+<div class="flex items-center justify-between mb-2 pb-1.5 border-b border-amber-200/70 text-xs font-sans">
+<span class="font-semibold text-amber-900 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-amber-600">format_quote</span>
+              Đoạn văn bản được trích dẫn chính xác cho AI
+            </span>
+<span class="px-2 py-0.5 rounded bg-amber-200/60 text-amber-900 font-code-sm text-[11px] font-medium">Lines 42-53</span>
+</div>
+<p class="font-sans text-[14px] leading-relaxed text-amber-950 font-medium" id="quotedRawText">
+            "Asynchronous replication means that writes to the leader are acknowledged before they have been copied to followers. If the system is lightly loaded, replication lag is usually small, but if a network partition occurs or a node falls behind, eventual consistency offers no time bounds."
+          </p>
+</div>
+<p class="mb-4 text-justify font-sans text-body-md text-on-surface-variant leading-relaxed">
+          This delay is called <span class="font-semibold text-on-surface">replication lag</span>. In the normal case, the lag might only be a fraction of a second, and not noticeable in practice. However, if system resources are exhausted or there are network glitches, the delay can easily increase to several seconds or even minutes.
+        </p>
+<!-- Secondary Sub-quote / Surrounding Context -->
+<div class="my-4 pl-4 border-l-2 border-primary-container font-sans text-body-sm text-on-surface-variant leading-relaxed">
+<span class="text-xs font-semibold text-primary block uppercase tracking-wide mb-0.5">Ngữ cảnh bổ sung [2] - Đánh đổi tính sẵn sàng:</span>
+          "When a system promises only eventual consistency, software developers cannot rely on reading data that reflects the most recent writes immediately after they were committed. If availability is preferred over strict serializability under network partitions (CAP theorem), applications must gracefully handle stale reads or enforce write-after-read consistency manually."
+        </div>
+<p class="text-justify font-sans text-body-md text-on-surface-variant leading-relaxed">
+          Because such lag can be confusing to users, systems often need stronger guarantees such as <em>read-after-write consistency</em> (preventing the user from seeing their own updates disappear) and <em>monotonic reads</em> (preventing users from seeing data move backward in time).
+        </p>
+<!-- Page Footer simulation -->
+<div class="flex items-center justify-between text-[11px] font-code-sm text-outline pt-6 border-t border-surface-container mt-6">
+<span class="">Designing Data-Intensive Applications</span>
+<span class="">Chapter 5: Replication • 155</span>
+</div>
+</div>
+</div>
+<!-- Modal Footer Controls -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm px-space-lg py-3 border-t border-surface-container bg-surface-container-low/40">
+<div class="flex items-center gap-space-sm text-outline text-xs">
+<span class="material-symbols-outlined text-[16px] text-primary">verified</span>
+<span class="hidden sm:inline">Dữ liệu đối soát bảo mật từ Vector Knowledge Engine</span>
+</div>
+<div class="flex items-center gap-space-xs ml-auto">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-container bg-surface-container-lowest text-on-surface hover:bg-surface-container font-headline-sm text-body-sm transition-colors shadow-sm" id="btnCopySnippet">
+<span class="material-symbols-outlined text-[16px]" id="copySnippetIcon">content_copy</span>
+<span id="copySnippetText" class="">Sao chép đoạn trích dẫn</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-container bg-surface-container-lowest text-on-surface hover:bg-surface-container font-headline-sm text-body-sm transition-colors shadow-sm" id="btnDownloadOriginalDoc">
+<span class="material-symbols-outlined text-[16px] text-primary">download</span>
+<span class="">Tải file gốc</span>
+</button>
+<button class="px-4 py-1.5 rounded-lg bg-primary text-on-primary font-headline-sm text-body-sm hover:bg-primary-container transition-colors shadow-sm" id="btnCloseCitationModalFooter">
+          Đóng
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script id="chat-sessions-manager-script">
+(function() {
+  const sessionData = {
+    'session-1': {
+      title: 'Eventual Consistency & Trade-offs',
+      userMsg: 'Các tài liệu này nói gì về eventual consistency và các đánh đổi trong hệ thống phân tán?',
+      lead: 'Dựa trên tài liệu Designing Data-Intensive Applications và các nghiên cứu về hệ thống phân tán trong bộ sưu tập:',
+      point1Title: '1. Khái niệm & Bản chất của Eventual Consistency',
+      point1Body: 'Trong các hệ thống phân tán sử dụng mô hình bất đồng bộ (asynchronous replication), nếu không có ghi chép mới nào xảy ra, tất cả các bản sao (replicas) cuối cùng sẽ hội tụ về cùng một giá trị [1]. Tuy nhiên, từ "eventual" (cuối cùng) là một cam kết rất yếu vì nó không xác định khoảng trễ thời gian (replication lag) là vài mili-giây hay vài phút.',
+      point2Title: '2. Các Đánh đổi Trọng yếu (Trade-offs)',
+      point2Body: 'Availability vs Consistency: Chấp nhận tính nhất quán yếu để đảm bảo tính sẵn sàng cao và độ trễ thấp (latency) khi mạng phân vùng (theo CAP theorem) [2]. Ngoài ra còn tăng độ phức tạp ở tầng ứng dụng và trải nghiệm người dùng khi đọc dữ liệu stale.'
+    },
+    'session-2': {
+      title: 'Thiết kế Clean Architecture cho Go microservice',
+      userMsg: 'Làm thế nào để áp dụng Clean Architecture vào dự án microservice viết bằng Golang?',
+      lead: 'Dựa trên tài liệu Clean Architecture.pdf của Robert C. Martin:',
+      point1Title: '1. Phân chia Layer độc lập trong Go',
+      point1Body: 'Domain Layer (Entities) thuần túy không chứa bất kỳ struct dependency nào từ DB hay HTTP. Usecase Layer chứa business flows và định nghĩa Input/Output Ports qua Interfaces.',
+      point2Title: '2. Dependency Injection & Giao tiếp Infrastructure',
+      point2Body: 'Tầng Adapter (HTTP handlers, gRPC servers, DB Repositories) triển khai Interface của UseCase. Sử dụng Wire hoặc Fx để khởi tạo dependency graph khi khởi động ứng dụng.'
+    },
+    'session-3': {
+      title: 'PostgreSQL Indexing & Query Tuning',
+      userMsg: 'Khi nào nên sử dụng BRIN index thay vì B-Tree trong bảng log lớn 50M records?',
+      lead: 'Dựa trên tài liệu PostgreSQL 16 Tuning Notes:',
+      point1Title: '1. Nguyên lý hoạt động của BRIN (Block Range Index)',
+      point1Body: 'BRIN chỉ lưu min/max value cho từng dải block dữ liệu vật lý (mặc định 128 pages). Dung lượng chỉ chiếm khoảng vài Megabytes so với Gigabytes của B-Tree.',
+      point2Title: '2. Điều kiện tối ưu',
+      point2Body: 'Dữ liệu phải có tính tương quan vật lý cao (naturally ordered như created_at, sequence ID). Bảng ít cập nhật/xóa nhằm tránh phân mảnh block.'
+    },
+    'session-4': {
+      title: 'CAP Theorem vs PACELC Theorem',
+      userMsg: 'Định lý PACELC mở rộng CAP Theorem ở điểm nào cụ thể?',
+      lead: 'Dựa trên tài liệu Designing Data-Intensive Applications:',
+      point1Title: '1. Vấn đề của CAP cổ điển',
+      point1Body: 'CAP chỉ xem xét hệ thống trong tình trạng mạng bị phân vùng (Network Partition), nhưng phân vùng là sự cố hiếm hoi xảy ra trong hệ thống thực tế.',
+      point2Title: '2. Bổ sung của PACELC',
+      point2Body: 'Nếu có Partition (P): chọn Availability (A) hay Consistency (C); Ngược lại Else (E): chọn Latency (L) hay Consistency (C). Điển hình DynamoDB / Cassandra ưu tiên Latency (PA/EL).'
+    }
+  };
+
+  const sidebar = document.getElementById('chatSessionsSidebar');
+  const collapseBtn = document.getElementById('collapseHistoryBtn');
+  const expandBtn = document.getElementById('expandHistoryBtn');
+  const newChatBtn = document.getElementById('newChatSessionBtn');
+  const activeTitleHeader = document.getElementById('activeSessionTitleHeader');
+  const userMsgEl = document.getElementById('currentUserMessageText');
+  const sessionCards = document.querySelectorAll('.session-card');
+  const searchSessionInput = document.getElementById('searchSessionInput');
+  const sendBtn = document.getElementById('sendPromptBtn');
+  const chatInput = document.getElementById('chatInputPrompt');
+
+  // Toggle history sidebar collapse/expand
+  function collapseSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.remove('w-80');
+    sidebar.classList.add('w-0', 'border-r-0', 'opacity-0');
+    if (expandBtn) expandBtn.classList.remove('hidden');
+  }
+
+  function expandSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.remove('w-0', 'border-r-0', 'opacity-0');
+    sidebar.classList.add('w-80');
+    if (expandBtn) expandBtn.classList.add('hidden');
+  }
+
+  collapseBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    collapseSidebar();
+  });
+
+  expandBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    expandSidebar();
+  });
+
+  // Select Session handler
+  function activateSession(card) {
+    sessionCards.forEach(c => {
+      c.classList.remove('bg-surface-container-low/70', 'border-l-2', 'border-primary-container');
+      c.classList.add('hover:bg-surface-container-low');
+      const title = c.querySelector('span:first-child');
+      if (title) {
+        title.classList.remove('text-primary', 'font-semibold');
+        title.classList.add('text-on-surface');
+      }
+    });
+
+    card.classList.add('bg-surface-container-low/70', 'border-l-2', 'border-primary-container');
+    card.classList.remove('hover:bg-surface-container-low');
+    const targetTitle = card.querySelector('span:first-child');
+    if (targetTitle) {
+      targetTitle.classList.add('text-primary', 'font-semibold');
+      targetTitle.classList.remove('text-on-surface');
+    }
+
+    const sId = card.getAttribute('data-session-id');
+    const data = sessionData[sId];
+    if (data && activeTitleHeader && userMsgEl) {
+      activeTitleHeader.textContent = data.title;
+      userMsgEl.textContent = data.userMsg;
+    }
+  }
+
+  sessionCards.forEach(card => {
+    card.addEventListener('click', () => activateSession(card));
+  });
+
+  // New Chat Session Button
+  newChatBtn?.addEventListener('click', () => {
+    sessionCards.forEach(c => {
+      c.classList.remove('bg-surface-container-low/70', 'border-l-2', 'border-primary-container');
+      const title = c.querySelector('span:first-child');
+      if (title) title.classList.remove('text-primary', 'font-semibold');
+    });
+
+    if (activeTitleHeader) activeTitleHeader.textContent = 'Phiên hỏi đáp mới';
+    if (userMsgEl) userMsgEl.textContent = 'Bạn muốn tìm hiểu hoặc phân tích nội dung nào từ các tài liệu trong bộ sưu tập?';
+    if (chatInput) {
+      chatInput.value = '';
+      chatInput.focus();
+    }
+  });
+
+  // Search sessions
+  searchSessionInput?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    sessionCards.forEach(card => {
+      const text = card.textContent.toLowerCase();
+      card.style.display = text.includes(term) ? 'flex' : 'none';
+    });
+  });
+
+  // Delete Session helper
+  window.deleteSession = function(sId) {
+    const card = document.querySelector(`[data-session-id="${sId}"]`);
+    if (card) {
+      card.style.opacity = '0';
+      setTimeout(() => {
+        card.remove();
+      }, 150);
+    }
+  };
+
+  // Enter key in chat prompt
+  chatInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      sendBtn?.click();
+    }
+  });
+
+  sendBtn?.addEventListener('click', () => {
+    const query = chatInput?.value.trim();
+    if (!query) return;
+    if (userMsgEl) userMsgEl.textContent = query;
+    if (activeTitleHeader && activeTitleHeader.textContent === 'Phiên hỏi đáp mới') {
+      activeTitleHeader.textContent = query.length > 35 ? query.substring(0, 35) + '...' : query;
+    }
+    chatInput.value = '';
+  });
+
+  // Tabs switching support
+  const tabBtn01 = document.getElementById('tabBtn01');
+  const tabBtn02 = document.getElementById('tabBtn02');
+  const tabContent01 = document.getElementById('tabContent01');
+  const tabContent02 = document.getElementById('tabContent02');
+
+  tabBtn01?.addEventListener('click', () => {
+    tabBtn01.className = 'flex items-center gap-space-xs px-4 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-headline-sm text-body-md shadow-sm transition-all';
+    tabBtn02.className = 'flex items-center gap-space-xs px-4 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-body-md text-body-md transition-all';
+    tabContent01.classList.remove('hidden');
+    tabContent01.classList.add('flex');
+    tabContent02.classList.add('hidden');
+    tabContent02.classList.remove('flex');
+  });
+
+  tabBtn02?.addEventListener('click', () => {
+    tabBtn02.className = 'flex items-center gap-space-xs px-4 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-headline-sm text-body-md shadow-sm transition-all';
+    tabBtn01.className = 'flex items-center gap-space-xs px-4 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-body-md text-body-md transition-all';
+    tabContent02.classList.remove('hidden');
+    tabContent02.classList.add('flex');
+    tabContent01.classList.add('hidden');
+    tabContent01.classList.remove('flex');
+  });
+
+  // Collection dropdown
+  const colBtn = document.getElementById('collectionDropdownBtn');
+  const colMenu = document.getElementById('collectionDropdownMenu');
+  const arrow = document.getElementById('dropdownArrow');
+  colBtn?.addEventListener('click', () => {
+    const isHidden = colMenu?.classList.toggle('hidden');
+    if (arrow) arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+  });
+
+  // ================= CITATION VIEWER MODAL LOGIC =================
+  const citationModal = document.getElementById('citationViewerModal');
+  const citationCard = document.getElementById('citationModalCard');
+  const closeBtn = document.getElementById('closeCitationModalBtn');
+  const closeFooterBtn = document.getElementById('btnCloseCitationModalFooter');
+  const targetHighlight = document.getElementById('targetCitationBlock');
+  const copySnippetBtn = document.getElementById('btnCopySnippet');
+  const copySnippetText = document.getElementById('copySnippetText');
+  const copySnippetIcon = document.getElementById('copySnippetIcon');
+  const btnDownloadOriginalDoc = document.getElementById('btnDownloadOriginalDoc');
+
+  window.openDocCitationModal = function(docType) {
+    if (!citationModal || !citationCard) return;
+    citationModal.classList.remove('opacity-0', 'pointer-events-none');
+    citationModal.classList.add('opacity-100', 'pointer-events-auto');
+    citationCard.classList.remove('scale-95');
+    citationCard.classList.add('scale-100');
+
+    // Smooth scroll to highlight if needed
+    setTimeout(() => {
+      if (targetHighlight) {
+        targetHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 200);
+  };
+
+  function closeCitationModal() {
+    if (!citationModal || !citationCard) return;
+    citationModal.classList.remove('opacity-100', 'pointer-events-auto');
+    citationModal.classList.add('opacity-0', 'pointer-events-none');
+    citationCard.classList.remove('scale-100');
+    citationCard.classList.add('scale-95');
+  }
+
+  closeBtn?.addEventListener('click', closeCitationModal);
+  closeFooterBtn?.addEventListener('click', closeCitationModal);
+
+  // Close when clicking outside on the backdrop
+  citationModal?.addEventListener('click', (e) => {
+    if (e.target === citationModal) {
+      closeCitationModal();
+    }
+  });
+
+  // Close on Escape key press
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && citationModal && !citationModal.classList.contains('pointer-events-none')) {
+      closeCitationModal();
+    }
+  });
+
+  // Hook citation badges [1], [2] to open citation modal
+  document.querySelectorAll('.citation-badge').forEach(badge => {
+    badge.addEventListener('click', (e) => {
+      e.preventDefault();
+      openDocCitationModal('ddia');
+    });
+  });
+
+  // Copy snippet functionality
+  copySnippetBtn?.addEventListener('click', () => {
+    const rawQuote = document.getElementById('quotedRawText')?.textContent?.trim() || '';
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(rawQuote).then(() => {
+        if (copySnippetText) copySnippetText.textContent = 'Đã sao chép!';
+        if (copySnippetIcon) copySnippetIcon.textContent = 'check';
+        setTimeout(() => {
+          if (copySnippetText) copySnippetText.textContent = 'Sao chép đoạn trích dẫn';
+          if (copySnippetIcon) copySnippetIcon.textContent = 'content_copy';
+        }, 2000);
+      });
+    }
+  });
+
+  // Download feedback toast / simulation
+  btnDownloadOriginalDoc?.addEventListener('click', () => {
+    const origText = btnDownloadOriginalDoc.innerHTML;
+    btnDownloadOriginalDoc.innerHTML = '<span class="material-symbols-outlined text-[16px] text-emerald-600 animate-spin">sync</span><span>Đang tải file...</span>';
+    setTimeout(() => {
+      btnDownloadOriginalDoc.innerHTML = '<span class="material-symbols-outlined text-[16px] text-emerald-600">done</span><span>Đã tải 14.2 MB</span>';
+      setTimeout(() => {
+        btnDownloadOriginalDoc.innerHTML = origText;
+      }, 2500);
+    }, 1000);
+  });
+})();
+</script>
+
+
+</body></html>
