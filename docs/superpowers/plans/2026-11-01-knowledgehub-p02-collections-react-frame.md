@@ -261,6 +261,8 @@ Every checkbox below is **owner work** unless explicitly labeled a review/prefli
 
 **Trap:** mocked success is **not** evidence that DB DDL, grants, persistence, isolation under real connections or concurrent SQL locks work.
 
+> **Frontend implementation companion (Tasks 10–18):** For the precise mockup-to-shadcn/ui reuse matrix, proposed file-by-file edits, React/TypeScript examples, sequencing and visual checks, use [`2026-11-15-knowledgehub-p02-frontend-ui-implementation-guide.md`](./2026-11-15-knowledgehub-p02-frontend-ui-implementation-guide.md). This companion is a manual teaching guide, not approval to perform product/database edits; P02 spec and this parent plan remain authoritative for scope/security.
+
 ### Task 10 - Add frontend API contract, types and protected route
 
 **Learn:** Axios envelope, React Router, permission context, typed API functions.
