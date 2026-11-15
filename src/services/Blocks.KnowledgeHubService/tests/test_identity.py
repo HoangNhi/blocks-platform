@@ -27,6 +27,7 @@ class TestIdentity(unittest.TestCase):
             jwt_audience="BlocksWeb",
             system_grpc_url="https://localhost:7073",
             system_grpc_ca_file=self.ca_file,
+            database_url=SecretStr("postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub"),
         )
         self.actor_id = uuid4()
 

@@ -4,9 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pydantic import ValidationError
-
 from knowledgehub.config import Settings
+from pydantic import ValidationError
 
 
 class TestConfig(unittest.TestCase):
@@ -23,6 +22,7 @@ class TestConfig(unittest.TestCase):
             "KNOWLEDGEHUB_JWT_AUDIENCE": "BlocksWeb",
             "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073",
             "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(self.ca_file),
+            "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub",
         }
 
     def tearDown(self):
@@ -40,35 +40,136 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(settings.system_grpc_url, "https://localhost:7073")
             self.assertEqual(settings.system_grpc_ca_file, self.ca_file)
             self.assertEqual(settings.permission_timeout_seconds, 3.0)
+            self.assertEqual(
+                settings.database_url.get_secret_value(),
+                "postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub",
+            )
 
-        env_with_timeout = {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "5.0"}
+        env_with_timeout = {
+            **self.valid_env,
+            "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "5.0",
+        }
         with patch.dict(os.environ, env_with_timeout, clear=True):
             settings = Settings(_env_file=None)
             self.assertEqual(settings.permission_timeout_seconds, 5.0)
 
     def test_invalid_configuration_rejected(self):
         cases = {
-            "missing_key": {k: v for k, v in self.valid_env.items() if k != "KNOWLEDGEHUB_JWT_KEY"},
+            "missing_key": {
+                k: v for k, v in self.valid_env.items() if k != "KNOWLEDGEHUB_JWT_KEY"
+            },
             "short_key": {**self.valid_env, "KNOWLEDGEHUB_JWT_KEY": "too_short"},
             "whitespace_key": {**self.valid_env, "KNOWLEDGEHUB_JWT_KEY": " " * 35},
             "empty_issuer": {**self.valid_env, "KNOWLEDGEHUB_JWT_ISSUER": "  "},
             "empty_audience": {**self.valid_env, "KNOWLEDGEHUB_JWT_AUDIENCE": ""},
-            "http_url": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "http://localhost:7073"},
-            "missing_port": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost"},
-            "port_zero": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:0"},
-            "port_too_large": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:70000"},
-            "url_credentials": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://user:pass@localhost:7073"},
-            "url_query": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073?q=1"},
-            "url_fragment": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073#frag"},
-            "url_non_root_path": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073/api"},
-            "missing_ca": {k: v for k, v in self.valid_env.items() if k != "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE"},
-            "relative_ca": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": "relative/ca.pem"},
-            "nonexistent_ca": {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(Path(self.temp_dir.name) / "missing.pem")},
-            "timeout_zero": {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "0"},
-            "timeout_negative": {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "-1"},
-            "timeout_too_large": {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "30.1"},
-            "timeout_nan": {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "nan"},
-            "timeout_inf": {**self.valid_env, "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "inf"},
+            "http_url": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "http://localhost:7073",
+            },
+            "missing_port": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost",
+            },
+            "port_zero": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:0",
+            },
+            "port_too_large": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:70000",
+            },
+            "url_credentials": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://user:pass@localhost:7073",
+            },
+            "url_query": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073?q=1",
+            },
+            "url_fragment": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073#frag",
+            },
+            "url_non_root_path": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073/api",
+            },
+            "missing_ca": {
+                k: v
+                for k, v in self.valid_env.items()
+                if k != "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE"
+            },
+            "relative_ca": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": "relative/ca.pem",
+            },
+            "nonexistent_ca": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(
+                    Path(self.temp_dir.name) / "missing.pem"
+                ),
+            },
+            "timeout_zero": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "0",
+            },
+            "timeout_negative": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "-1",
+            },
+            "timeout_too_large": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "30.1",
+            },
+            "timeout_nan": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "nan",
+            },
+            "timeout_inf": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "inf",
+            },
+            "missing_db_url": {
+                k: v
+                for k, v in self.valid_env.items()
+                if k != "KNOWLEDGEHUB_DATABASE_URL"
+            },
+            "db_url_empty": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "",
+            },
+            "db_url_whitespace": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "   ",
+            },
+            "db_url_wrong_scheme": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql://dev:secret@localhost:5432/knowledgehub",
+            },
+            "db_url_missing_user": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://localhost:5432/knowledgehub",
+            },
+            "db_url_missing_host": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@:5432/knowledgehub",
+            },
+            "db_url_missing_port": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost/knowledgehub",
+            },
+            "db_url_port_zero": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:0/knowledgehub",
+            },
+            "db_url_port_too_large": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:70000/knowledgehub",
+            },
+            "db_url_wrong_db": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:5432/other_db",
+            },
         }
         for name, env in cases.items():
             with self.subTest(case=name):
@@ -79,7 +180,8 @@ class TestConfig(unittest.TestCase):
     def test_ca_file_with_private_key_rejected(self):
         bad_ca = Path(self.temp_dir.name) / "with_key.pem"
         bad_ca.write_text(
-            self.valid_ca_pem + "\n-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASC...\n-----END PRIVATE KEY-----\n",
+            self.valid_ca_pem
+            + "\n-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASC...\n-----END PRIVATE KEY-----\n",
             encoding="utf-8",
         )
         env = {**self.valid_env, "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(bad_ca)}
@@ -134,7 +236,8 @@ class TestConfig(unittest.TestCase):
             f"KNOWLEDGEHUB_JWT_ISSUER=DotenvIssuer\n"
             f"KNOWLEDGEHUB_JWT_AUDIENCE=DotenvAudience\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_URL=https://localhost:7073\n"
-            f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n",
+            f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
+            f"KNOWLEDGEHUB_DATABASE_URL=postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub\n",
             encoding="utf-8",
         )
         with patch.dict(os.environ, {}, clear=True):
@@ -152,7 +255,8 @@ class TestConfig(unittest.TestCase):
             f"KNOWLEDGEHUB_JWT_ISSUER=DotenvIssuer\n"
             f"KNOWLEDGEHUB_JWT_AUDIENCE=DotenvAudience\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_URL=https://localhost:7073\n"
-            f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n",
+            f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
+            f"KNOWLEDGEHUB_DATABASE_URL=postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub\n",
             encoding="utf-8",
         )
         override_env = {"KNOWLEDGEHUB_JWT_KEY": "env_override_secret_1234567890123456"}
@@ -166,6 +270,12 @@ class TestConfig(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValidationError):
                 Settings(_env_file=None)
+
+    def test_database_url_hides_credentials(self):
+        with patch.dict(os.environ, self.valid_env, clear=True):
+            settings = Settings(_env_file=None)
+            self.assertNotIn("secret", str(settings.database_url))
+            self.assertEqual(str(settings.database_url), "**********")
 
 
 if __name__ == "__main__":

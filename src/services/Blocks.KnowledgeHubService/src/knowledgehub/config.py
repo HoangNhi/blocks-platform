@@ -10,9 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ENV_FILE_ENV = os.getenv("KNOWLEDGEHUB_ENV_FILE")
 if ENV_FILE_ENV is not None:
     ENV_PATH = (
-        Path(ENV_FILE_ENV)
-        if ENV_FILE_ENV and ENV_FILE_ENV.lower() != "none"
-        else None
+        Path(ENV_FILE_ENV) if ENV_FILE_ENV and ENV_FILE_ENV.lower() != "none" else None
     )
 else:
     DEFAULT_ENV = Path(__file__).resolve().parents[2] / ".env"
@@ -35,6 +33,7 @@ class Settings(BaseSettings):
     system_grpc_url: str
     system_grpc_ca_file: Path
     permission_timeout_seconds: float = Field(default=3.0)
+    database_url: SecretStr
 
     @field_validator("jwt_key")
     @classmethod
@@ -100,9 +99,7 @@ class Settings(BaseSettings):
         try:
             ssl._ssl._test_decode_cert(str(v))
         except Exception:
-            raise ValueError(
-                "CA file must be a valid, readable X.509 PEM certificate"
-            )
+            raise ValueError("CA file must be a valid, readable X.509 PEM certificate")
 
         return v
 
@@ -111,4 +108,29 @@ class Settings(BaseSettings):
     def validate_timeout(cls, v: float) -> float:
         if not math.isfinite(v) or v <= 0 or v > 30:
             raise ValueError("Timeout must be a finite number in (0, 30]")
+        return v
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, v: SecretStr) -> SecretStr:
+        raw = v.get_secret_value()
+        if not raw or not raw.strip():
+            raise ValueError("Database URL must not be empty")
+        parsed = urlparse(raw)
+        if parsed.scheme != "postgresql+asyncpg":
+            raise ValueError("Scheme must be postgresql+asyncpg")
+        if not parsed.username or not parsed.username.strip():
+            raise ValueError("Database URL must include a username")
+        if not parsed.hostname:
+            raise ValueError("Database URL must include host")
+        try:
+            port = parsed.port
+        except ValueError:
+            raise ValueError("Invalid port")
+        if port is None or not (1 <= port <= 65535):
+            raise ValueError("Database URL must include a valid port (1-65535)")
+
+        db_name = parsed.path.lstrip("/")
+        if db_name != "knowledgehub":
+            raise ValueError("Database name must be exactly 'knowledgehub'")
         return v

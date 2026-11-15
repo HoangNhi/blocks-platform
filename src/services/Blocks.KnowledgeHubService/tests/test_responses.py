@@ -4,6 +4,7 @@ import unittest
 import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
+from sqlalchemy.exc import OperationalError
 
 from knowledgehub.responses import (
     error_response,
@@ -101,6 +102,24 @@ class TestResponses(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(body["Data"])
             self.assertEqual(body["Message"], "Đã xảy ra lỗi hệ thống")
             self.assertNotIn(internal_marker, resp.text)
+
+    async def test_db_operational_error_uses_envelope_503(self):
+        test_app = FastAPI()
+        setup_exception_handlers(test_app)
+
+        @test_app.get("/db-error")
+        async def db_error():
+            raise OperationalError("SELECT 1", {}, Exception("Connection refused"))
+
+        transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/db-error")
+            self.assertEqual(resp.status_code, 200)
+            body = resp.json()
+            self.assertFalse(body["Success"])
+            self.assertEqual(body["StatusCode"], 503)
+            self.assertIsNone(body["Data"])
+            self.assertEqual(body["Message"], "Dịch vụ cơ sở dữ liệu tạm thời không khả dụng")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,9 @@ dependencies = [
     "pydantic-settings==2.16.1",
     "PyJWT==2.15.1",
     "grpcio==1.85.0",
-    "protobuf==7.36.2"
+    "protobuf==7.36.2",
+    "sqlalchemy[asyncio]==2.1.6",
+    "asyncpg==0.32.0"
 ]
 
 [dependency-groups]

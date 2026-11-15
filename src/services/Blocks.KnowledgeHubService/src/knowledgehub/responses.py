@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import DBAPIError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 T = TypeVar("T")
@@ -65,3 +66,10 @@ def setup_exception_handlers(app: FastAPI) -> None:
             "Message": "Đã xảy ra lỗi hệ thống",
         }
         return JSONResponse(content=payload, status_code=500)
+
+    @app.exception_handler(OperationalError)
+    @app.exception_handler(DBAPIError)
+    async def db_connnection_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        return error_response(503, "Dịch vụ cơ sở dữ liệu tạm thời không khả dụng")

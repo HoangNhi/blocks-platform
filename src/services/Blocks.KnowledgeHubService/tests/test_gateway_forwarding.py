@@ -115,6 +115,7 @@ class TestGatewayForwarding(unittest.TestCase):
                 "KNOWLEDGEHUB_SYSTEM_GRPC_URL": f"https://localhost:{cls.grpc_port}",
                 "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(cls.ca_pem),
                 "KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS": "3.0",
+                "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub",
                 "KNOWLEDGEHUB_ENV_FILE": "none",  # Explicitly disable reading physical .env
                 "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
             }
