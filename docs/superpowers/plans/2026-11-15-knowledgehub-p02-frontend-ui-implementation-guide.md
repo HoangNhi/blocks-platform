@@ -1787,4 +1787,8 @@ Run commands as the owner after prerequisites; this document did **not** execute
 - shadcn/ui Radix Popover: https://ui.shadcn.com/docs/components/radix/popover
 - shadcn/ui React Hook Form: https://ui.shadcn.com/docs/forms/react-hook-form
 - TanStack Query cancellation: https://tanstack.com/query/latest/docs/framework/react/guides/query-cancellation
+- TanStack Query useInfiniteQuery: https://tanstack.com/query/latest/docs/framework/react/reference/useInfiniteQuery
+- TanStack Query QueryClient: https://tanstack.com/query/latest/docs/framework/react/reference/QueryClient
+- React refs and render purity: https://react.dev/reference/react/useRef
+- React useLayoutEffect: https://react.dev/reference/react/useLayoutEffect
 - React Router search params: https://reactrouter.com/api/hooks/useSearchParams
