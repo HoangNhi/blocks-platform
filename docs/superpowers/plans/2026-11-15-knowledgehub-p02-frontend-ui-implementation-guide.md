@@ -510,69 +510,635 @@ describe("URL-only collection selection", () => {
 
 ---
 
-## Task 13 — Collection header, selector, pagination, honest states
+## Task 13 — Build the exact collection header and paginated selector
 
-**13.1** Create <code>components/CollectionSelector.tsx</code>; props should include <code>selection</code>, <code>selectedCollection</code>, <code>list/page/loading/error</code>, <code>canCreate</code>, <code>onSelect(id)</code>, <code>onCreate()</code>, <code>onLoadMore()</code>. Keep asynchronous data/route decisions in page/hooks, not in a generic shadcn primitive.
+**Goal:** Match the mockup's header + dropdown hierarchy while showing real collection data and never implying there are actual documents. The existing <code>ui/combobox.tsx</code> cannot be copied verbatim because its <code>CommandItem value</code> uses the visible name, which may be duplicated; compose existing shadcn primitives instead.
 
-**13.2** Compose these **already installed** source files:
-- <code>ui/popover.tsx</code>: Popover, PopoverTrigger, PopoverContent.
-- <code>ui/command.tsx</code>: Command, CommandInput, CommandList, CommandGroup, CommandItem, CommandEmpty.
-- <code>ui/button.tsx</code>, <code>ui/badge.tsx</code>, Lucide ChevronDown / Check / Plus.
+### Checklist 13.1 — Create: <code>src/features/knowledgehub/components/CollectionSelector.tsx</code>
 
-Example fragment illustrating UUID identity (not a complete selector):
+Dependencies **already installed**: <code>ui/button.tsx</code>, <code>ui/popover.tsx</code>, <code>ui/command.tsx</code>, Lucide. Do not create new generic Button/Dropdown, import Stitch HTML/CSS/CDN or install another combobox library.
 
 ~~~tsx
-<Popover>
-  <PopoverTrigger asChild>
-    <Button variant="ghost" className="min-w-0 max-w-full justify-start text-left">
-      <span className="min-w-0 truncate">{selectedCollection?.Name ?? "Chọn bộ sưu tập"}</span>
-      <ChevronDown className="size-4 shrink-0" />
-    </Button>
-  </PopoverTrigger>
-  <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] p-0">
-    <Command>
-      <CommandInput placeholder="Tìm trong danh sách đã tải..." />
-      <CommandList>
-        <CommandEmpty>Không có bộ sưu tập phù hợp</CommandEmpty>
-        <CommandGroup>
-          {collections.map((collection) => (
-            <CommandItem
-              key={collection.Id}
-              value={collection.Id}
-              keywords={[collection.Name]}
-              onSelect={() => onSelect(collection.Id)}
-            >
-              <span className="min-w-0 flex-1 truncate">{collection.Name}</span>
-              {selectedId === collection.Id && <Check className="size-4" />}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        {/* A real load-more Button appears here when another page exists. */}
-      </CommandList>
-    </Command>
-  </PopoverContent>
-</Popover>
+import { useState } from "react";
+import { Check, ChevronDown, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput,
+  CommandItem, CommandList,
+} from "@/components/ui/command";
+import type { CollectionDto } from "../types/collections.types";
+
+interface Props {
+  collections: CollectionDto[];
+  selected: CollectionDto | null;
+  selectedId: string | null;
+  listLoading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  errorMessage: string | null;
+  canCreate: boolean;
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+  onLoadMore: () => void;
+}
+
+export function CollectionSelector({
+  collections, selected, selectedId, listLoading, loadingMore,
+  hasMore, errorMessage, canCreate, onSelect, onCreate, onLoadMore,
+}: Props) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          aria-label="Chọn bộ sưu tập"
+          aria-expanded={open}
+          className="h-auto min-w-0 max-w-full justify-start px-1 text-left text-xl font-semibold"
+        >
+          <span className="min-w-0 truncate">
+            {"Bộ sưu tập: " + (selected?.Name ?? "Chưa chọn")}
+          </span>
+          <ChevronDown className="size-4 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[min(22rem,calc(100vw-2rem))] p-0"
+      >
+        <Command>
+          <CommandInput placeholder="Tìm trong các bộ sưu tập đã tải..." />
+          <CommandList>
+            {listLoading && collections.length === 0 && (
+              <p className="p-3 text-sm text-muted-foreground">Đang tải...</p>
+            )}
+            {errorMessage && (
+              <p role="alert" className="p-3 text-sm text-destructive">
+                {errorMessage}
+              </p>
+            )}
+            <CommandEmpty>
+              Không có kết quả trong các bộ sưu tập đã tải.
+            </CommandEmpty>
+            <CommandGroup heading="Bộ sưu tập hiện có">
+              {collections.map((collection) => (
+                <CommandItem
+                  key={collection.Id}
+                  value={collection.Id}
+                  keywords={[collection.Name]}
+                  onSelect={() => {
+                    onSelect(collection.Id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {collection.Name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {collection.Id.slice(0, 8)}
+                  </span>
+                  {selectedId === collection.Id && (
+                    <Check className="size-4" aria-hidden="true" />
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+          {hasMore && (
+            <div className="border-t p-2">
+              <Button
+                variant="ghost"
+                className="w-full"
+                disabled={loadingMore}
+                onClick={onLoadMore}
+              >
+                {loadingMore ? "Đang tải thêm..." : "Tải thêm bộ sưu tập"}
+              </Button>
+            </div>
+          )}
+          {canCreate && (
+            <div className="border-t p-2">
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => {
+                  setOpen(false);
+                  onCreate();
+                }}
+              >
+                <Plus className="size-4" />
+                Tạo bộ sưu tập mới
+              </Button>
+            </div>
+          )}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 ~~~
 
-**13.3** Paging rule: first GET <code>page_index=1&page_size=50</code>. Show a real <code>Tải thêm</code> control while <code>loadedCount &lt; TotalRow</code>; fetch next page only on demand and deduplicate by UUID. Search above filters **loaded** items only; label it accurately, not as global server search. Do not fabricate document-count values from mockup or silently stop at 50.
+**Why UUID + keywords?** The UUID is the React key and <code>CommandItem.value</code>; <code>keywords={[Name]}</code> makes the name searchable without using it as identity. Eight initial UUID characters are shown to distinguish two identically named collections; the full UUID is still the mutation target. Search only examines the **loaded** pages, not all server records. The load-more button is outside the filtered CommandList so searching cannot accidentally hide paging.
 
-**13.4** Distinguish states: no collections / no selection / selected detail pending / list pending / permission denied / temporary 503 / invalid URL / missing-deleted-foreign detail. Use <code>CollectionState.tsx</code> for presentational messages if repetition appears. The badge reads the selected real DTO's <code>DocumentCount</code>, which is zero in P02.
+### Checklist 13.2 — Create: <code>src/features/knowledgehub/components/CollectionState.tsx</code>
 
-**Task 13 checkpoint:** 51+ fixtures, duplicate names with distinct UUIDs, selected item off current list page, non-clickable action when permission absent, no stale data flashing.
+Use this small presentational state component in both tabs, not a fake documents table. No new state store is needed.
 
-## Task 14 — Create, rename, delete with existing shadcn dialog/form primitives
+~~~tsx
+export type CollectionContentState =
+  | "none" | "invalid" | "loading" | "unavailable"
+  | "denied" | "outage" | "ready";
 
-**14.1** Create <code>components/CollectionFormDialog.tsx</code> for both create/rename. Use the existing <code>ui/dialog.tsx</code>, <code>ui/form.tsx</code> (or <code>ui/field.tsx</code> with React Hook Form), <code>ui/input.tsx</code>, <code>ui/textarea.tsx</code>, <code>ui/button.tsx</code>, <code>react-hook-form</code>, <code>zod</code> and <code>zodResolver</code>. Inspect <code>PopupFaculty.tsx</code> for local syntax, **but do not copy its client-generated UUID**: KnowledgeHub IDs are backend-generated.
+const copy: Record<Exclude<CollectionContentState, "ready">, string> = {
+  none: "Hãy chọn hoặc tạo một bộ sưu tập để bắt đầu.",
+  invalid: "Liên kết bộ sưu tập không hợp lệ. Hãy chọn lại từ danh sách.",
+  loading: "Đang tải bộ sưu tập...",
+  unavailable: "Bộ sưu tập không tồn tại hoặc bạn không có quyền truy cập.",
+  denied: "Bạn chưa được cấp quyền xem KnowledgeHub.",
+  outage: "Dịch vụ KnowledgeHub đang tạm thời không khả dụng.",
+};
 
-Fields: <code>Name</code> required (trim, reject NUL, 1–200 Unicode **code points**); <code>Description</code> optional/nullable (trim, reject NUL, max 2000 code points, blank → null). For JS code-point length use <code>Array.from(value).length</code>, not <code>value.length</code>. Form submit sends **only** <code>{Name, Description}</code>; edit sends both values even when description is null. Do not infer that duplicate names are invalid.
+export function CollectionState({
+  state,
+}: { state: Exclude<CollectionContentState, "ready"> }) {
+  return (
+    <div
+      role={state === "loading" ? "status" : "alert"}
+      className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground"
+    >
+      {copy[state]}
+    </div>
+  );
+}
+~~~
 
-**14.2** Create <code>hooks/useCollectionMutations.ts</code>, using TanStack <code>useMutation</code> and Task 10's rejecting API adapter. On success and only if initiating/current actor still match: invalidate the actor's list; create selects the returned ID; rename refetches/updates the actor's detail without changing URL. On failed/uncertain response: keep dialog, inputs, URL and error message, with no success toast. Prevent double submits; choose and test pending dismissal rules.
+Never distinguish “foreign ID” from “deleted ID” in visible copy: both must be indistinguishable 404 states.
 
-**14.3** Create <code>components/CollectionDeleteDialog.tsx</code> reusing <code>ui/confirm-delete-dialog.tsx</code>. It already supports <code>isLoading</code>, <code>confirmVariant="destructive"</code>, <code>stopAutoClose</code>. Supply the **target name plus an ID fragment** because names can repeat. Use <code>stopAutoClose={true}</code> and close only after confirmed mutation success; block dismissal if pending. Deletion of the selected item removes only current <code>c</code> with replace and evicts affected detail; deleting another ID does not change current selection.
+### Checklist 13.3 — Connect infinite paging in <code>routes/KnowledgeHubPage.tsx</code> (Task 15)
 
-**14.4** Gate visible actions by exact permission flags from <code>MainLayout</code> Outlet context (<code>IsAdded</code>, <code>IsUpdated</code>, <code>IsDeleted</code>). A hidden button is not security; API/RPC/owner SQL remain authoritative.
+The Task 11 hook already returns <code>data.pages</code>, <code>fetchNextPage</code>, <code>hasNextPage</code> and <code>isFetchingNextPage</code>. Flatten and deduplicate **by UUID**:
 
-**Task 14 checkpoint:** create/edit/delete success + every soft-error state; draft retained after 403/503; duplicate-name disambiguation; keyboard, Escape, focus restoration, pending state and actor switching.
+~~~tsx
+const list = useCollections(actorId, canView);
+const collections = Array.from(
+  new Map(
+    (list.data?.pages.flatMap((page) => page.Data) ?? [])
+      .map((item) => [item.Id, item] as const)
+  ).values()
+);
+
+// Pass to CollectionSelector:
+<CollectionSelector
+  collections={collections}
+  selected={selectedCollection}
+  selectedId={selectedId}
+  listLoading={list.isLoading}
+  loadingMore={list.isFetchingNextPage}
+  hasMore={list.hasNextPage === true}
+  errorMessage={list.isError ? "Không thể tải danh sách bộ sưu tập." : null}
+  canCreate={canCreate}
+  onSelect={select}
+  onCreate={() => setDialogMode("create")}
+  onLoadMore={() => {
+    if (list.hasNextPage && !list.isFetching) {
+      void list.fetchNextPage();
+    }
+  }}
+/>
+~~~
+
+This is a **fragment** of the final page; the complete page assembly appears in Task 15. Avoid <code>useState(collections)</code> duplicating TanStack Query's server state. The <code>DocumentCount</code> badge comes from the **selected detail DTO** only and equals zero in P02; no sample “4 tài liệu”.
+
+### Checklist 13.4 — Create test: <code>src/features/knowledgehub/components/CollectionSelector.test.tsx</code>
+
+Start with a fixture factory with **two identical names but different UUIDs**, then render the selector with <code>selected=null</code>, <code>onSelect=vi.fn()</code>:
+
+~~~tsx
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { CollectionSelector } from "./CollectionSelector";
+import type { CollectionDto } from "../types/collections.types";
+
+const make = (id: string): CollectionDto => ({
+  Id: id, Name: "Backend Engineering", Description: null,
+  CreatedAt: "2026-11-01T00:00:00Z",
+  UpdatedAt: "2026-11-01T00:00:00Z",
+  DocumentCount: 0,
+});
+
+describe("Collection selector", () => {
+  it("selects duplicate names by UUID, not display text", () => {
+    const a = make("11111111-1111-1111-1111-111111111111");
+    const b = make("22222222-2222-2222-2222-222222222222");
+    const onSelect = vi.fn();
+    render(
+      <CollectionSelector
+        collections={[a, b]} selected={null} selectedId={null}
+        listLoading={false} loadingMore={false} hasMore={false}
+        errorMessage={null} canCreate={false}
+        onSelect={onSelect} onCreate={vi.fn()} onLoadMore={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Chọn bộ sưu tập" }));
+    fireEvent.click(screen.getByText("22222222"));
+    expect(onSelect).toHaveBeenCalledWith(b.Id);
+  });
+});
+~~~
+
+Add tests for: 51 fixtures with <code>hasMore</code> and click “Tải thêm”; pending disables double request; create affordance absent when <code>canCreate=false</code>; error text is distinct from empty list; keyboard navigation with Enter and Escape; long name truncation and mobile width.
+
+**Done Task 13 when:** 51st collection is reachable, duplicate names select the correct UUID, off-page direct link works through detail endpoint and there are no made-up document rows/counts.
+
+---
+
+## Task 14 — Create/edit/delete dialogs and actor-safe mutations, file by file
+
+**Goal:** Assemble existing shadcn Dialog/Form components, React Hook Form + Zod 4 and TanStack mutations. Validate Unicode **code points** rather than UTF-16 units. The browser never generates collection IDs or sends ownership/deletion fields.
+
+### Checklist 14.1 — Create: <code>src/features/knowledgehub/components/collection-form.schema.ts</code>
+
+Do normalization in a tiny testable module. Keep form values as strings for <code>react-hook-form</code>; transform to API input only on submit. This avoids resolver input/output type mismatches. Final validation remains on the backend.
+
+~~~ts
+import * as z from "zod";
+import type { CollectionInput } from "../types/collections.types";
+
+const validCount = (value: string, limit: number) =>
+  Array.from(value.trim()).length <= limit;
+
+export const collectionFormSchema = z.object({
+  Name: z.string()
+    .refine((v) => !v.includes("\0"), "Tên không được chứa NUL")
+    .refine((v) => v.trim().length > 0, "Tên bộ sưu tập là bắt buộc")
+    .refine((v) => validCount(v, 200), "Tên tối đa 200 ký tự"),
+  Description: z.string()
+    .refine((v) => !v.includes("\0"), "Mô tả không được chứa NUL")
+    .refine((v) => validCount(v, 2000), "Mô tả tối đa 2000 ký tự"),
+});
+export type CollectionFormValues = z.infer<typeof collectionFormSchema>;
+
+export function toCollectionInput(v: CollectionFormValues): CollectionInput {
+  return {
+    Name: v.Name.trim(),
+    Description: v.Description.trim() || null,
+  };
+}
+~~~
+
+**Note:** JavaScript <code>"😀".length</code> is 2, whereas <code>Array.from("😀").length</code> is 1. Do **not** set an HTML <code>maxLength=200</code> as the sole validator, because it measures UTF-16 units. Compare frontend normalization against real backend behavior on rare Unicode whitespace; backend is authoritative.
+
+### Checklist 14.2 — Create: <code>src/features/knowledgehub/components/CollectionFormDialog.tsx</code>
+
+Reuse local <code>ui/dialog.tsx</code>, <code>ui/form.tsx</code>, <code>ui/input.tsx</code>, <code>ui/textarea.tsx</code>, <code>ui/button.tsx</code>. Do NOT recreate the Dialog or use the Faculty form's browser-generated UUID.
+
+~~~tsx
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+} from "@/components/ui/form";
+import type { CollectionDto, CollectionInput } from "../types/collections.types";
+import {
+  collectionFormSchema, toCollectionInput, type CollectionFormValues,
+} from "./collection-form.schema";
+
+interface Props {
+  open: boolean;
+  mode: "create" | "edit";
+  initial: CollectionDto | null;
+  pending: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: CollectionInput) => Promise<void>;
+}
+
+export function CollectionFormDialog({
+  open, mode, initial, pending, error, onOpenChange, onSubmit,
+}: Props) {
+  const form = useForm<CollectionFormValues>({
+    resolver: zodResolver(collectionFormSchema),
+    defaultValues: { Name: "", Description: "" },
+  });
+  const { reset } = form;
+
+  useEffect(() => {
+    if (open) {
+      reset({
+        Name: mode === "edit" ? (initial?.Name ?? "") : "",
+        Description: mode === "edit" ? (initial?.Description ?? "") : "",
+      });
+    }
+    // Reset on opening or changing the target, not on an error/refetch.
+  }, [open, mode, initial?.Id, reset]);
+
+  const requestOpenChange = (next: boolean) => {
+    if (!pending) onOpenChange(next);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={requestOpenChange}>
+      <DialogContent
+        showCloseButton={!pending}
+        onInteractOutside={(e) => { if (pending) e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (pending) e.preventDefault(); }}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? "Tạo bộ sưu tập" : "Đổi tên bộ sưu tập"}
+          </DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            className="grid gap-4"
+            onSubmit={form.handleSubmit(async (values) => {
+              try {
+                await onSubmit(toCollectionInput(values));
+              } catch {
+                // The parent supplies the real API error through the error prop.
+              }
+            })}
+          >
+            <FormField control={form.control} name="Name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tên bộ sưu tập *</FormLabel>
+                <FormControl>
+                  <Input {...field} aria-label="Tên bộ sưu tập" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="Description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Mô tả</FormLabel>
+                <FormControl>
+                  <Textarea {...field} aria-label="Mô tả" rows={3} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            {error && (
+              <p role="alert" className="text-sm text-destructive">{error}</p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button" variant="outline"
+                disabled={pending}
+                onClick={() => requestOpenChange(false)}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" disabled={pending || form.formState.isSubmitting}>
+                {pending ? "Đang lưu..." : "Lưu"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+~~~
+
+**Required behavior:** On API 400/403/503 or network uncertainty, keep the dialog, input and URL unchanged. Pending dismiss/escape is blocked; do not show a success toast until API application <code>Success=true</code> (Task 10 adapter throws otherwise). Use only <code>Name</code> and <code>Description</code> in the request body. PUT sends both fields; an empty description becomes null. Duplicate names are legal.
+
+### Checklist 14.3 — Create: <code>src/features/knowledgehub/hooks/useCollectionMutations.ts</code>
+
+This file is the **critical bridge** the earlier companion was missing. Mutation variables capture the stable <code>KnowledgeHubSession</code> object from Task 11. Late A completions are ignored if the boundary now represents B or a new login session. <code>getCurrent()</code> avoids hijacking selection if the user navigated to another collection while create was pending.
+
+~~~ts
+import { useEffect, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { collectionsApi } from "../api/collections.api";
+import type { CollectionInput } from "../types/collections.types";
+import { collectionKeys } from "./collection-query-keys";
+import {
+  useKnowledgeHubSession, type KnowledgeHubSession,
+} from "./KnowledgeHubCacheBoundary";
+import type { Selection } from "./useCollectionSelection";
+
+type Navigation = {
+  select: (id: string) => void;
+  clearIfSelected: (id: string) => void;
+  getCurrent: () => Selection;
+};
+type BaseArgs = { guard: KnowledgeHubSession };
+type CreateArgs = BaseArgs & {
+  input: CollectionInput; selectionBefore: string;
+};
+type EditArgs = BaseArgs & { id: string; input: CollectionInput };
+type DeleteArgs = BaseArgs & { id: string };
+
+export function useCollectionMutations(
+  actorId: string | null,
+  navigation: Navigation
+) {
+  const client = useQueryClient();
+  const currentSession = useKnowledgeHubSession();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const isCurrent = (guard: KnowledgeHubSession) =>
+    mounted.current && currentSession.current === guard;
+
+  const capture = () => {
+    const guard = currentSession.current;
+    if (!actorId || guard.actorId !== actorId) {
+      throw new Error("Tài khoản đã thay đổi; vui lòng thử lại.");
+    }
+    return guard;
+  };
+
+  const create = useMutation({
+    mutationFn: (v: CreateArgs) => collectionsApi.create(v.input),
+    onSuccess: (created, v) => {
+      if (!isCurrent(v.guard) || !v.guard.actorId) return;
+      void client.invalidateQueries({
+        queryKey: collectionKeys.lists(v.guard.actorId),
+      });
+      // A deliberate user selection after submit takes priority.
+      if (JSON.stringify(navigation.getCurrent()) === v.selectionBefore) {
+        navigation.select(created.Id);
+      }
+      toast.success("Đã tạo bộ sưu tập");
+    },
+  });
+
+  const rename = useMutation({
+    mutationFn: (v: EditArgs) => collectionsApi.update(v.id, v.input),
+    onSuccess: (updated, v) => {
+      if (!isCurrent(v.guard) || !v.guard.actorId) return;
+      client.setQueryData(
+        collectionKeys.detail(v.guard.actorId, v.id), updated
+      );
+      void client.invalidateQueries({
+        queryKey: collectionKeys.lists(v.guard.actorId),
+      });
+      toast.success("Đã cập nhật bộ sưu tập");
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (v: DeleteArgs) => collectionsApi.remove(v.id),
+    onSuccess: (_deleted, v) => {
+      if (!isCurrent(v.guard) || !v.guard.actorId) return;
+      client.removeQueries({
+        queryKey: collectionKeys.detail(v.guard.actorId, v.id),
+        exact: true,
+      });
+      void client.invalidateQueries({
+        queryKey: collectionKeys.lists(v.guard.actorId),
+      });
+      navigation.clearIfSelected(v.id);
+      toast.success("Đã xóa bộ sưu tập");
+    },
+  });
+
+  const createCollection = async (input: CollectionInput) => {
+    const guard = capture();
+    const created = await create.mutateAsync({
+      guard, input,
+      selectionBefore: JSON.stringify(navigation.getCurrent()),
+    });
+    return isCurrent(guard) ? created : null;
+  };
+
+  const renameCollection = async (id: string, input: CollectionInput) => {
+    const guard = capture();
+    const updated = await rename.mutateAsync({ guard, id, input });
+    return isCurrent(guard) ? updated : null;
+  };
+
+  const deleteCollection = async (id: string) => {
+    const guard = capture();
+    const deleted = await remove.mutateAsync({ guard, id });
+    return isCurrent(guard) ? deleted : null;
+  };
+
+  return {
+    create, rename, remove,
+    createCollection, renameCollection, deleteCollection,
+  };
+}
+~~~
+
+**Important race checks:** This example has **no optimistic mutation**, no frontend authority over actor ID, and no retry after uncertain create. In addition to current actor, test route unmount and A→B→A. A pending mutation can still finish on the server; UI ignoring stale effects does not undo committed database writes. The next explicit refetch establishes truth.
+
+### Checklist 14.4 — Create: <code>src/features/knowledgehub/components/CollectionDeleteDialog.tsx</code>
+
+Reuse the repository's existing <code>ConfirmDeleteDialog</code>. It offers <code>stopAutoClose</code>, pending loading and destructive styling. Show a name **and UUID fragment** because duplicate names are allowed.
+
+~~~tsx
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import type { CollectionDto } from "../types/collections.types";
+
+interface Props {
+  target: CollectionDto | null;
+  pending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+export function CollectionDeleteDialog({
+  target, pending, error, onCancel, onConfirm,
+}: Props) {
+  return (
+    <>
+      <ConfirmDeleteDialog
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open && !pending) onCancel();
+        }}
+        title="Xác nhận xóa bộ sưu tập"
+        description={
+          target
+            ? "Xóa bộ sưu tập " + target.Name +
+              " (ID: " + target.Id.slice(0, 8) +
+              ")? Bộ sưu tập sẽ bị ẩn; P02 không hỗ trợ khôi phục."
+            : ""
+        }
+        isLoading={pending}
+        stopAutoClose
+        confirmVariant="destructive"
+        confirmText="Xóa bộ sưu tập"
+        onConfirm={() => { if (target && !pending) onConfirm(); }}
+      />
+      {target && error && (
+        <p role="alert" className="text-sm text-destructive">{error}</p>
+      )}
+    </>
+  );
+}
+~~~
+
+**Important UI caution:** This wrapper renders API error text below the dialog portal, which is not ideal for screen readers or visibility. For production quality, either (a) adapt the existing generic dialog to accept an optional error slot without changing its behavior for other callers, or (b) implement a **feature-level** Dialog composed of the already installed <code>ui/dialog</code> primitives so <code>role=alert</code> appears inside <code>DialogContent</code>. Do not rewrite the shadcn Dialog primitive itself. Test error is actually visible inside the modal before marking Task 14 done.
+
+### Checklist 14.5 — Create test: <code>src/features/knowledgehub/components/collection-form.schema.test.ts</code>
+
+~~~ts
+import { describe, expect, it } from "vitest";
+import { collectionFormSchema, toCollectionInput } from "./collection-form.schema";
+
+describe("collection form normalization", () => {
+  it("trims values and converts blank description to null", () => {
+    const v = collectionFormSchema.parse({
+      Name: "  Kiến thức  ", Description: "   ",
+    });
+    expect(toCollectionInput(v)).toEqual({
+      Name: "Kiến thức", Description: null,
+    });
+  });
+
+  it("counts supplementary Unicode as one code point", () => {
+    expect(collectionFormSchema.safeParse({
+      Name: "😀".repeat(200), Description: "",
+    }).success).toBe(true);
+    expect(collectionFormSchema.safeParse({
+      Name: "😀".repeat(201), Description: "",
+    }).success).toBe(false);
+  });
+
+  it("rejects blank Name and embedded NUL", () => {
+    expect(collectionFormSchema.safeParse({
+      Name: "   ", Description: "",
+    }).success).toBe(false);
+    expect(collectionFormSchema.safeParse({
+      Name: "valid\0bad", Description: "",
+    }).success).toBe(false);
+  });
+});
+~~~
+
+### Checklist 14.6 — Add integration tests beside mutations and dialogs
+
+Create <code>hooks/useCollectionMutations.test.tsx</code>, <code>components/CollectionFormDialog.test.tsx</code> and <code>components/CollectionDeleteDialog.test.tsx</code>. Use the real Task 10 adapter with mocked <code>api</code> or explicitly mocked <code>collectionsApi</code> and a fresh test QueryClient.
+
+Verify all of:
+1. POST sends **only** normalized <code>Name</code>, <code>Description</code>; owner/id/deletion fields absent. PUT includes both values even when description cleared.
+2. <code>Success=false</code> 403/503 never closes dialog or changes <code>c</code>; input is preserved and <code>role=alert</code> is visible.
+3. Consecutive clicks during pending create yield one request; no automatic retry after a timeout.
+4. A→B transition while A create/rename/delete is pending: no B navigation/cache/toast from A's completion.
+5. Delete confirmation displays the exact target ID fragment; deleting a different ID leaves the selected <code>c</code> intact.
+6. Tab/Shift+Tab focus stays in Dialog, Escape/close works when idle, and focus returns after closing. Pending close is prevented.
+7. Create success selects the returned server UUID (unless user deliberately selected another collection meanwhile). Rename does not clear <code>c</code>.
+
+**Done Task 14 when:** create/edit/delete use only existing shadcn primitives, strict API envelopes, permissions, actor-safe mutation results and tested accessible dialogs; do not mark done merely because the form opens.
+
+---
 
 ## Task 15 — Assemble the mockup hierarchy with truthful tabs
 
