@@ -64,11 +64,13 @@ src/features/knowledgehub/
   hooks/KnowledgeHubCacheBoundary.tsx
   routes/KnowledgeHubPage.tsx
   components/CollectionSelector.tsx
+  components/collection-form.schema.ts
   components/CollectionFormDialog.tsx
   components/CollectionDeleteDialog.tsx
   components/RepositoryFrame.tsx
   components/AskResearchFrame.tsx
   components/CollectionState.tsx
+  test/renderKnowledgeHub.tsx
   ...focused *.test.ts / *.test.tsx beside those files
 ~~~
 
@@ -249,9 +251,10 @@ export function KnowledgeHubCacheBoundary({
     const key = collectionKeys.actor(previousActorId);
 
     // Never globally clear unrelated queries.
-    void queryClient.cancelQueries({ queryKey: key }).then(() => {
-      queryClient.removeQueries({ queryKey: key });
-    });
+    // Cancel the transport, then drop the old cache synchronously.
+    // No other feature's keys are affected.
+    void queryClient.cancelQueries({ queryKey: key }).catch(() => undefined);
+    queryClient.removeQueries({ queryKey: key });
   }, [previousActorId, actorId, queryClient]);
 
   return (
@@ -579,9 +582,11 @@ export function CollectionSelector({
                 {errorMessage}
               </p>
             )}
-            <CommandEmpty>
-              Không có kết quả trong các bộ sưu tập đã tải.
-            </CommandEmpty>
+            {!listLoading && !errorMessage && (
+              <CommandEmpty>
+                Không có kết quả trong các bộ sưu tập đã tải.
+              </CommandEmpty>
+            )}
             <CommandGroup heading="Bộ sưu tập hiện có">
               {collections.map((collection) => (
                 <CommandItem
@@ -1039,10 +1044,14 @@ export function useCollectionMutations(
 
 ### Checklist 14.4 — Create: <code>src/features/knowledgehub/components/CollectionDeleteDialog.tsx</code>
 
-Reuse the repository's existing <code>ConfirmDeleteDialog</code>. It offers <code>stopAutoClose</code>, pending loading and destructive styling. Show a name **and UUID fragment** because duplicate names are allowed.
+The repo also has <code>ui/confirm-delete-dialog.tsx</code>, but its API has **no error slot inside the modal**. Because P02 must preserve and announce server errors while the modal stays open, compose a small **feature-level confirmation** from the already installed <code>ui/dialog</code> and <code>ui/button</code> primitives. This is **not** rewriting a generic Dialog.
 
 ~~~tsx
-import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import type { CollectionDto } from "../types/collections.types";
 
 interface Props {
@@ -1057,35 +1066,57 @@ export function CollectionDeleteDialog({
   target, pending, error, onCancel, onConfirm,
 }: Props) {
   return (
-    <>
-      <ConfirmDeleteDialog
-        open={target !== null}
-        onOpenChange={(open) => {
-          if (!open && !pending) onCancel();
+    <Dialog
+      open={target !== null}
+      onOpenChange={(next) => {
+        if (!next && !pending) onCancel();
+      }}
+    >
+      <DialogContent
+        showCloseButton={!pending}
+        onInteractOutside={(event) => {
+          if (pending) event.preventDefault();
         }}
-        title="Xác nhận xóa bộ sưu tập"
-        description={
-          target
-            ? "Xóa bộ sưu tập " + target.Name +
-              " (ID: " + target.Id.slice(0, 8) +
-              ")? Bộ sưu tập sẽ bị ẩn; P02 không hỗ trợ khôi phục."
-            : ""
-        }
-        isLoading={pending}
-        stopAutoClose
-        confirmVariant="destructive"
-        confirmText="Xóa bộ sưu tập"
-        onConfirm={() => { if (target && !pending) onConfirm(); }}
-      />
-      {target && error && (
-        <p role="alert" className="text-sm text-destructive">{error}</p>
-      )}
-    </>
+        onEscapeKeyDown={(event) => {
+          if (pending) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Xác nhận xóa bộ sưu tập</DialogTitle>
+          <DialogDescription>
+            {target
+              ? "Xóa " + target.Name + " (ID: " +
+                target.Id.slice(0, 8) +
+                ")? P02 chưa hỗ trợ khôi phục bộ sưu tập."
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <DialogFooter>
+          <Button
+            variant="outline" disabled={pending} onClick={onCancel}
+          >
+            Hủy
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={pending || !target}
+            onClick={() => { if (target && !pending) onConfirm(); }}
+          >
+            {pending ? "Đang xóa..." : "Xóa bộ sưu tập"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 ~~~
 
-**Important UI caution:** This wrapper renders API error text below the dialog portal, which is not ideal for screen readers or visibility. For production quality, either (a) adapt the existing generic dialog to accept an optional error slot without changing its behavior for other callers, or (b) implement a **feature-level** Dialog composed of the already installed <code>ui/dialog</code> primitives so <code>role=alert</code> appears inside <code>DialogContent</code>. Do not rewrite the shadcn Dialog primitive itself. Test error is actually visible inside the modal before marking Task 14 done.
+**Why this version:** The error stays **inside** the controlled dialog (visible and screen-reader announced); pending Escape/outside click/submit are blocked; it shows the real deletion target including UUID fragment; and it reuses all existing shadcn primitives. The parent closes the dialog **only after** a successful mutation. No optimistic delete and no new generic Dialog implementation.
 
 ### Checklist 14.5 — Create test: <code>src/features/knowledgehub/components/collection-form.schema.test.ts</code>
 
@@ -1250,6 +1281,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { CollectionApiError } from "../api/collections.api";
 import type { GetPermissionByUser } from
   "@/features/system/types/role.types";
 import type {
@@ -1306,10 +1338,20 @@ function KnowledgeHubWorkspace() {
   else if (selection.state === "invalid") state = "invalid";
   else if (detail.isLoading) state = "loading";
   else if (detail.isError) {
-    const code = "statusCode" in detail.error
+    const code = detail.error instanceof CollectionApiError
       ? detail.error.statusCode : undefined;
-    state = code === 503 ? "outage" : "unavailable";
+    state = code === 403 ? "denied" :
+      code === 404 ? "unavailable" : "outage";
   } else state = detail.isSuccess ? "ready" : "loading";
+
+  const listErrorMessage = !list.isError ? null :
+    list.error instanceof CollectionApiError &&
+    list.error.statusCode === 403
+      ? "Bạn không có quyền xem danh sách bộ sưu tập."
+      : list.error instanceof CollectionApiError &&
+        list.error.statusCode === 503
+        ? "Dịch vụ tạm thời không khả dụng."
+        : "Không thể tải danh sách bộ sưu tập.";
 
   const openCreate = () => {
     if (!canCreate) return;
@@ -1364,7 +1406,7 @@ function KnowledgeHubWorkspace() {
             listLoading={list.isLoading}
             loadingMore={list.isFetchingNextPage}
             hasMore={list.hasNextPage === true}
-            errorMessage={list.isError ? "Không thể tải danh sách bộ sưu tập." : null}
+            errorMessage={listErrorMessage}
             canCreate={canCreate}
             onSelect={select}
             onCreate={openCreate}
