@@ -1140,83 +1140,588 @@ Verify all of:
 
 ---
 
-## Task 15 — Assemble the mockup hierarchy with truthful tabs
+## Task 15 — Assemble the two mockup tab frames in React, exact files
 
-**15.1** Create <code>routes/KnowledgeHubPage.tsx</code>. Start with the existing protected layout context:
+**Goal:** Recreate the mockup's **feature hierarchy** inside the existing Blocks MainLayout. The 1280×1024 reference depicts an already-populated fake repository and a dropdown-open state; those data and fake progress bars are **not** P02 behavior. The agreed initial tab is Repository/Import, not the prototype's inconsistent active tab.
+
+### Checklist 15.1 — Create: <code>src/features/knowledgehub/components/RepositoryFrame.tsx</code>
+
+Reuse installed Card, Button and Lucide; no file input, drag event, API call, status filters or uploaded documents. The visual drop-zone is intentionally disabled until P03.
 
 ~~~tsx
+import { CloudUpload, FolderOpen, LockKeyhole } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  CollectionState, type CollectionContentState,
+} from "./CollectionState";
+
+export function RepositoryFrame({
+  state,
+}: { state: CollectionContentState }) {
+  if (state !== "ready") return <CollectionState state={state} />;
+
+  return (
+    <div className="grid min-w-0 gap-5">
+      <Card className="border-dashed bg-muted/40 py-0 shadow-none">
+        <CardContent className="flex flex-col items-center gap-3 p-7 text-center">
+          <div className="rounded-xl bg-background p-3">
+            <CloudUpload className="size-7 text-primary" aria-hidden="true" />
+          </div>
+          <h2 className="text-base font-semibold">Kho tài liệu & Import</h2>
+          <p className="max-w-lg text-sm text-muted-foreground">
+            Tính năng tải và xử lý PDF, Markdown, TXT sẽ được phát triển
+            ở giai đoạn tiếp theo.
+          </p>
+          <Button disabled>
+            <LockKeyhole className="size-4" />
+            Tải tài liệu (chưa khả dụng)
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="gap-3 py-4 shadow-none">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FolderOpen className="size-4" />
+            Tài liệu trong bộ sưu tập
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          Chưa có tài liệu trong bộ sưu tập này.
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+~~~
+
+**What not to copy from <code>code.html</code>:** <code>fileInput</code>, drop handlers, “PDF 50MB” claim, fake Clean Architecture rows, “Sẵn sàng (2)”, “Đang xử lý 72%”, delete/retry controls and pagination for nonexistent documents.
+
+### Checklist 15.2 — Create: <code>src/features/knowledgehub/components/AskResearchFrame.tsx</code>
+
+Use the same two-tab location as the prototype, but the actual Ask/Research function does not exist in P02. The UI must not contain fake answers, historical conversations, AI model names, citations or a usable composer.
+
+~~~tsx
+import { Bot, LockKeyhole } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  CollectionState, type CollectionContentState,
+} from "./CollectionState";
+
+export function AskResearchFrame({
+  state,
+}: { state: CollectionContentState }) {
+  if (state !== "ready") return <CollectionState state={state} />;
+
+  return (
+    <Card className="min-h-64 justify-center shadow-none">
+      <CardContent className="flex flex-col items-center gap-4 text-center">
+        <div className="rounded-xl bg-muted p-4">
+          <Bot className="size-8 text-primary" aria-hidden="true" />
+        </div>
+        <h2 className="text-lg font-semibold">Hỏi đáp & Nghiên cứu</h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Hỏi đáp theo tài liệu, tìm kiếm và trích dẫn sẽ khả dụng
+          trong các giai đoạn KnowledgeHub tiếp theo.
+        </p>
+        <Button disabled variant="secondary">
+          <LockKeyhole className="size-4" />
+          Bắt đầu hỏi đáp (chưa khả dụng)
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+~~~
+
+### Checklist 15.3 — Create: <code>src/features/knowledgehub/routes/KnowledgeHubPage.tsx</code>
+
+This is the complete **composition example** showing how earlier Task 11–14 files connect. Permission comes from the existing protected <code>MainLayout</code>'s Outlet context. The outer component is keyed by the current login-session version to reset open forms on actor change. It does not build another sidebar, global header or authentication flow.
+
+~~~tsx
+import { useState } from "react";
+import { Pencil, Trash2, FolderOpen, Bot } from "lucide-react";
 import { useOutletContext } from "react-router-dom";
-import type { GetPermissionByUser } from "@/features/system/types/role.types";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger,
+} from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/useAuth";
+import type { GetPermissionByUser } from
+  "@/features/system/types/role.types";
+import type {
+  CollectionDto, CollectionInput,
+} from "../types/collections.types";
+import { useKnowledgeHubSession } from "../hooks/KnowledgeHubCacheBoundary";
+import { useCollectionSelection } from "../hooks/useCollectionSelection";
+import { useCollections, useCollectionDetail } from "../hooks/useCollections";
+import { useCollectionMutations } from "../hooks/useCollectionMutations";
+import { CollectionSelector } from "../components/CollectionSelector";
+import { CollectionFormDialog } from "../components/CollectionFormDialog";
+import { CollectionDeleteDialog } from "../components/CollectionDeleteDialog";
+import {
+  type CollectionContentState,
+} from "../components/CollectionState";
+import { RepositoryFrame } from "../components/RepositoryFrame";
+import { AskResearchFrame } from "../components/AskResearchFrame";
 
-const { permission } = useOutletContext<{ permission: GetPermissionByUser | null }>();
-const canCreate = permission?.IsAdded === true;
-// Read actor, URL selection, queries, mutations via Task 11/12/14 hooks.
+function KnowledgeHubWorkspace() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const { permission } = useOutletContext<{
+    permission: GetPermissionByUser | null;
+  }>();
+  const actorId = !loading && isAuthenticated ? (user?.Id ?? null) : null;
+  const canView = permission?.IsViewed === true;
+  const canCreate = permission?.IsAdded === true;
+  const canEdit = permission?.IsUpdated === true;
+  const canDelete = permission?.IsDeleted === true;
+
+  const selectionApi = useCollectionSelection();
+  const { selection, select } = selectionApi;
+  const list = useCollections(actorId, canView);
+  const detail = useCollectionDetail(actorId, canView, selection);
+  const mutations = useCollectionMutations(actorId, selectionApi);
+
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
+  const [editTarget, setEditTarget] = useState<CollectionDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CollectionDto | null>(null);
+
+  const collections = Array.from(
+    new Map(
+      (list.data?.pages.flatMap((p) => p.Data) ?? [])
+        .map((item) => [item.Id, item] as const)
+    ).values()
+  );
+
+  const selectedId = selection.state === "selected" ? selection.id : null;
+  const selected = selection.state === "selected" && detail.isSuccess
+    ? (detail.data ?? null) : null;
+
+  let state: CollectionContentState;
+  if (!actorId || !canView) state = "denied";
+  else if (selection.state === "none") state = "none";
+  else if (selection.state === "invalid") state = "invalid";
+  else if (detail.isLoading) state = "loading";
+  else if (detail.isError) {
+    const code = "statusCode" in detail.error
+      ? detail.error.statusCode : undefined;
+    state = code === 503 ? "outage" : "unavailable";
+  } else state = detail.isSuccess ? "ready" : "loading";
+
+  const openCreate = () => {
+    if (!canCreate) return;
+    mutations.create.reset();
+    setEditTarget(null);
+    setDialogMode("create");
+  };
+  const openEdit = () => {
+    if (!canEdit || !selected) return;
+    mutations.rename.reset();
+    setEditTarget(selected);
+    setDialogMode("edit");
+  };
+
+  const save = async (input: CollectionInput) => {
+    if (dialogMode === "create") {
+      const result = await mutations.createCollection(input);
+      if (result) setDialogMode(null);
+    } else if (editTarget) {
+      const result = await mutations.renameCollection(editTarget.Id, input);
+      if (result) {
+        setEditTarget(null);
+        setDialogMode(null);
+      }
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const result = await mutations.deleteCollection(deleteTarget.Id);
+      if (result) setDeleteTarget(null);
+    } catch {
+      // The mutation.error is shown inside the confirmation dialog.
+    }
+  };
+
+  const formError = dialogMode === "create"
+    ? mutations.create.error?.message ?? null
+    : mutations.rename.error?.message ?? null;
+  const formPending = dialogMode === "create"
+    ? mutations.create.isPending : mutations.rename.isPending;
+
+  return (
+    <section className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-5">
+      <div className="flex min-w-0 flex-col justify-between gap-3 md:flex-row md:items-center">
+        <div className="flex min-w-0 flex-col gap-2">
+          <CollectionSelector
+            collections={collections}
+            selected={selected}
+            selectedId={selectedId}
+            listLoading={list.isLoading}
+            loadingMore={list.isFetchingNextPage}
+            hasMore={list.hasNextPage === true}
+            errorMessage={list.isError ? "Không thể tải danh sách bộ sưu tập." : null}
+            canCreate={canCreate}
+            onSelect={select}
+            onCreate={openCreate}
+            onLoadMore={() => {
+              if (list.hasNextPage && !list.isFetching) {
+                void list.fetchNextPage();
+              }
+            }}
+          />
+          {selected && (
+            <Badge variant="secondary">
+              {selected.DocumentCount + " tài liệu"}
+            </Badge>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {canEdit && (
+            <Button
+              variant="outline" size="sm"
+              disabled={!selected || formPending}
+              onClick={openEdit}
+            >
+              <Pencil className="size-4" /> Đổi tên
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="outline" size="sm"
+              disabled={!selected || mutations.remove.isPending}
+              onClick={() => {
+                if (selected) {
+                  mutations.remove.reset();
+                  setDeleteTarget(selected);
+                }
+              }}
+            >
+              <Trash2 className="size-4" /> Xóa
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Tabs defaultValue="repository" className="w-full min-w-0 gap-4">
+        <TabsList className="h-auto max-w-full flex-wrap justify-start">
+          <TabsTrigger value="repository">
+            <FolderOpen className="size-4" />
+            Kho tài liệu & Import
+          </TabsTrigger>
+          <TabsTrigger value="research">
+            <Bot className="size-4" />
+            Hỏi đáp & Nghiên cứu
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="repository" className="min-w-0">
+          <RepositoryFrame state={state} />
+        </TabsContent>
+        <TabsContent value="research" className="min-w-0">
+          <AskResearchFrame state={state} />
+        </TabsContent>
+      </Tabs>
+
+      <CollectionFormDialog
+        open={dialogMode !== null}
+        mode={dialogMode === "edit" ? "edit" : "create"}
+        initial={editTarget}
+        pending={formPending}
+        error={formError}
+        onOpenChange={(open) => {
+          if (!open && !formPending) {
+            setDialogMode(null);
+            setEditTarget(null);
+          }
+        }}
+        onSubmit={save}
+      />
+      <CollectionDeleteDialog
+        target={deleteTarget}
+        pending={mutations.remove.isPending}
+        error={mutations.remove.error?.message ?? null}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => { void confirmDelete(); }}
+      />
+    </section>
+  );
+}
+
+export default function KnowledgeHubPage() {
+  const { user } = useAuth(); // subscribe to authentication transitions
+  const session = useKnowledgeHubSession();
+  void user;
+  return <KnowledgeHubWorkspace key={session.current.version} />;
+}
 ~~~
 
-Use <code>mx-auto w-full max-w-7xl min-w-0 space-y-4</code> for the feature body. Do **not** add another <code>h-screen</code>, <code>fixed left-0</code>, separate sidebar, duplicated breadcrumb bar or global color overrides: <code>MainLayout.tsx</code> already renders the Blocks shell and scroll container.
+**Review before adopting:** The import list assumes exact names from this companion's Tasks 10–14. The snippet illustrates assembly **after** those files exist; it does not mean the user's repo has them today. TypeScript should be checked locally: if a union error does not safely expose <code>statusCode</code>, narrow with <code>instanceof CollectionApiError</code> instead of assuming every network error is a KnowledgeHub soft error. The implementation must also reconcile confirmed changes on the branch before copying.
 
-**15.2** Render, from top to bottom:
+**Key rules encoded above:**
+- Selected collection stays in URL, not React state.
+- Refresh/Back/Forward still render based on <code>c</code>.
+- List query is independent of detail query.
+- Frontend permission controls fail closed; backend still checks permission and ownership.
+- The selected collection's count is real DTO data (zero in P02).
+- Create/edit/delete modal targets use actual UUIDs.
+- No upload, documents, AI chat, citation or model name is fabricated.
+- MainLayout continues to own global shell, breadcrumb, sidebar and scrolling.
 
-~~~text
-KnowledgeHubPage (inside existing MainLayout)
-  FeatureHeader
-    CollectionSelector (title/dropdown)
-    DocumentCount Badge (real DTO, 0 in P02)
-    Create/Rename/Delete buttons (permission-gated)
-  Tabs defaultValue="repository"
-    TabsList
-      TabsTrigger value="repository": Kho tài liệu & Import
-      TabsTrigger value="research": Hỏi đáp & Nghiên cứu
-    TabsContent value="repository"
-      RepositoryFrame (honest empty / disabled upload)
-    TabsContent value="research"
-      AskResearchFrame (honest unavailable AI frame)
-  CollectionFormDialog (create/edit)
-  CollectionDeleteDialog
+### Checklist 15.4 — Test the two frames
+
+Create <code>components/RepositoryFrame.test.tsx</code> and <code>components/AskResearchFrame.test.tsx</code> with real Testing Library render and simple assertions:
+
+~~~tsx
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { RepositoryFrame } from "./RepositoryFrame";
+
+describe("P02 repository truthfulness", () => {
+  it("has an honest disabled upload placeholder and no fake files", () => {
+    render(<RepositoryFrame state="ready" />);
+    expect(screen.getByRole("button", {
+      name: /Tải tài liệu.*chưa khả dụng/,
+    })).toBeDisabled();
+    expect(screen.getByText("Chưa có tài liệu trong bộ sưu tập này."))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/Clean Architecture/)).not.toBeInTheDocument();
+  });
+});
 ~~~
 
-**15.3** Create <code>components/RepositoryFrame.tsx</code>: preserve the mockup's upload surface silhouette/icon and repository-area hierarchy using Card/Button/Separator, **but no working file input, drag handler, fabricated documents, status filters, fake progress, “12 files” metadata or upload size promise**. Label clearly <code>Chức năng tải tài liệu sẽ có ở giai đoạn tiếp theo</code>. When selected, show <code>Chưa có tài liệu trong bộ sưu tập này</code> and zero count. When no selected collection, lead with the selection action. Keep focus/disabled semantics truthful.
+Also test default <code>TabsTrigger value="repository"</code> is active, research tab toggles, switching tabs does not change <code>c</code>, and the no-selection/invalid/404/outage states render correct Vietnamese copy.
 
-**15.4** Create <code>components/AskResearchFrame.tsx</code>: retain the second tab's overall spatial position without rendering fake conversations, “nguồn trích dẫn”, active composer, research answers or models. Show a well-labeled future capability state and, if a disabled button is visible, actually disable it. Don't reproduce the prototype's citation modal.
+**Done Task 15 when:** feature hierarchy matches the approved mockup without duplicating MainLayout or presenting false working functionality; keyboard tabs work and all P02 states are truthful.
 
-**15.5** Visual decisions: use current semantic Tailwind utilities (<code>bg-background</code>, <code>bg-muted</code>, <code>text-muted-foreground</code>, <code>border-border</code>, <code>text-primary</code>) and Lucide icons. Approximate mockup spacing and hierarchy with small local class adjustments; preserve MainLayout typography/color system instead of copying the Stitch CDN or replacing <code>:root</code> tokens. On mobile, selector and actions stack; tabs can wrap/scroll horizontally without horizontal page overflow.
+---
 
-**Task 15 checkpoint:** both tabs switch and have correct accessible Radix semantics; repository tab initially active; no fake functional document/AI feature; no shell duplication.
+## Task 16 — Write actual behavior/failure/race tests (not just a list of topics)
 
-## Task 16 — Tests by file and behavior, not “test later”
+**Goal:** build a reproducible test harness. These are mock tests with fake DTOs, not substitutes for Task 17 real integration.
 
-Place Vitest/Testing Library tests next to the files they cover. Reuse <code>vitest.config.ts</code>, <code>src/test/setup.ts</code> and nearby Faculty/Router tests. Use deterministic **test-only** fake DTOs, never a production fixture list.
+### Checklist 16.1 — Create: <code>src/features/knowledgehub/test/renderKnowledgeHub.tsx</code>
 
-| Test file | Mandatory assertions |
+Use a new QueryClient **per test** to avoid private cache state leaking between tests. Never use the production singleton or real credentials. Wrap an individual component in MemoryRouter and QueryClientProvider:
+
+~~~tsx
+import type { ReactNode } from "react";
+import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+export function renderKnowledgeHub(
+  content: ReactNode,
+  initialEntries: string[] = ["/knowledgehub"]
+) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={initialEntries}>
+          {content}
+        </MemoryRouter>
+      </QueryClientProvider>
+    ),
+  };
+}
+~~~
+
+For a page test, additionally render a <code>Route</code> with <code>Outlet context={{permission: fakePermission}}</code>, mock <code>useAuth()</code> to supply actor identity, and mount a <code>KnowledgeHubCacheBoundary</code>. Keep these mocks **only inside tests**.
+
+### Checklist 16.2 — Create an API contract test: <code>api/collections.api.test.ts</code>
+
+Import the exact Task 10 module; spy on the existing <code>api.get/post/put/delete</code> methods. One minimum case:
+
+~~~ts
+import { afterEach, describe, expect, it, vi } from "vitest";
+import api from "@/lib/api";
+import { collectionsApi, CollectionApiError } from "./collections.api";
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("KnowledgeHub soft HTTP 200 errors", () => {
+  it("does not accept application 403 as query success", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      Success: false, StatusCode: 403, Message: "Không có quyền",
+    } as never);
+    await expect(collectionsApi.list({
+      page_index: 1, page_size: 50,
+    })).rejects.toBeInstanceOf(CollectionApiError);
+  });
+});
+~~~
+
+Repeat for application 400, 404 and 503; also POST/PUT/DELETE and successful PascalCase payload. For soft-401 refresh, test the **existing Axios client** with its fake transport at the proper integration layer: do not duplicate refresh logic in collections.api.
+
+### Checklist 16.3 — Test navigation with memory history
+
+In <code>hooks/useCollectionSelection.test.tsx</code>, extend Task 12's Probe:
+1. Start <code>/knowledgehub?foo=1</code>, select UUID A, then B. Back must show A, Forward B.
+2. Delete B: <code>replace</code> removes only <code>c</code>, preserving <code>foo=1</code>.
+3. Invalid, repeated, zero <code>c</code> → zero detail requests.
+4. An id outside the first 50 list rows still requests its detail by ID.
+5. A's delayed detail response after B selection never paints as B.
+
+### Checklist 16.4 — Test pending mutation races using deferred Promises
+
+Create <code>hooks/useCollectionMutations.test.tsx</code> with a controlled unresolved Promise so you can change the authenticated test actor **before** completion:
+
+~~~ts
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+~~~
+
+Then write these test sequences against the mounted boundary + page:
+- **A create pending → B login → A response resolves:** B's URL, cache, open dialogs and success toast unchanged.
+- **A delete pending → B selects another collection → A response resolves:** no clearing B's <code>c</code>.
+- **A→logout→A login during pending create:** old session result has a different <code>version</code> and must not navigate the new session.
+- **403 or 503 after submit:** preserve user draft, dialog and URL; no “created successfully”.
+- **Create response lost after DB commit:** do not auto-retry create or claim exactly-once semantics.
+
+### Checklist 16.5 — Add dedicated tests per file
+
+| File | Exact assertions |
 | --- | --- |
-| <code>api/collections.api.test.ts</code> | GET/POST/PUT/DELETE use Gateway prefix; <code>Success=false</code> 400/403/404/503 rejects, never success |
-| <code>hooks/useCollectionSelection.test.ts</code> | No <code>c</code>, valid, empty, duplicate, malformed, zero UUID; preserve unrelated params; push selection / replace selected delete |
-| <code>hooks/useCollections.test.tsx</code> | Actor-prefixed keys; abort/read cancellation; no leak A→B; off-page detail; paged list 51+ |
-| <code>hooks/useCollectionMutations.test.tsx</code> | Success navigation/invalidation, error preserves draft, late A mutation cannot navigate B |
-| <code>components/CollectionSelector.test.tsx</code> | Duplicate names choose correct UUID; pagination; disabled permission; keyboard access |
-| <code>components/CollectionFormDialog.test.tsx</code> | Unicode code-point counts, blank and NUL, nullable description, pending, Escape/focus, 403/503 |
-| <code>components/CollectionDeleteDialog.test.tsx</code> | Target identity shown, no auto-close before success, unaffected selection for other ID |
-| <code>routes/KnowledgeHubPage.test.tsx</code> | Protected layout context, initial repository tab, two honest frames, error/empty/invalid states, no fake actions |
+| <code>hooks/collection-query-keys.test.ts</code> | Two actors have different list/detail keys |
+| <code>hooks/useCollectionSelection.test.tsx</code> | Parser, push/replace, Back/Forward, query-key preservation |
+| <code>components/CollectionSelector.test.tsx</code> | Same name + different UUID, 51st item via paging, keyboard, disabled create |
+| <code>components/collection-form.schema.test.ts</code> | Vietnamese and emoji code points, NUL, blank, length 200/2000 |
+| <code>components/CollectionFormDialog.test.tsx</code> | Label/error accessibility, pending and failure keep draft, Escape/return focus |
+| <code>components/CollectionDeleteDialog.test.tsx</code> | Correct target UUID, visible error, no pending close |
+| <code>hooks/useCollectionMutations.test.tsx</code> | Real callbacks, A→B, A→logout→A, soft-error rejection |
+| <code>routes/KnowledgeHubPage.test.tsx</code> | Protected Outlet permission, default repository tab, honest frames, unselected/error/unavailable states |
+| <code>Router.behavior.test.tsx</code> | Add guarded <code>/knowledgehub</code> case; keep the old route tests intact |
 
-Create tests in the smallest useful implementation increments: Task 10 API tests; 11/12 hook tests; 13 selector tests; 14 dialog/mutation tests; 15 page visual/state tests. Do not use a successful mocked UI test as evidence that the real Gateway/DB permissions work.
+Test production behavior only: placeholders can be marked “not supported”, but do not mount invented fake services in the application.
 
-## Task 17 — Integration gate (do not silently execute)
+### Checklist 16.6 — Run focused/full checks from repo root
 
-Follow parent plan strictly: ask owner authorization for SystemService menu/grants and live disposable actors, then verify through protected <code>/knowledgehub</code> → Gateway → backend. Do not modify SystemService role data by direct SQL, fabricate actors or touch a shared DB to make UI seem functional. If approval/environment is unavailable, record **NOT RUN** (never PASS).
+~~~powershell
+npm --prefix src/apps/Blocks.Web test -- src/features/knowledgehub
+npm --prefix src/apps/Blocks.Web test
+npm --prefix src/apps/Blocks.Web run build
+npm --prefix src/apps/Blocks.Web run lint
+git diff --check
+~~~
 
-UI-specific checks: unauthenticated redirect; denied <code>IsViewed</code>; allowed add/update/delete buttons only for actual permissions; another user's UUID uniformly unavailable; soft HTTP200 errors do not show success or close forms.
+Record **actual** PASS/FAIL/NOT RUN with the command and branch revision. Full tests may have unrelated baseline failures; do not silently weaken or delete them.
 
-## Task 18 — Visual acceptance with a deviation ledger
+**Done Task 16 when:** all critical frontend flows and races above have deterministic tests; compile/build/lint results are recorded honestly.
 
-**Record three viewports:** 1280×1024 (reference), 1440×900 (desktop), 390×844 (mobile), zoom 100%, reference DPR 1 unless owner records different actual environment. Capture at least these separately:
-1. Authenticated, **no** collection selected, repository tab active, dropdown closed.
-2. A real selected collection, **dropdown open**, zero-document badge; compare selector/header/table **hierarchy**, not fake row contents.
-3. Selected collection, **research** tab active, unavailable frame.
-4. Create/rename/delete dialogs, validation and server-error variants.
-5. Narrow viewport with long Unicode collection name, menu open and scroll/keyboard checks.
+---
 
-**Compare geometry, spacing, alignment, typography hierarchy, overlay layering, focus and responsiveness**, not raw pixel similarity for fabricated file content or a different app shell. Document each divergence as <code>accepted shell difference</code>, <code>intentional P02 disabled state</code>, or <code>bug to fix</code>. Do not “fix” the prototype's inconsistent visible tab state by making production tabs inconsistent.
+## Task 17 — Real Gateway, roles and persistence: exact owner-run steps
+
+**This task requires explicit authorization** before modifying menu/grants or application data. Do not execute DB or SystemService changes merely because UI tests pass.
+
+### Checklist 17.1 — Confirm target and permission prerequisites
+
+1. Verify current branch, commit, local changes and service targets against P01 outcome.
+2. Owner explicitly authorizes enabling the **existing** KnowledgeHub menu and editing **existing** roles via SystemService administration. Do not directly mutate SystemService role/permission tables.
+3. Preserve unrelated permissions when an admin form sends an entire permission collection; refresh authentication/session after role changes.
+4. Identify two **previously approved** actors and disposable collections. Record only nonsecret actor identifiers, never tokens/passwords/DSNs.
+
+### Checklist 17.2 — Exercise real route through existing Gateway
+
+1. Sign in as actor A through Blocks.
+2. Navigate to <code>/knowledgehub</code> (not a direct Python port); verify <code>ProtectedRoute</code> and existing MainLayout.
+3. Check GET list route <code>/api/knowledgehub/collections?page_index=1&page_size=50</code>. Inspect both HTTP and <code>{Success, StatusCode, Data, Message}</code>; HTTP 200 may still be application 403 or 503.
+4. Create a **disposable** collection with A; record generated UUID, confirm the URL becomes <code>?c=UUID</code>.
+5. Refresh; use Back/Forward; rename; inspect server result and latest selected detail. Soft-delete and check <code>c</code> is removed only if still selecting the deleted item.
+6. Under approved read-only admin access, verify that <code>deleted_at</code> is set and row persists; UI list/detail must not expose it.
+
+### Checklist 17.3 — Actor/role matrix
+
+| Scenario | Expected |
+| --- | --- |
+| A with VIEW | List/detail of **A's** active collections |
+| A with ADD only for creation | POST permitted only when action granted; cannot infer update/delete |
+| A with UPDATE/DELETE | Only authorized owned rows; write must remain owner/active-scoped in SQL |
+| B guesses A's UUID | Uniform application 404 (if VIEW action granted); no data leakage |
+| Actor lacks action grant | Application 403, permission checked before collection DB access |
+| Expired/invalid JWT | Application 401 or existing refresh/redirect behavior; no implicit bypass |
+| DB/permission service temporarily unavailable | Safe application 503, never false success |
+| Real unexpected server failure | Safe real HTTP 500 response; no fabricated save toast |
+
+**No admin ownership bypass.** Document actual proof for each scenario with redacted network evidence. Do not create users, change shared roles or deliberately disrupt DB connectivity without separate approval.
+
+### Checklist 17.4 — Check persistence/readiness
+
+- With authorization, restart browser/services or reload as appropriate; verify previous collection creation/edit remains persisted.
+- Inspect <code>/health</code> (RPC + bounded DB checks) and <code>/alive</code> under ordinary non-disruptive conditions.
+- Retain P02's no-document scope: populated-parent deletion/vector cleanup is handed off to later parts, not “tested PASS” here.
+
+**Done Task 17 when:** real permission/action/owner semantics, real Gateway and persistence have recorded evidence. If authorization or runtime is missing, mark **NOT RUN**.
+
+---
+
+## Task 18 — Pixel hierarchy, responsive screenshots and explicit deviation log
+
+**Goal:** compare the implemented feature to the tracked 1280×1024 reference without copying prototype shell/fake data and without treating static screenshot similarity as complete product acceptance.
+
+### Checklist 18.1 — Fix comparison conditions before capture
+
+1. Open <code>docs/knowledgehub/references/stitch_blocks_interface/screen.png</code> and record its intrinsic 1280×1024 size.
+2. Capture actual browser viewport 1280×1024 CSS pixels, zoom 100%, DPR 1 unless the owner records/approves a different baseline; then repeat at 1440×900 and 390×844.
+3. Record exact route URL shape (redact UUID if necessary), selected tab and popup state, actor **label only**, commit and theme (do not include credentials in screenshots).
+
+### Checklist 18.2 — Capture these distinct scenarios
+
+| Screenshot label | UI state and comparison purpose |
+| --- | --- |
+| <code>P02-1280-unselected-repository.png</code> | Initial <code>/knowledgehub</code>, dropdown closed, repository active, no auto-selection |
+| <code>P02-1280-selected-selector-open.png</code> | Real selected collection, selector dropdown open, badge from actual DTO (=0), header geometry |
+| <code>P02-1280-research-unavailable.png</code> | Second tab active, no fabricated answer/conversations |
+| <code>P02-1440-dialog-create.png</code> | Create dialog alignment, labels, keyboard focus |
+| <code>P02-1440-dialog-delete-error.png</code> | Correct selected target, visible server error and preserved draft |
+| <code>P02-390-mobile-long-name.png</code> | Long Unicode name, dropdown/overflow, stacked actions and horizontal tab handling |
+
+Additional cases if useful: 51+ selector fixtures, 403/503 alert, invalid URL, 404 deleted/foreign, loading skeleton.
+
+### Checklist 18.3 — Review regions, not raw screenshot alone
+
+Compare in order:
+1. **Structure:** Existing Blocks sidebar/header → feature collection heading → selector + count → tab switch → content frame.
+2. **Geometry:** content max-width, horizontal gutters, vertical rhythm, dropdown alignment/width/z-index, tab positioning.
+3. **States:** no selection, loading, unavailable, disabled controls, error messages, focus states.
+4. **Responsiveness:** no horizontal page overflow at 390px, no clipped confirmation controls, accessible text and focus.
+5. **Interaction:** keyboard Tab/Shift+Tab, Enter, Escape, browser Back/Forward, scroll inside popover.
+
+Never copy <code>code.html</code>'s fake documents, progress percentages, AI answer/citation modal, fixed 288px second sidebar or external Material Symbols script. Keep application-wide theme tokens and MainLayout unchanged.
+
+### Checklist 18.4 — Create a visual deviation log (evidence, not production code)
+
+Use a reviewer-maintained table in your working evidence notes; do not create P02 outcome before actual acceptance:
+
+| Region / viewport | Mockup expectation | Actual screenshot | Difference classification | Action |
+| --- | --- | --- | --- | --- |
+| Header 1280 | Selector left of count badge | TBD | shell / intentional P02 / bug | TBD |
+| Popover 1280 | Dropdown below title, visible selected row | TBD | shell / intentional P02 / bug | TBD |
+| Repository 1280 | Upload zone then repository area | TBD | intentional disabled functionality | Verify honest message |
+| Research 1440 | Second tab placement | TBD | intentional disabled functionality | Verify no fake AI |
+| Mobile 390 | Readable stacked layout | TBD | bug if overflow/clipping | Fix local classes |
+
+**Done Task 18 when:** screenshots and classifications exist for all required viewports/states, keyboard accessibility is checked, and any unacceptable visual defects are corrected and re-captured. Screenshot similarity does not replace Task 17 live evidence.
+
+---
 
 ## D. Manual run sequence (stop after each check)
 
