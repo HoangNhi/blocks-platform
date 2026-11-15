@@ -176,62 +176,339 @@ export const collectionsApi = {
 
 **Task 10 checkpoint:** Import resolves; authenticated route shares MainLayout; fake unit response <code>{Success:false,StatusCode:403}</code> rejects, never renders a successful page.
 
-## Task 11 — Actor-private queries and lifecycle
+## Task 11 — Isolate TanStack Query cache by actor: implement each file
 
-**11.1** Create <code>hooks/collection-query-keys.ts</code>; use an explicit actor prefix:
+**Goal:** Read results and mutations belong to the authenticated actor. Actor A's responses, open forms and pending effects must not leak into B after logout/account switch. This is NOT a new authentication system. It assumes Task 10's typed <code>collectionsApi</code> exists.
+
+### Checklist 11.1 — Create: <code>src/features/knowledgehub/hooks/collection-query-keys.ts</code>
+
+Copy the complete module below. The top-level prefix isolates this feature from Faculty/System caches. List/detail keys also partition by user ID:
 
 ~~~ts
 export const collectionKeys = {
+  all: ["knowledgehub"] as const,
   actor: (actorId: string) => ["knowledgehub", actorId] as const,
-  lists: (actorId: string) => [...collectionKeys.actor(actorId), "collections"] as const,
-  list: (actorId: string, page: number, size: number) =>
-    [...collectionKeys.lists(actorId), { page, size }] as const,
+  lists: (actorId: string) =>
+    [...collectionKeys.actor(actorId), "collections"] as const,
   detail: (actorId: string, id: string) =>
     [...collectionKeys.actor(actorId), "detail", id] as const,
 };
 ~~~
 
-**11.2** In <code>hooks/useCollections.ts</code>, read authenticated <code>user?.Id</code> from <code>useAuth()</code>. Use <code>useQuery</code> with <code>queryFn: ({signal}) =&gt; collectionsApi.list(..., signal)</code>, <code>enabled</code> only when actor exists and view permission is granted. For detail also require a **valid URL selection** (Task 12). Query keys must include actor and parameters. Do not use <code>keepPreviousData</code> across actor/collection identity.
+**Explain:** <code>["knowledgehub", "actor-A", "collections"]</code> must never be reused for <code>actor-B</code>. Collection identity uses UUID, not Name. For the infinite paginated selector, page numbers are stored as part of TanStack Query's <code>pageParams</code> (Task 13) under the actor's list key. Never call <code>queryClient.clear()</code> here.
 
-**11.3** Implement <code>hooks/KnowledgeHubCacheBoundary.tsx</code> as a small context-aware component mounted under the existing providers. On actor transition/logout:
-- cancel old actor's queries with prefix <code>["knowledgehub", oldActorId]</code>;
-- remove **only old actor's** KnowledgeHub queries after cancellation;
-- ensure old pending mutations cannot update a new actor's cache, form, toast or URL;
-- reset feature dialogs/drafts on actor change; avoid globally clearing Faculty/System caches.
+### Checklist 11.2 — Create: <code>src/features/knowledgehub/hooks/KnowledgeHubCacheBoundary.tsx</code>
 
-Because a mutation can finish after a sign-out or route change, mutation handlers must capture initiating actor ID and compare with a **current-actor ref/generation** before any side effect. Test this explicitly; actor-scoped keys alone do not protect navigation.
+This boundary stays mounted above the feature route so a pending mutation from an unmounted page can still compare its initiating identity to the current identity. <code>version</code> also prevents an old A session from counting as a new A session after logout/relogin.
 
-**Task 11 checkpoint:** Cached A never paints under B; A's pending create/delete cannot select/clear B's <code>c</code>; requests consume AbortSignal. Real server ownership checks still remain mandatory.
+~~~tsx
+import {
+  createContext, useContext, useEffect, useRef,
+  type ReactNode, type RefObject,
+} from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { collectionKeys } from "./collection-query-keys";
 
-## Task 12 — URL-only selection, no competing selected-ID state
+export type KnowledgeHubSession = Readonly<{
+  actorId: string | null;
+  version: number;
+}>;
 
-**12.1** Create <code>hooks/useCollectionSelection.ts</code>. Use React Router <code>useSearchParams()</code>. Do not create <code>useState(selectedCollectionId)</code>, auto-select the first collection or store selection in localStorage.
+const SessionContext =
+  createContext<RefObject<KnowledgeHubSession> | null>(null);
 
-Suggested pure parser **inside this file** (or a nearby tested helper):
+export function useKnowledgeHubSession() {
+  const session = useContext(SessionContext);
+  if (!session) {
+    throw new Error("KnowledgeHubCacheBoundary is required");
+  }
+  return session;
+}
+
+export function KnowledgeHubCacheBoundary({
+  children,
+}: { children: ReactNode }) {
+  const { user, isAuthenticated, loading } = useAuth();
+  const queryClient = useQueryClient();
+  const actorId = !loading && isAuthenticated ? (user?.Id ?? null) : null;
+
+  const current = useRef<KnowledgeHubSession>({ actorId: null, version: 0 });
+  const previousActorId = current.current.actorId;
+
+  // Maintain an immutable identity token for each login/account transition.
+  if (previousActorId !== actorId) {
+    current.current = {
+      actorId,
+      version: current.current.version + 1,
+    };
+  }
+
+  useEffect(() => {
+    if (!previousActorId || previousActorId === actorId) return;
+    const key = collectionKeys.actor(previousActorId);
+
+    // Never globally clear unrelated queries.
+    void queryClient.cancelQueries({ queryKey: key }).then(() => {
+      queryClient.removeQueries({ queryKey: key });
+    });
+  }, [previousActorId, actorId, queryClient]);
+
+  return (
+    <SessionContext.Provider value={current}>
+      {children}
+    </SessionContext.Provider>
+  );
+}
+~~~
+
+**Security note:** This illustrates the account-transition boundary, not server authorization. A complete Task 11 review must exercise fast A→B→A transitions, cancellation-vs-removal races and error branches. If the client remains mounted while login changes tokens without updating <code>user</code>, make AuthContext's existing lifecycle reconcile that transition; do not trust a JWT ID derived from localStorage as backend authority.
+
+### Checklist 11.3 — Modify existing <code>src/App.tsx</code>
+
+Current source renders <code>Router</code> and <code>Toaster</code> within a top-level div. Add **one import** and wrap Router in the boundary; this works because <code>main.tsx</code> already mounts <code>App</code> inside <code>QueryClientProvider</code> and <code>AuthProvider</code>:
+
+~~~tsx
+import { KnowledgeHubCacheBoundary } from
+  "@/features/knowledgehub/hooks/KnowledgeHubCacheBoundary";
+~~~
+
+Replace only the existing <code>&lt;Router /&gt;</code> in <code>App.tsx</code> with:
+
+~~~tsx
+<KnowledgeHubCacheBoundary>
+  <Router />
+</KnowledgeHubCacheBoundary>
+~~~
+
+Do not add a second QueryClient, BrowserRouter, AuthProvider, SidebarProvider or custom refresh-token interceptor. Leave <code>Toaster</code> unchanged.
+
+### Checklist 11.4 — Create: <code>src/features/knowledgehub/hooks/useCollections.ts</code>
+
+Use <code>useInfiniteQuery</code> for the selector (Task 13) and <code>useQuery</code> for independent selected detail (Task 12). This covers both “selected collection lives on another page” and “more than 50 collections”. Both requests consume the AbortSignal forwarded through Task 10's API adapter.
 
 ~~~ts
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { collectionsApi } from "../api/collections.api";
+import { collectionKeys } from "./collection-query-keys";
+import type { Selection } from "./useCollectionSelection";
+
+const PAGE_SIZE = 50;
+
+export function useCollections(actorId: string | null, canView: boolean) {
+  return useInfiniteQuery({
+    queryKey: collectionKeys.lists(actorId ?? "signed-out"),
+    enabled: Boolean(actorId && canView),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) => {
+      if (!actorId) throw new Error("Chưa xác thực");
+      return collectionsApi.list(
+        { page_index: pageParam, page_size: PAGE_SIZE }, signal
+      );
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, page) => n + page.Data.length, 0);
+      if (lastPage.Data.length === 0 || loaded >= lastPage.TotalRow) {
+        return undefined;
+      }
+      return lastPage.PageIndex + 1;
+    },
+    retry: false,
+  });
+}
+
+export function useCollectionDetail(
+  actorId: string | null,
+  canView: boolean,
+  selection: Selection,
+) {
+  const id = selection.state === "selected" ? selection.id : null;
+  return useQuery({
+    queryKey: collectionKeys.detail(
+      actorId ?? "signed-out", id ?? "no-selection"
+    ),
+    enabled: Boolean(actorId && canView && id),
+    queryFn: ({ signal }) => {
+      if (!id) throw new Error("Chưa chọn bộ sưu tập");
+      return collectionsApi.detail(id, signal);
+    },
+    retry: false,
+  });
+}
+~~~
+
+**Why not <code>keepPreviousData</code>?** During URL A→B or actor A→B, displaying A's previous private detail is unacceptable. <code>enabled=false</code> is not a loading state; render no-selection/invalid states explicitly.
+
+### Checklist 11.5 — Create test: <code>src/features/knowledgehub/hooks/collection-query-keys.test.ts</code>
+
+~~~ts
+import { describe, expect, it } from "vitest";
+import { collectionKeys } from "./collection-query-keys";
+
+describe("KnowledgeHub private query keys", () => {
+  it("separates two actors and two collection ids", () => {
+    expect(collectionKeys.lists("A")).not.toEqual(collectionKeys.lists("B"));
+    expect(collectionKeys.detail("A", "one")).not.toEqual(
+      collectionKeys.detail("A", "two")
+    );
+    expect(collectionKeys.lists("A")[0]).toBe("knowledgehub");
+  });
+});
+~~~
+
+**Additional integration tests to write now:** render the boundary with a test QueryClient; prefill A/B's detail keys; switch mocked <code>useAuth</code> A→B; assert A's keys disappear and B's remain; hold A's GET using a deferred Promise and check its AbortSignal; switch to logout and assert no A rows are rendered. Mutations need the extra session-token guard in Task 14, not merely query key isolation.
+
+**Done Task 11 when:** this test passes and actor A's cached/in-flight read cannot be rendered as actor B's. Record commands and results; do not claim passing coverage without running them.
+
+---
+
+## Task 12 — URL-only selection: complete parser and navigation operations
+
+**Goal:** the ONLY selected collection identity is <code>c</code> in the current React Router URL. No <code>selectedId</code> state, localStorage selection, first-row auto-select or silently “fixing” invalid URLs.
+
+### Checklist 12.1 — Create: <code>src/features/knowledgehub/hooks/useCollectionSelection.ts</code>
+
+This is a complete example, including an imperative “read current location” method used by late mutation callbacks. It uses <code>useLocation</code> and <code>useNavigate</code> so it also works inside a <code>MemoryRouter</code> test.
+
+~~~ts
+import { useCallback, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+
 export type Selection =
   | { state: "none" }
   | { state: "invalid" }
   | { state: "selected"; id: string };
 
 export function parseSelection(params: URLSearchParams): Selection {
-  const all = params.getAll("c");
-  if (all.length === 0) return { state: "none" };
-  if (all.length !== 1 || !UUID.test(all[0]) || all[0].toLowerCase() === ZERO_UUID) {
+  const values = params.getAll("c");
+  if (values.length === 0) return { state: "none" };
+  if (
+    values.length !== 1 ||
+    !UUID.test(values[0]) ||
+    values[0].toLowerCase() === ZERO_UUID
+  ) {
     return { state: "invalid" };
   }
-  return { state: "selected", id: all[0].toLowerCase() };
+  return { state: "selected", id: values[0].toLowerCase() };
+}
+
+export function useCollectionSelection() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const latest = useRef(location);
+  latest.current = location;
+
+  const getCurrent = useCallback(
+    () => parseSelection(new URLSearchParams(latest.current.search)), []
+  );
+
+  const select = useCallback((id: string) => {
+    if (!UUID.test(id) || id.toLowerCase() === ZERO_UUID) return;
+    const now = latest.current;
+    if (now.pathname !== "/knowledgehub") return;
+    const next = new URLSearchParams(now.search);
+    next.set("c", id.toLowerCase());
+    navigate({
+      pathname: now.pathname,
+      search: "?" + next.toString(),
+      hash: now.hash,
+    }, { replace: false }); // explicit selection PUSHES history
+  }, [navigate]);
+
+  const clearIfSelected = useCallback((deletedId: string) => {
+    const now = latest.current;
+    if (now.pathname !== "/knowledgehub") return;
+    const next = new URLSearchParams(now.search);
+    const selection = parseSelection(next);
+    if (
+      selection.state !== "selected" ||
+      selection.id !== deletedId.toLowerCase()
+    ) return;
+    next.delete("c"); // preserve unrelated keys
+    navigate({
+      pathname: now.pathname,
+      search: next.toString() ? "?" + next.toString() : "",
+      hash: now.hash,
+    }, { replace: true }); // selected delete REPLACES history
+  }, [navigate]);
+
+  return {
+    selection: parseSelection(new URLSearchParams(location.search)),
+    getCurrent,
+    select,
+    clearIfSelected,
+  };
 }
 ~~~
 
-**12.2** For explicit selection, use <code>setSearchParams(previous =&gt; { const next = new URLSearchParams(previous); next.set("c", id); return next; });</code> (push by default). For deletion of the **currently selected** collection, delete only <code>c</code> with <code>{ replace: true }</code> after confirming current actor + current URL still match the mutation target. Preserve unrelated query keys. On rename keep URL unchanged.
+**Review points:** Repeated <code>c</code> is invalid, including <code>?c=a&c=b</code>. A missing <code>c</code> is different from <code>?c=</code>. One valid nonzero UUID makes a detail request even when that collection is not on the currently loaded selector page. A 404 for missing/deleted/foreign IDs gets the **same** unavailable UI (Task 15).
 
-**12.3** Detail requests must be independent of which list page contains the item. Duplicate, missing, malformed and zero UUID params trigger **no detail request**. Missing/deleted/foreign detail all render the same unavailable state. Back/Forward and refresh derive from URL.
+### Checklist 12.2 — Connect to the detail hook
 
-**Task 12 checkpoint:** <code>/knowledgehub?c=valid-id&foo=1</code> preserves <code>foo</code>; invalid repeated <code>c</code> does not trigger request; browser history works.
+Inside <code>KnowledgeHubPage.tsx</code> when you assemble Task 15, the exact order is:
+
+~~~tsx
+const { selection, select, clearIfSelected, getCurrent } =
+  useCollectionSelection();
+const detail = useCollectionDetail(actorId, canView, selection);
+~~~
+
+Do **not** replace <code>selection</code> with another <code>useState</code>. The page passes <code>select</code> to the collection selector and <code>clearIfSelected</code> to the successful delete mutation.
+
+### Checklist 12.3 — Create test: <code>src/features/knowledgehub/hooks/useCollectionSelection.test.tsx</code>
+
+~~~tsx
+import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { parseSelection, useCollectionSelection } from "./useCollectionSelection";
+
+const ID = "11111111-1111-1111-1111-111111111111";
+
+function Probe() {
+  const { selection, select, clearIfSelected } = useCollectionSelection();
+  const location = useLocation();
+  return (
+    <div>
+      <p data-testid="state">{selection.state}</p>
+      <p data-testid="url">{location.search}</p>
+      <button onClick={() => select(ID)}>Chọn</button>
+      <button onClick={() => clearIfSelected(ID)}>Xóa đã chọn</button>
+    </div>
+  );
+}
+
+describe("URL-only collection selection", () => {
+  it("rejects absent-vs-invalid, repeated, empty and zero c", () => {
+    expect(parseSelection(new URLSearchParams()).state).toBe("none");
+    expect(parseSelection(new URLSearchParams("c=")).state).toBe("invalid");
+    expect(parseSelection(new URLSearchParams("c=x&c=y")).state).toBe("invalid");
+    expect(parseSelection(new URLSearchParams(
+      "c=00000000-0000-0000-0000-000000000000"
+    )).state).toBe("invalid");
+  });
+
+  it("preserves unrelated query parameters", () => {
+    render(<MemoryRouter initialEntries={["/knowledgehub?view=compact"]}>
+      <Probe />
+    </MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Chọn" }));
+    expect(screen.getByTestId("url").textContent).toContain("view=compact");
+    expect(screen.getByTestId("url").textContent).toContain("c=" + ID);
+    fireEvent.click(screen.getByRole("button", { name: "Xóa đã chọn" }));
+    expect(screen.getByTestId("url").textContent).toBe("?view=compact");
+  });
+});
+~~~
+
+**Additional tests:** Use a memory history stack and Back/Forward to ensure selection pushes, delete replaces; fire a detail response for A **after** selecting B and confirm B remains visible. Test that another ID's delete never clears current <code>c</code>, and that invalid query params trigger no detail API call.
+
+**Done Task 12 when:** URL selection survives refresh/Back/Forward, duplicate invalid keys cause zero detail calls, and deletion clears only a still-matching selected ID.
+
+---
 
 ## Task 13 — Collection header, selector, pagination, honest states
 
