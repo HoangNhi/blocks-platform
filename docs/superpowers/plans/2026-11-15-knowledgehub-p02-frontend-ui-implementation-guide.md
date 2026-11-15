@@ -201,21 +201,18 @@ export const collectionKeys = {
 
 ### Checklist 11.2 — Create: <code>src/features/knowledgehub/hooks/KnowledgeHubCacheBoundary.tsx</code>
 
-This boundary stays mounted above the feature route so a pending mutation from an unmounted page can still compare its initiating identity to the current identity. <code>version</code> also prevents an old A session from counting as a new A session after logout/relogin.
+This boundary stays mounted above the feature route so a pending mutation from an unmounted page can compare its initiating login snapshot to the **current** snapshot. A→logout→A also gets a new immutable snapshot object. React warns against writing/reading refs during rendering, so this example updates the ref in a layout effect, **not** during render.
 
 ~~~tsx
 import {
-  createContext, useContext, useEffect, useRef,
+  createContext, useContext, useLayoutEffect, useMemo, useRef,
   type ReactNode, type RefObject,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionKeys } from "./collection-query-keys";
 
-export type KnowledgeHubSession = Readonly<{
-  actorId: string | null;
-  version: number;
-}>;
+export type KnowledgeHubSession = Readonly<{ actorId: string | null }>;
 
 const SessionContext =
   createContext<RefObject<KnowledgeHubSession> | null>(null);
@@ -235,27 +232,22 @@ export function KnowledgeHubCacheBoundary({
   const queryClient = useQueryClient();
   const actorId = !loading && isAuthenticated ? (user?.Id ?? null) : null;
 
-  const current = useRef<KnowledgeHubSession>({ actorId: null, version: 0 });
-  const previousActorId = current.current.actorId;
+  // A new immutable token is created for every observed actor transition.
+  const snapshot = useMemo<KnowledgeHubSession>(
+    () => ({ actorId }), [actorId]
+  );
+  const current = useRef(snapshot);
 
-  // Maintain an immutable identity token for each login/account transition.
-  if (previousActorId !== actorId) {
-    current.current = {
-      actorId,
-      version: current.current.version + 1,
-    };
-  }
+  useLayoutEffect(() => {
+    const previousActorId = current.current.actorId;
+    current.current = snapshot;
 
-  useEffect(() => {
     if (!previousActorId || previousActorId === actorId) return;
     const key = collectionKeys.actor(previousActorId);
-
-    // Never globally clear unrelated queries.
-    // Cancel the transport, then drop the old cache synchronously.
-    // No other feature's keys are affected.
+    // Cancel transport and synchronously evict ONLY the old private cache.
     void queryClient.cancelQueries({ queryKey: key }).catch(() => undefined);
     queryClient.removeQueries({ queryKey: key });
-  }, [previousActorId, actorId, queryClient]);
+  }, [actorId, snapshot, queryClient]);
 
   return (
     <SessionContext.Provider value={current}>
@@ -265,7 +257,7 @@ export function KnowledgeHubCacheBoundary({
 }
 ~~~
 
-**Security note:** This illustrates the account-transition boundary, not server authorization. A complete Task 11 review must exercise fast A→B→A transitions, cancellation-vs-removal races and error branches. If the client remains mounted while login changes tokens without updating <code>user</code>, make AuthContext's existing lifecycle reconcile that transition; do not trust a JWT ID derived from localStorage as backend authority.
+**Security note:** This covers identity transitions observed through <code>useAuth()</code>; if credentials change without updating its <code>user</code> state, first reconcile the existing authentication lifecycle. Test StrictMode, very fast A→B→A transitions, cancellation, and logout. Frontend cache partitioning never replaces the server's verified JWT / permission RPC / owner-scoped SQL.
 
 ### Checklist 11.3 — Modify existing <code>src/App.tsx</code>
 
@@ -374,7 +366,7 @@ describe("KnowledgeHub private query keys", () => {
 This is a complete example, including an imperative “read current location” method used by late mutation callbacks. It uses <code>useLocation</code> and <code>useNavigate</code> so it also works inside a <code>MemoryRouter</code> test.
 
 ~~~ts
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -402,7 +394,7 @@ export function useCollectionSelection() {
   const location = useLocation();
   const navigate = useNavigate();
   const latest = useRef(location);
-  latest.current = location;
+  useLayoutEffect(() => { latest.current = location; }, [location]);
 
   const getCurrent = useCallback(
     () => parseSelection(new URLSearchParams(latest.current.search)), []
@@ -800,7 +792,7 @@ export function toCollectionInput(v: CollectionFormValues): CollectionInput {
 Reuse local <code>ui/dialog.tsx</code>, <code>ui/form.tsx</code>, <code>ui/input.tsx</code>, <code>ui/textarea.tsx</code>, <code>ui/button.tsx</code>. Do NOT recreate the Dialog or use the Faculty form's browser-generated UUID.
 
 ~~~tsx
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -835,16 +827,21 @@ export function CollectionFormDialog({
     defaultValues: { Name: "", Description: "" },
   });
   const { reset } = form;
+  const previousFormTarget = useRef<string | null>(null);
 
   useEffect(() => {
+    const targetKey = !open ? null :
+      mode === "edit" ? "edit:" + (initial?.Id ?? "") : "create";
+    if (targetKey === previousFormTarget.current) return;
+    previousFormTarget.current = targetKey;
     if (open) {
       reset({
         Name: mode === "edit" ? (initial?.Name ?? "") : "",
         Description: mode === "edit" ? (initial?.Description ?? "") : "",
       });
     }
-    // Reset on opening or changing the target, not on an error/refetch.
-  }, [open, mode, initial?.Id, reset]);
+    // A background detail refetch won't erase a draft for the same target.
+  }, [open, mode, initial, reset]);
 
   const requestOpenChange = (next: boolean) => {
     if (!pending) onOpenChange(next);
@@ -1269,7 +1266,7 @@ export function AskResearchFrame({
 
 ### Checklist 15.3 — Create: <code>src/features/knowledgehub/routes/KnowledgeHubPage.tsx</code>
 
-This is the complete **composition example** showing how earlier Task 11–14 files connect. Permission comes from the existing protected <code>MainLayout</code>'s Outlet context. The outer component is keyed by the current login-session version to reset open forms on actor change. It does not build another sidebar, global header or authentication flow.
+This is the complete **composition example** showing how earlier Task 11–14 files connect. Permission comes from the existing protected <code>MainLayout</code>'s Outlet context. The outer component is keyed by the current actor to reset open forms on actor change; the Task 11 session-snapshot object additionally guards against stale results across logout/relogin. It does not build another sidebar, global header or authentication flow.
 
 ~~~tsx
 import { useState } from "react";
@@ -1287,7 +1284,6 @@ import type { GetPermissionByUser } from
 import type {
   CollectionDto, CollectionInput,
 } from "../types/collections.types";
-import { useKnowledgeHubSession } from "../hooks/KnowledgeHubCacheBoundary";
 import { useCollectionSelection } from "../hooks/useCollectionSelection";
 import { useCollections, useCollectionDetail } from "../hooks/useCollections";
 import { useCollectionMutations } from "../hooks/useCollectionMutations";
@@ -1494,10 +1490,10 @@ function KnowledgeHubWorkspace() {
 }
 
 export default function KnowledgeHubPage() {
-  const { user } = useAuth(); // subscribe to authentication transitions
-  const session = useKnowledgeHubSession();
-  void user;
-  return <KnowledgeHubWorkspace key={session.current.version} />;
+  const { user, loading, isAuthenticated } = useAuth();
+  const actorKey = !loading && isAuthenticated
+    ? (user?.Id ?? "signed-out") : "signed-out";
+  return <KnowledgeHubWorkspace key={actorKey} />;
 }
 ~~~
 
@@ -1634,7 +1630,7 @@ export function deferred<T>() {
 Then write these test sequences against the mounted boundary + page:
 - **A create pending → B login → A response resolves:** B's URL, cache, open dialogs and success toast unchanged.
 - **A delete pending → B selects another collection → A response resolves:** no clearing B's <code>c</code>.
-- **A→logout→A login during pending create:** old session result has a different <code>version</code> and must not navigate the new session.
+- **A→logout→A login during pending create:** old session snapshot has a different **object identity** and must not navigate the new session.
 - **403 or 503 after submit:** preserve user draft, dialog and URL; no “created successfully”.
 - **Create response lost after DB commit:** do not auto-retry create or claim exactly-once semantics.
 
