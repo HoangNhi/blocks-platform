@@ -18,9 +18,15 @@ vi.mock("@/lib/api", () => ({
 describe("fileService and API_ENDPOINTS contract", () => {
   it("retains_only_minimal_file_methods_and_endpoints", () => {
     expect(Object.keys(fileService).sort()).toEqual(["getAvatarBlob", "uploadFile"]);
-    expect(Object.keys(API_ENDPOINTS).sort()).toEqual(["Catalog", "File", "System"]);
+    expect(Object.keys(API_ENDPOINTS).sort()).toEqual([
+      "Catalog",
+      "File",
+      "KnowledgeHub",
+      "System",
+    ]);
     expect(Object.keys(API_ENDPOINTS.Catalog)).toEqual(["Faculty"]);
     expect(Object.keys(API_ENDPOINTS.File.UploadFile)).toEqual(["POST"]);
+    expect(Object.keys(API_ENDPOINTS.KnowledgeHub)).toEqual(["COLLECTIONS"]);
   });
 
   it("upload_keeps_formdata_contract", async () => {

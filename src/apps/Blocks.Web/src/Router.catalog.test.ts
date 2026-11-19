@@ -51,7 +51,7 @@ describe("Router catalog routes and retained faculty", () => {
     }
     expect(paths.sort()).toEqual([
       "/", "/login", "/user", "/faculty", "/systemgroup",
-      "/menu", "/role", "/auditlog", "/unauthorized", "*",
+      "/menu", "/role", "/auditlog", "/knowledgehub", "/unauthorized", "*",
     ].sort());
   });
 });

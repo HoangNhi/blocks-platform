@@ -1,6 +1,7 @@
 const SYSTEM_BASE = "/System";
 const CATALOG_BASE = "/Catalog";
 const FILE_BASE = "/File";
+const KNOWLEDGEHUB_BASE = "/api/KnowledgeHub";
 
 export const API_ENDPOINTS = {
   System: {
@@ -74,4 +75,7 @@ export const API_ENDPOINTS = {
       GET: (fileName: string) => `${FILE_BASE}/api/Avatar/${fileName}`,
     },
   },
+  KnowledgeHub: {
+    COLLECTIONS: KNOWLEDGEHUB_BASE + "/Collections",
+  }
 };

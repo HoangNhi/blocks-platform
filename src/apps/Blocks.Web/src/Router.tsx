@@ -12,6 +12,7 @@ import RolePage from "./features/system/routes/Role";
 import UnauthorizedPage from "./pages/common/UnauthorizedPage";
 import AuditLogPage from "./features/system/routes/AuditLog/AuditLogPage";
 import NotFoundPage from "./pages/common/NotFoundPage";
+import KnowledgeHubPage from "./features/knowledgehub/routes/KnowledgeHubPage.tsx";
 
 const Router: FC = () => {
   return (
@@ -35,6 +36,7 @@ const Router: FC = () => {
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/role" element={<RolePage />} />
           <Route path="/auditlog" element={<AuditLogPage />} />
+          <Route path="/knowledgehub" element={<KnowledgeHubPage />} />
         </Route>
 
         <Route element={<MainLayout />}>
