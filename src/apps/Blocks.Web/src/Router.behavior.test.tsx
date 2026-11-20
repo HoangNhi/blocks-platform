@@ -89,6 +89,9 @@ vi.mock("./features/system/routes/AuditLog/AuditLogPage", () => ({
 vi.mock("./features/system/routes/Auth/LoginPage", () => ({
   default: () => <div data-testid="page-login">Login Sentinel</div>,
 }));
+vi.mock("./features/knowledgehub/routes/KnowledgeHubPage.tsx", () => ({
+  default: () => <div data-testid="page-knowledgehub">KnowledgeHub Sentinel</div>,
+}));
 vi.mock("./pages/common/UnauthorizedPage", () => ({
   default: () => <div data-testid="page-unauthorized">Unauthorized Sentinel</div>,
 }));
@@ -101,6 +104,7 @@ const allPageTestIds = [
   "page-menu",
   "page-role",
   "page-auditlog",
+  "page-knowledgehub",
   "page-login",
   "page-unauthorized",
 ];
@@ -183,6 +187,7 @@ describe("Router behavior", () => {
       { path: "/menu", testId: "page-menu" },
       { path: "/role", testId: "page-role" },
       { path: "/auditlog", testId: "page-auditlog" },
+      { path: "/knowledgehub", testId: "page-knowledgehub" },
     ];
 
     for (const route of guardedRoutes) {

@@ -6,6 +6,7 @@ import { useCollectionMutations } from "./useCollectionMutations";
 import { collectionKeys } from "./collection-query-keys";
 import { collectionsApi } from "../api/collections.api";
 import type { CollectionDto, CollectionInput } from "../types/collections.types";
+import { toast } from "sonner";
 
 const authState: {
   user: { Id: string } | null;
@@ -361,5 +362,24 @@ describe("useCollectionMutations", () => {
     await expect(first).rejects.toThrow("timeout");
     await expect(second).rejects.toThrow("timeout");
     await waitFor(() => expect(createApi).toHaveBeenCalledTimes(1));
+  });
+
+  it("rejects soft API errors without announcing a successful create", async () => {
+    createApi.mockRejectedValueOnce(
+      Object.assign(new Error("Unavailable"), { statusCode: 503 }),
+    );
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const navigation = {
+      select: vi.fn(),
+      clearIfSelected: vi.fn(),
+      getCurrent: () => null,
+    };
+    const { result } = renderMutation(client, navigation);
+
+    await expect(result.current.createCollection(input)).rejects.toMatchObject({
+      statusCode: 503,
+      message: "Unavailable",
+    });
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
