@@ -1,8 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import {
+  MemoryRouter,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import KnowledgeHubPage from "./KnowledgeHubPage";
 import { CollectionApiError } from "../api/collections.api";
+import { KnowledgeHubCacheBoundary } from "../hooks/KnowledgeHubCacheBoundary";
 import type { CollectionDto } from "../types/collections.types";
 
 const useAuthMock = vi.hoisted(() => vi.fn());
@@ -27,37 +35,53 @@ const selected: CollectionDto = {
   DocumentCount: 7,
 };
 
-function renderPage(permission: {
-  IsViewed: boolean;
-  IsAdded: boolean;
-}) {
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location-search">{location.search}</output>;
+}
+
+function renderPage(
+  permission: {
+    IsViewed: boolean;
+    IsAdded: boolean;
+  },
+  search = `?c=${selected.Id}&view=compact`,
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
   return render(
-    <MemoryRouter
-      initialEntries={[
-        `/knowledgehub?c=${selected.Id}&view=compact`,
-      ]}
-    >
-      <Routes>
-        <Route
-          element={
-            <Outlet
-              context={{
-                permission: {
-                  Controller: "knowledgehub",
-                  ...permission,
-                  IsUpdated: false,
-                  IsDeleted: false,
-                  IsApproved: false,
-                  IsAnalyzed: false,
-                },
-              }}
-            />
-          }
-        >
-          <Route path="/knowledgehub" element={<KnowledgeHubPage />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <KnowledgeHubCacheBoundary>
+        <MemoryRouter initialEntries={[`/knowledgehub${search}`]}>
+          <LocationProbe />
+          <Routes>
+            <Route
+              element={
+                <Outlet
+                  context={{
+                    permission: {
+                      Controller: "knowledgehub",
+                      ...permission,
+                      IsUpdated: false,
+                      IsDeleted: false,
+                      IsApproved: false,
+                      IsAnalyzed: false,
+                    },
+                  }}
+                />
+              }
+            >
+              <Route path="/knowledgehub" element={<KnowledgeHubPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </KnowledgeHubCacheBoundary>
+    </QueryClientProvider>,
   );
 }
 
@@ -97,7 +121,7 @@ describe("KnowledgeHub page Task 13 assembly", () => {
     renderPage({ IsViewed: true, IsAdded: false });
 
     expect(screen.getByText("7 tài liệu")).toBeInTheDocument();
-    expect(screen.getByText("Deep link collection")).toBeInTheDocument();
+    expect(screen.getByText(/Deep link collection/)).toBeInTheDocument();
     expect(useCollectionDetailMock).toHaveBeenCalledWith(
       "actor-1",
       true,
@@ -185,5 +209,73 @@ describe("KnowledgeHub page Task 13 assembly", () => {
         .getAllByRole("button")
         .find((button) => (button as HTMLButtonElement).disabled)
     ).toBeDefined();
+  });
+
+  it("starts on repository and toggles to research without changing c", () => {
+    renderPage({ IsViewed: true, IsAdded: false });
+
+    const repositoryTab = screen.getByRole("tab", {
+      name: /Kho tài liệu.*Import/,
+    });
+    const researchTab = screen.getByRole("tab", {
+      name: /Hỏi đáp.*Nghiên cứu/,
+    });
+
+    expect(repositoryTab).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByRole("button", {
+        name: /Tải tài liệu.*chưa khả dụng/,
+      }),
+    ).toBeDisabled();
+
+    fireEvent.mouseDown(researchTab, {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(researchTab).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByRole("button", {
+        name: /Bắt đầu hỏi đáp.*chưa khả dụng/,
+      }),
+    ).toBeDisabled();
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      `?c=${selected.Id}&view=compact`,
+    );
+  });
+
+  it.each([
+    ["none", "", "Hãy chọn hoặc tạo một bộ sưu tập để bắt đầu."],
+    [
+      "invalid",
+      "?c=not-a-uuid",
+      "Liên kết bộ sưu tập không hợp lệ. Hãy chọn lại từ danh sách.",
+    ],
+  ])("renders the %s state copy", (_name, search, copy) => {
+    renderPage({ IsViewed: true, IsAdded: false }, search);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(copy);
+  });
+
+  it("renders the same unavailable state for a missing detail", () => {
+    useCollectionDetailMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      isSuccess: false,
+      error: new CollectionApiError(404, "Not found"),
+    });
+
+    renderPage({ IsViewed: true, IsAdded: false });
+
+    expect(screen.getByRole("alert")).toHaveAttribute(
+      "data-state",
+      "unavailable",
+    );
+    expect(
+      screen.getByText(
+        "Bộ sưu tập không tồn tại hoặc bạn không có quyền truy cập.",
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -48,6 +48,7 @@ export function CollectionFormDialog({
   onOpenChange,
   onSubmit,
 }: Props) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const form = useForm<CollectionFormValues>({
     resolver: zodResolver(collectionFormSchema),
     defaultValues: {
@@ -84,6 +85,16 @@ export function CollectionFormDialog({
     <Dialog open={open} onOpenChange={requestOpenChange}>
       <DialogContent
         showCloseButton={!pending}
+        onOpenAutoFocus={() => {
+          const activeElement = document.activeElement;
+          returnFocusRef.current =
+            activeElement instanceof HTMLElement ? activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          returnFocusRef.current?.focus();
+          returnFocusRef.current = null;
+        }}
         onInteractOutside={(e) => {
           if (pending) e.preventDefault();
         }}
