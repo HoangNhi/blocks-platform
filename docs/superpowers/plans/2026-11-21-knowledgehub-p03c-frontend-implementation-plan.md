@@ -451,6 +451,26 @@ Do not show READY, parsing, embedding, chunking, or fake 100% while registration
 
 ## Task FE-05 - Build the repository table, row actions, and delete dialog
 
+### FE-05.0 - Implement document mutations
+
+**Create:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.ts.
+
+Expose narrowly scoped mutations:
+- finalize(documentId): call documentsApi.finalize, then invalidate the actor/collection document list and selected collection detail;
+- download(documentId): call documentsApi.download and return Blob for the row action;
+- remove(documentId): call documentsApi.remove, remove the document from normal list cache after success, invalidate collection detail, and inspect CleanupStatus.
+
+Every mutation must capture the current P02 KnowledgeHub session identity. Before cache writes, invalidations, navigation, or toast, confirm the captured actor/session is still current. Do not optimistically increment/decrement DocumentCount.
+
+If logical deletion succeeds but CleanupStatus is PENDING/FAILED, show a warning toast that the document is no longer in the repository while FileService cleanup remains pending. Do not show this as a failed document deletion.
+
+**Tests:** useDocumentMutations.test.tsx must cover successful finalize/download/delete, cleanup-pending toast, error envelope mapping, correct document IDs, invalidation scope, and actor-switch stale responses.
+
+- [ ] Step 1: Add deferred-promise tests for finalize, download, delete, and actor switch.
+- [ ] Step 2: Implement useDocumentMutations with the P02 session guard and query-key factories.
+- [ ] Step 3: Run hook tests and confirm a late mutation cannot touch another actor's cache/toasts.
+- [ ] Step 4: Commit the mutation hooks and tests.
+
 ### FE-05.1 - Repository
 
 **Create:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.tsx.
