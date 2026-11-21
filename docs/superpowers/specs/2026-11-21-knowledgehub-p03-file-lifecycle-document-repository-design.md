@@ -82,6 +82,7 @@ These are design proposals for owner approval, not earlier owner decisions:
 - Reuse the existing unary PreviewFile RPC for bounded downloads; do not introduce a streaming RPC in P03.
 - Limit concurrent KnowledgeHub original downloads to one per API process initially.
 - Keep registration lifecycle, document deletion lifecycle, and future processing lifecycle separate.
+- For the exact FileService stage purpose `KnowledgeHubDocument`, call SystemService `CheckPermission(controller="knowledgehub", action=ADD(2))` using the actor and current JWT derived from the validated FileService request, before writing any bytes or manifest into FileService-managed Temp storage. Denial or permission-service unavailability fails closed.
 
 Approval of this document accepts these proposed defaults together, unless the owner asks for a specific amendment.
 
@@ -142,6 +143,13 @@ Read-only inspection of branch feature/knowledgehub-learning, head 990e307be1e28
   - ModelAttachmentProto currently uses fields 1-8 and does not return the manifest SHA256.
 - src/services/Blocks.FileService/Configs/ConfigService.cs
   - FileService gRPC server send/receive message limits are currently 128 MiB.
+  - It currently registers an AuditProto client to SystemService through gRPC-Web; it does not yet register a SystemProto client for CheckPermission.
+- src/services/Blocks.FileService/Blocks.FileService.csproj
+  - It currently generates a client from audit.proto, but not from system.proto.
+- src/services/Blocks.SystemService/Protos/system.proto and Services/gRPC/SystemGrpcService.cs
+  - SystemProto.CheckPermission already accepts user_id, controller, and action and returns CheckActionResponse.success.
+  - SystemService's gRPC authentication accepts the per-call x-service-authorization bearer metadata.
+  - CheckPermission returns success=false when the requested action is not allowed.
 - src/services/Blocks.FileService/Services/gRPC/FileGrpcService.cs
   - RPC methods are authenticated.
   - The service maps business failures to gRPC status codes.
@@ -149,7 +157,8 @@ Read-only inspection of branch feature/knowledgehub-learning, head 990e307be1e28
 
 ### 4.2. Existing security and routing boundaries
 
-- src/services/Blocks.FileService/Configs/ConfigureAuthentication.cs accepts the internal x-service-authorization bearer metadata.
+- src/services/Blocks.FileService/Configs/ConfigureAuthentication.cs accepts the internal x-service-authorization bearer metadata for gRPC requests.
+- FileService already has an internal SystemService dependency through AppHost and an AuditProto gRPC-Web client. P03 adds the existing SystemProto.CheckPermission client contract; it does not create a new permission service or public route.
 - src/services/Blocks.ApiGateway/Middlewares/FileServiceBoundary.cs permits selected HTTP FileService routes and blocks FileProto gRPC through the public Gateway. P03 must preserve this boundary.
 - The existing browser upload endpoint is exposed through the /File Gateway prefix. Browser code must not call a private FileService host.
 - src/services/Blocks.KnowledgeHubService/src/knowledgehub/identity.py validates the existing HS256 JWT and derives ActorId from the name claim.
@@ -173,6 +182,7 @@ P02 outcome explicitly hands off these requirements:
 
 - Approved KnowledgeHub FileService namespace.
 - .md support and target-specific PDF/Markdown/TXT validation.
+- FileService-side SystemService ADD permission check for KnowledgeHub-purpose staging.
 - Authenticated Python-to-FileService gRPC client over TLS.
 - Stage/finalize/register upload lifecycle.
 - Trusted file references and source SHA256.
@@ -323,7 +333,27 @@ P03 multipart fields:
 
 UploadPurpose is a restrictive scope marker for validation, not an authorization credential. Persist it in the upload-session manifest so finalization can verify that the staged purpose matches the requested namespace. FileService must still bind the staged session to the ActorId from the verified JWT. Only KnowledgeHub backend gRPC finalization can turn the staged session into an active KnowledgeHub key.
 
-**Authorization boundary requiring owner confirmation:** the existing generic stage HTTP endpoint authenticates the user but does not itself call KnowledgeHub CheckPermission. Under the proposed MVP default, the upload-intent and finalize APIs enforce KnowledgeHub ADD (2), while stage remains an actor-bound, temporary-only operation; public Gateway still blocks FileProto gRPC, so staging alone cannot publish a document. This means an authenticated user without KnowledgeHub ADD could still allocate bounded Temp storage by calling the generic stage route directly. If that residual resource-abuse path is unacceptable, P03 must add a purpose-specific SystemService ADD check in FileService before writing Temp, or design a one-time upload grant. Do not treat UploadPurpose as proof of ADD permission.
+**Confirmed authorization policy (owner-selected option A):** FileService must call the existing SystemService SystemProto.CheckPermission before it creates a KnowledgeHub upload session, writes a batch, or persists a manifest in its managed Temp storage.
+
+For a request whose exact UploadPurpose is KnowledgeHubDocument:
+
+1. FileService first validates that the JWT-authenticated principal exists and derives the actor GUID from the validated name claim using the existing GetActorId() contract.
+2. FileService obtains the current bearer token from the authenticated HTTP request. It must not accept a user ID, controller, action, or bearer token from multipart fields.
+3. FileService calls SystemProto.CheckPermission with user_id = actorId, controller = "knowledgehub", and action = 2 (ADD). The call sends x-service-authorization: Bearer <current request token> as per-call gRPC metadata, uses the private SystemService endpoint over TLS, has a bounded deadline, and propagates request cancellation.
+4. A success=false response is a permission denial (application 403). Unauthenticated is 401. Deadline, unavailable, or unexpected SystemService RPC failures are safe 503 responses. All failures are fail-closed: no FileStorage Temp session directory, batch, file, or manifest is created.
+5. The permission check is performed on every KnowledgeHub-purpose stage request. Do not cache permission decisions or retry a failed permission call in P03.
+6. This check occurs before FileService-managed Temp writes. ASP.NET Core may already have parsed/buffered the bounded multipart request while model binding constructs IFormFile; that framework request buffering is not a FileService upload session and must remain bounded by the request limit.
+
+Implementation impact:
+
+- Generate a FileService client from the existing src/services/Blocks.SystemService/Protos/system.proto with GrpcServices="Client"; do not generate from C# obj output or copy the proto.
+- Register a SystemProto.SystemProtoClient in FileService ConfigService, using the existing SystemService gRPC-Web client pattern and the private HTTPS endpoint. The existing SystemService server already maps SystemProto through gRPC-Web.
+- Reuse the existing FileService-to-SystemService AppHost reference. Configure the SystemService client address to the internal HTTPS endpoint and verify TLS trust; do not route the permission RPC through API Gateway.
+- Add a narrow permission-client abstraction or equivalent test seam so denial, RPC failure, metadata, deadline, cancellation, and no-write behavior can be tested without a live SystemService.
+- Preserve legacy uploads whose UploadPurpose is absent; they retain existing authorization behavior and cannot be finalized into the KnowledgeHub namespace. Unknown non-empty purpose values fail closed.
+- UploadDataAsync must require the manifest purpose to be KnowledgeHubDocument whenever the requested target is KnowledgeHub/Documents. A client cannot bypass the permission check by omitting the purpose marker and later requesting a KnowledgeHub target.
+
+The SystemService RPC accepts a user_id in its request and currently does not bind that field to the JWT actor itself. FileService must therefore derive user_id exclusively from its validated ClaimsPrincipal; it must never trust a client-supplied actor identifier.
 
 The FileService stage endpoint currently accepts multiple files and has a 50 MiB request-body limit including multipart framing. Proposed P03 behavior:
 
@@ -896,6 +926,7 @@ Reuse existing primitives; do not create a new generic design system or overwrit
 | P03-14 | Upload progress reflects actual transferred bytes; registration has a separate pending state. | React tests using progress events and deferred API responses. |
 | P03-15 | Repository UI uses actual data, existing shadcn primitives, and honest empty/loading/error states. | Vitest, build/lint, desktop/mobile browser captures. |
 | P03-16 | Existing P01/P02, FileService, Gateway, and SystemService regressions remain green. | Relevant DB-free regression suites and owner-authorized live checks. |
+| P03-17 | KnowledgeHub-purpose staging calls SystemService CheckPermission with the JWT-derived actor, controller knowledgehub, and ADD (2) before any FileStorage Temp write; denial/unavailability fails closed. | FileService tests assert exact RPC request/metadata/deadline and no Temp artifacts on deny/timeout; authorized call stages successfully; legacy upload behavior remains compatible. |
 
 ### 17.1. Required negative and race cases
 
@@ -903,7 +934,7 @@ At minimum:
 
 - Actor B cannot finalize Actor A's upload session.
 - Actor B cannot register, list, download, detail, or delete Actor A's document.
-- A valid token without the relevant KnowledgeHub action permission cannot register or delete.
+- A valid token without KnowledgeHub ADD cannot stage a KnowledgeHubDocument upload; SystemService denial and unavailability both produce no FileStorage Temp artifacts.
 - A guessed document UUID does not bypass ownership.
 - A guessed storage key is never accepted from the browser.
 - Collection soft-delete before upload intent prevents intent creation.
@@ -912,6 +943,7 @@ At minimum:
 - Retry after FileService finalize but before DB commit returns the same key and hash.
 - Partial finalize preserves the Temp source; corrupted destination fails closed.
 - FileService unavailable/timeout does not create false success.
+- SystemService CheckPermission false, unauthenticated, timeout, and unavailable results prevent KnowledgeHub-purpose staging before managed Temp writes.
 - FileService DeleteData success followed by DB cleanup-state failure remains retryable.
 - Deleted documents cannot be downloaded even while cleanup is pending.
 - Collection deletion does not set document deleted_at or call FileService DeleteData.
@@ -924,6 +956,7 @@ DB-free tests can cover:
 
 - SQL compilation and owner/active predicates.
 - Mocked FileService RPC metadata, deadlines, cancellation, and error mapping.
+- Mocked FileService-to-SystemService CheckPermission calls, including exact actor/controller/action metadata and fail-closed behavior.
 - FastAPI request/response contracts.
 - Registration state transitions and idempotency.
 - FileService private filesystem fixtures and gRPC listeners.
@@ -936,8 +969,9 @@ Do not claim real permission, TLS, FileService, DB, or Gateway acceptance from m
 
 ## 19. Risks And Deferred Contracts
 
-1. **Global FileService WriteGate:** staging/finalize/delete operations serialize. P03 frontend queues one upload at a time. A per-session lock redesign is not included without measured contention and a separate review.
-2. **Buffered PreviewFile:** 50 MiB unary response has memory cost in FileService and Python. P03 bounds size, receive-message limit, timeout, and concurrency. Streaming is a future design if measurements require it.
+1. **SystemService permission dependency:** KnowledgeHub-purpose stage now depends synchronously on SystemService CheckPermission. SystemService outage intentionally blocks that upload purpose; legacy upload purposes retain their existing path. No permission cache or fail-open fallback is allowed.
+2. **Global FileService WriteGate:** staging/finalize/delete operations serialize. P03 frontend queues one upload at a time. A per-session lock redesign is not included without measured contention and a separate review.
+3. **Buffered PreviewFile:** 50 MiB unary response has memory cost in FileService and Python. P03 bounds size, receive-message limit, timeout, and concurrency. Streaming is a future design if measurements require it.
 3. **Multipart overhead:** request envelope must be larger than the actual file-byte cap; preserve the 50 MiB file limit.
 4. **Stage-session retention:** an abandoned or parent-deleted Temp session may remain. P03 records the intent/state and never deletes uncertain data. P04/P11 must define safe Temp reconciliation.
 5. **Pending document file cleanup:** P03 persists cleanup state and retry-safe operation; P04/P11 must assign the durable worker or authorized operational reconciliation owner.
@@ -970,7 +1004,7 @@ The owner should be able to explain:
 
 ## 22. External References
 
-- Microsoft Learn, Authentication and authorization in gRPC for ASP.NET Core: https://learn.microsoft.com/en-us/aspnet/core/grpc/authn-and-authz
+- Microsoft Learn, Authentication and authorization in gRPC for ASP.NET Core: https://learn.microsoft.com/en-us/aspnet/core/grpc/authn-and-authz (per-call bearer metadata; call credentials require TLS).
 - Microsoft Learn, Reliable gRPC services with deadlines and cancellation: https://learn.microsoft.com/en-us/aspnet/core/grpc/deadlines-cancellation
 - PostgreSQL documentation, Partial Indexes: https://www.postgresql.org/docs/16/indexes-partial.html
 
