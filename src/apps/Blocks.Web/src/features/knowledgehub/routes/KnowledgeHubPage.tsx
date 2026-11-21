@@ -133,7 +133,7 @@ function KnowledgeHubWorkspace() {
   return (
     <section className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-5">
       <div className="flex min-w-0 flex-col justify-between gap-3 md:flex-row md:items-center">
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <CollectionSelector
             collections={collections}
             selected={selected}
@@ -152,7 +152,7 @@ function KnowledgeHubWorkspace() {
             }}
           />
           {selected && (
-            <Badge variant="secondary">
+            <Badge variant="secondary" className="shrink-0">
               {selected.DocumentCount + " tài liệu"}
             </Badge>
           )}
@@ -187,12 +187,15 @@ function KnowledgeHubWorkspace() {
       </div>
 
       <Tabs defaultValue="repository" className="w-full min-w-0 gap-4">
-        <TabsList className="h-auto max-w-full flex-wrap justify-start">
-          <TabsTrigger value="repository">
+        <TabsList className="h-auto max-w-full flex-wrap justify-start gap-1">
+          <TabsTrigger
+            value="repository"
+            className="h-auto flex-initial py-1.5"
+          >
             <FolderOpen className="size-4" />
             Kho tài liệu & Import
           </TabsTrigger>
-          <TabsTrigger value="research">
+          <TabsTrigger value="research" className="h-auto flex-initial py-1.5">
             <Bot className="size-4" />
             Hỏi đáp & Nghiên cứu
           </TabsTrigger>

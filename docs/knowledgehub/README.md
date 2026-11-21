@@ -1,7 +1,7 @@
 ﻿# KnowledgeHub Part Briefs And Session Handoff
 
 Date: 2026-11-01
-Status: P00 and P01 ACCEPTED; P02 ready for design.
+Status: P00, P01, and P02 ACCEPTED; P03 ready for design.
 
 Master: `docs/superpowers/specs/2026-10-27-knowledgehub-master-design.md`.
 
@@ -16,7 +16,7 @@ plan is too large for a beginner to understand and verify incrementally.
 | --- | --- | --- | --- |
 | P00 | Integration decisions and contracts | Master approved | ACCEPTED |
 | P01 | Python runtime, Gateway, identity | P00 | ACCEPTED |
-| P02 | Collections and React feature frame | P01 | NOT STARTED |
+| P02 | Collections and React feature frame | P01 | ACCEPTED |
 | P03 | File lifecycle and document repository | P02 | NOT STARTED |
 | P04 | Durable worker and job lifecycle | P03 | NOT STARTED |
 | P05 | Parsing, chunks, source view, keyword search | P04 | NOT STARTED |
