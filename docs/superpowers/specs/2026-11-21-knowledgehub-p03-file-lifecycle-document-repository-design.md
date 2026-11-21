@@ -321,7 +321,9 @@ P03 multipart fields:
 - FolderName: the UUID UploadSessionId returned/registered by the KnowledgeHub upload-intent API.
 - UploadPurpose: fixed value KnowledgeHubDocument.
 
-UploadPurpose is a restrictive scope marker for validation, not an authorization credential. FileService must still bind the staged session to the ActorId from the verified JWT. Only KnowledgeHub backend gRPC finalization can turn the staged session into an active KnowledgeHub key.
+UploadPurpose is a restrictive scope marker for validation, not an authorization credential. Persist it in the upload-session manifest so finalization can verify that the staged purpose matches the requested namespace. FileService must still bind the staged session to the ActorId from the verified JWT. Only KnowledgeHub backend gRPC finalization can turn the staged session into an active KnowledgeHub key.
+
+**Authorization boundary requiring owner confirmation:** the existing generic stage HTTP endpoint authenticates the user but does not itself call KnowledgeHub CheckPermission. Under the proposed MVP default, the upload-intent and finalize APIs enforce KnowledgeHub ADD (2), while stage remains an actor-bound, temporary-only operation; public Gateway still blocks FileProto gRPC, so staging alone cannot publish a document. This means an authenticated user without KnowledgeHub ADD could still allocate bounded Temp storage by calling the generic stage route directly. If that residual resource-abuse path is unacceptable, P03 must add a purpose-specific SystemService ADD check in FileService before writing Temp, or design a one-time upload grant. Do not treat UploadPurpose as proof of ADD permission.
 
 The FileService stage endpoint currently accepts multiple files and has a 50 MiB request-body limit including multipart framing. Proposed P03 behavior:
 
@@ -620,14 +622,15 @@ No storage path or upload session is accepted in the request body. The backend l
 Flow:
 
 1. Validate JWT and ADD permission.
-2. Load the document intent and parent collection using actor ownership and collection.deleted_at IS NULL.
+2. Load the document intent by ID through its parent collection owner. A missing or foreign-owned intent returns the uniform 404. If the owned parent collection is already soft-deleted, set BLOCKED_PARENT_DELETED, do not call FileService, and return a safe unavailable/not-found result. Otherwise continue only when collection.deleted_at IS NULL.
 3. Atomically claim a registration attempt by setting REGISTERING, a fresh attempt ID, and a lease expiry. A concurrent active attempt returns a pending/conflict result; a stale lease can be reclaimed.
 4. Commit the attempt claim before the external RPC. Do not hold a database transaction over gRPC.
 5. Call FileService UploadData with server-fixed target KnowledgeHub/Documents, RelatedId equal to DocumentId, and TempFolder equal to UploadSessionId.
 6. Validate the returned trusted attachment and SHA256 against the intent.
 7. Open a new database transaction. Lock/recheck the parent collection row and verify it is still active and owned by the actor.
 8. If the collection is still active, persist file_id, storage_key, actual size, SHA256, content type, REGISTERED, and registered_at. Clear attempt/error fields.
-9. Commit before returning success.
+9. If the collection became deleted while FileService was finalizing, persist the trusted returned reference and mark PARENT_DELETED_RETAINED. Do not expose it through normal repository APIs and do not call FileService DeleteData.
+10. Commit before returning success.
 
 Idempotency:
 
@@ -635,6 +638,7 @@ Idempotency:
 - If FileService finalizes successfully but the KnowledgeHub DB commit fails, keep the intent and retry the same UploadData request with the same DocumentId and UploadSessionId. FileService's same-target finalized retry must return the same trusted key and metadata.
 - Never generate a new DocumentId on retry.
 - A target mismatch is a conflict.
+- On a FileService error, if the attempt ID still matches, set REGISTRATION_FAILED, persist a safe error code, and clear the lease. A timeout is an uncertain result; retry with the same IDs.
 - If FileService reports a partial/corrupt destination, preserve the Temp source and trusted intent; fail closed and require reconciliation. Do not delete an uncertain original.
 
 ### 10.4. Registration concurrency and leases
