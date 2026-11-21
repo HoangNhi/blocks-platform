@@ -1,7 +1,7 @@
 # KnowledgeHub P03: File Lifecycle And Document Repository
 
 Date: 2026-11-21  
-Status: DRAFT - owner approval pending  
+Status: ACCEPTED - owner approved 2026-11-21  
 Prerequisites: approved Master Design; P00 ACCEPTED; P01 ACCEPTED; P02 ACCEPTED  
 Master: docs/superpowers/specs/2026-10-27-knowledgehub-master-design.md  
 P00: docs/superpowers/specs/2026-10-27-knowledgehub-p00-integration-contracts-design.md  
@@ -1020,7 +1020,7 @@ The owner should be able to explain:
 
 ## 23. Approval Boundary
 
-This document is DRAFT until the owner approves it.
+This document was approved by the owner on 2026-11-21. Implementation is still owner-performed under the manual learning workflow; approval of this design does not authorize database mutation, deployment, permission changes, or agent-written product code.
 
 After approval, use Superpowers writing-plans to prepare a manual, small-step implementation plan. The plan must cover:
 
