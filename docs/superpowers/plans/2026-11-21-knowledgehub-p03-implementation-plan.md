@@ -112,9 +112,7 @@ If a file has changed since planning, update the task before editing. Do not for
 
 ## 5. Execution order and stop gates
 
-<box>
-Not applicable: this is a repository plan, not a UI artifact.
-</box>
+Execution is sequential: preflight -> FileService -> SQL draft/review -> KnowledgeHub backend -> React -> integrated acceptance. The dependency gates below define when the next workstream may start.
 
 | Order | Task group | Depends on | Stop condition |
 | --- | --- | --- | --- |
