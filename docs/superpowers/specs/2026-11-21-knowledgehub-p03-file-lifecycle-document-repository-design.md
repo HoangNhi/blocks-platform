@@ -323,42 +323,43 @@ Continue using the existing Gateway-exposed HTTP endpoint:
 POST /File/api/UploadFile
 Content-Type: multipart/form-data
 Authorization: Bearer <current user token>
+X-Upload-Purpose: KnowledgeHubDocument
 ~~~
 
 P03 multipart fields:
 
 - files: exactly one file for a KnowledgeHub document.
 - FolderName: the UUID UploadSessionId returned/registered by the KnowledgeHub upload-intent API.
-- UploadPurpose: fixed value KnowledgeHubDocument.
 
-UploadPurpose is a restrictive scope marker for validation, not an authorization credential. Persist it in the upload-session manifest so finalization can verify that the staged purpose matches the requested namespace. FileService must still bind the staged session to the ActorId from the verified JWT. Only KnowledgeHub backend gRPC finalization can turn the staged session into an active KnowledgeHub key.
+The request header X-Upload-Purpose carries the fixed value KnowledgeHubDocument. It is a restrictive scope marker for validation, not an authorization credential. It is deliberately a header rather than a multipart field so FileService can authorize the purpose before MVC model binding reads or buffers the multipart body. Persist the validated purpose in the upload-session manifest so finalization can verify that the staged purpose matches the requested namespace. FileService must still bind the staged session to the ActorId from the verified JWT. Only KnowledgeHub backend gRPC finalization can turn the staged session into an active KnowledgeHub key.
 
-**Confirmed authorization policy (owner-selected option A):** FileService must call the existing SystemService SystemProto.CheckPermission before it creates a KnowledgeHub upload session, writes a batch, or persists a manifest in its managed Temp storage.
+**Confirmed authorization policy (owner-selected option A):** FileService must call the existing SystemService SystemProto.CheckPermission before it creates a KnowledgeHub upload session, reads/buffers the multipart body through MVC model binding, writes a batch, or persists a manifest in its managed Temp storage.
 
-For a request whose exact UploadPurpose is KnowledgeHubDocument:
+For a request whose exact X-Upload-Purpose header is KnowledgeHubDocument:
 
-1. FileService first validates that the JWT-authenticated principal exists and derives the actor GUID from the validated name claim using the existing GetActorId() contract.
-2. FileService obtains the current bearer token from the authenticated HTTP request. It must not accept a user ID, controller, action, or bearer token from multipart fields.
-3. FileService calls SystemProto.CheckPermission with user_id = actorId, controller = "knowledgehub", and action = 2 (ADD). The call sends x-service-authorization: Bearer <current request token> as per-call gRPC metadata, uses the private SystemService endpoint over TLS, has a bounded deadline, and propagates request cancellation.
-4. A success=false response is a permission denial (application 403). Unauthenticated is 401. Deadline, unavailable, or unexpected SystemService RPC failures are safe 503 responses. All failures are fail-closed: no FileStorage Temp session directory, batch, file, or manifest is created.
+1. The existing authentication middleware validates the bearer JWT. A purpose-specific MVC IAsyncAuthorizationFilter reads the header before model binding and derives the actor GUID from the validated name claim using the existing GetActorId() contract.
+2. The filter obtains the current bearer token from the authenticated HTTP request. It must not accept a user ID, controller, action, or bearer token from query/form fields.
+3. The filter calls SystemProto.CheckPermission with user_id = actorId, controller = "knowledgehub", and action = 2 (ADD). The call sends x-service-authorization: Bearer <current request token> as per-call gRPC metadata, uses the private SystemService endpoint over TLS, has a bounded deadline, and propagates request cancellation.
+4. A success=false response is a permission denial (application 403). Unauthenticated is 401. Deadline, unavailable, or unexpected SystemService RPC failures are safe 503 responses. All failures are fail-closed and short-circuit MVC before multipart model binding; no IFormFile form buffering, FileStorage Temp session directory, batch, file, or manifest is created.
 5. The permission check is performed on every KnowledgeHub-purpose stage request. Do not cache permission decisions or retry a failed permission call in P03.
-6. This check occurs before FileService-managed Temp writes. ASP.NET Core may already have parsed/buffered the bounded multipart request while model binding constructs IFormFile; that framework request buffering is not a FileService upload session and must remain bounded by the request limit.
+6. An absent X-Upload-Purpose header retains the legacy upload path. Unknown non-empty values fail closed before model binding. The request size limit remains enforced for authorized uploads.
 
 Implementation impact:
 
 - Generate a FileService client from the existing src/services/Blocks.SystemService/Protos/system.proto with GrpcServices="Client"; do not generate from C# obj output or copy the proto.
 - Register a SystemProto.SystemProtoClient in FileService ConfigService, using the existing SystemService gRPC-Web client pattern and the private HTTPS endpoint. The existing SystemService server already maps SystemProto through gRPC-Web.
 - Reuse the existing FileService-to-SystemService AppHost reference. Configure the SystemService client address to the internal HTTPS endpoint and verify TLS trust; do not route the permission RPC through API Gateway.
-- Add a narrow permission-client abstraction or equivalent test seam so denial, RPC failure, metadata, deadline, cancellation, and no-write behavior can be tested without a live SystemService.
+- Add a narrow permission-client abstraction or equivalent test seam so denial, RPC failure, metadata, deadline, cancellation, and no-body-read behavior can be tested without a live SystemService.
 - Relevant FileService implementation touchpoints are:
   - Blocks.FileService.csproj: generate the SystemProto client from the existing system.proto.
-  - Configs/ConfigService.cs: register the SystemProto client with the existing gRPC-Web handler pattern.
-  - Controllers/UploadFileController.cs: bind the optional UploadPurpose form field and pass it to the service.
-  - Services/CoreFeature/UploadFile/IUploadFileService.cs and UploadFileService.cs: pass the purpose, authorize it, and preserve the legacy path.
+  - Configs/ConfigService.cs: register the SystemProto client with the existing gRPC-Web handler pattern and register the authorization filter.
+  - Controllers/UploadFileController.cs: attach the purpose-specific authorization filter and bind optional X-Upload-Purpose from the request header.
+  - Infrastructure/Filters/KnowledgeHubUploadPermissionFilter.cs: implement IAsyncAuthorizationFilter so CheckPermission runs before MVC form model binding.
+  - Services/CoreFeature/UploadFile/IUploadFileService.cs and UploadFileService.cs: pass the validated purpose, require the filter's request-scoped authorization marker, persist the purpose, and preserve the legacy path.
   - Infrastructure/Storage/UploadSessionStore.cs: persist and validate the purpose in the upload-session manifest.
   - Blocks.AppHost/AppHost.cs: configure FileService's SystemService client to the internal HTTPS endpoint using the existing FileService-to-SystemService reference. This setting is also used by the existing AuditProto client, so audit behavior must be regression-tested.
-  - test/FileService.RemovalChecks/Program.cs (and focused helper files if needed): verify authorization and no-write behavior.
-- Preserve legacy uploads whose UploadPurpose is absent; they retain existing authorization behavior and cannot be finalized into the KnowledgeHub namespace. Unknown non-empty purpose values fail closed.
+  - test/FileService.RemovalChecks/Program.cs (and focused helper files if needed): verify authorization, pre-model-binding short-circuit, and no-write behavior.
+- Preserve legacy uploads whose X-Upload-Purpose header is absent; they retain existing authorization behavior and cannot be finalized into the KnowledgeHub namespace. Unknown non-empty purpose values fail closed.
 - UploadDataAsync must require the manifest purpose to be KnowledgeHubDocument whenever the requested target is KnowledgeHub/Documents. A client cannot bypass the permission check by omitting the purpose marker and later requesting a KnowledgeHub target.
 
 The SystemService RPC accepts a user_id in its request and currently does not bind that field to the JWT actor itself. FileService must therefore derive user_id exclusively from its validated ClaimsPrincipal; it must never trust a client-supplied actor identifier.
@@ -640,9 +641,9 @@ Successful Data:
 
 After receiving the intent, the browser posts one file to /File/api/UploadFile through Gateway with:
 
-- files: selected File.
-- FolderName: UploadSessionId.
-- UploadPurpose: KnowledgeHubDocument.
+- Multipart files: selected File.
+- Multipart FolderName: UploadSessionId.
+- Header X-Upload-Purpose: KnowledgeHubDocument.
 
 The existing authenticated Blocks API client supplies the user's bearer token. The frontend must use multipart FormData and must not hard-code the multipart boundary. Because the shared Axios instance defaults to JSON, the upload adapter must explicitly allow Axios/browser FormData handling rather than sending a JSON content type.
 
@@ -910,6 +911,7 @@ Reuse existing primitives; do not create a new generic design system or overwrit
 
 - Use existing src/lib/api.ts and API_ENDPOINTS.
 - Add a narrowly scoped multipart upload helper/configuration; do not duplicate token refresh logic.
+- Set X-Upload-Purpose: KnowledgeHubDocument as a request header, not a multipart field.
 - Let Axios/browser set the multipart boundary.
 - Extend the download helper narrowly to support the required timeout and blob-envelope handling.
 - Keep the browser on Gateway URLs only. The browser never receives the internal FileService gRPC endpoint.
@@ -934,7 +936,7 @@ Reuse existing primitives; do not create a new generic design system or overwrit
 | P03-14 | Upload progress reflects actual transferred bytes; registration has a separate pending state. | React tests using progress events and deferred API responses. |
 | P03-15 | Repository UI uses actual data, existing shadcn primitives, and honest empty/loading/error states. | Vitest, build/lint, desktop/mobile browser captures. |
 | P03-16 | Existing P01/P02, FileService, Gateway, and SystemService regressions remain green. | Relevant DB-free regression suites and owner-authorized live checks. |
-| P03-17 | KnowledgeHub-purpose staging calls SystemService CheckPermission with the JWT-derived actor, controller knowledgehub, and ADD (2) before any FileStorage Temp write; denial/unavailability fails closed. | FileService tests assert exact RPC request/metadata/deadline and no Temp artifacts on deny/timeout; authorized call stages successfully; legacy upload behavior remains compatible. |
+| P03-17 | KnowledgeHub-purpose staging calls SystemService CheckPermission with the JWT-derived actor, controller knowledgehub, and ADD (2) in an MVC authorization filter before multipart model binding; denial/unavailability fails closed without reading/buffering the body or writing Temp. | FileService tests assert exact RPC request/metadata/deadline, pre-model-binding short-circuit, and no Temp artifacts on deny/timeout; authorized call stages successfully; legacy upload behavior remains compatible. |
 
 ### 17.1. Required negative and race cases
 
@@ -942,7 +944,7 @@ At minimum:
 
 - Actor B cannot finalize Actor A's upload session.
 - Actor B cannot register, list, download, detail, or delete Actor A's document.
-- A valid token without KnowledgeHub ADD cannot stage a KnowledgeHubDocument upload; SystemService denial and unavailability both produce no FileStorage Temp artifacts.
+- A valid token without KnowledgeHub ADD cannot stage a KnowledgeHubDocument upload; SystemService denial and unavailability short-circuit before multipart model binding and produce no FileStorage Temp artifacts.
 - A guessed document UUID does not bypass ownership.
 - A guessed storage key is never accepted from the browser.
 - Collection soft-delete before upload intent prevents intent creation.
@@ -951,7 +953,7 @@ At minimum:
 - Retry after FileService finalize but before DB commit returns the same key and hash.
 - Partial finalize preserves the Temp source; corrupted destination fails closed.
 - FileService unavailable/timeout does not create false success.
-- SystemService CheckPermission false, unauthenticated, timeout, and unavailable results prevent KnowledgeHub-purpose staging before managed Temp writes.
+- SystemService CheckPermission false, unauthenticated, timeout, and unavailable results short-circuit before multipart model binding and prevent KnowledgeHub-purpose staging.
 - FileService DeleteData success followed by DB cleanup-state failure remains retryable.
 - Deleted documents cannot be downloaded even while cleanup is pending.
 - Collection deletion does not set document deleted_at or call FileService DeleteData.
