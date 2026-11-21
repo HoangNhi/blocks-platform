@@ -1,5 +1,40 @@
 # KnowledgeHub P03-A: FileService Namespace And Upload Authorization - Implementation Plan
 
+> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans only after owner approval of execution. Steps use checkbox syntax for tracking. The owner writes product code and SQL.
+
+**Goal:** Extend FileService with an exact KnowledgeHub document namespace and require KnowledgeHub ADD permission before MVC parses a purpose-marked multipart upload or FileService writes managed Temp data.
+
+**Architecture:** A purpose-specific MVC authorization filter calls the existing SystemService CheckPermission RPC using the validated user's JWT and actor claim. Authorized uploads use the existing actor-bound manifest, private Temp/Files/Deleted areas, finalize/preview/delete RPCs, and receipt mechanism; legacy System Attachment and Avatar paths remain unchanged.
+
+**Tech Stack:** .NET 10, C#, ASP.NET Core MVC filters, SystemProto gRPC-Web client, JWT bearer authentication, FileStorage, UploadSessionStore, Google.Protobuf, FileService.RemovalChecks.
+
+**Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
+
+## Detailed global constraints
+
+- Permission tuple is controller=knowledgehub and action=2 (ADD), with actor ID derived from the validated JWT name claim.
+- Per-call metadata is x-service-authorization: Bearer <current request JWT>; use private HTTPS SystemService, bounded deadline, and request cancellation.
+- Denial/unavailable fails closed before MVC multipart model binding and before managed FileStorage Temp writes.
+- Stage purpose is the HTTP header X-Upload-Purpose: KnowledgeHubDocument; it is not a multipart field.
+- Actual file bytes remain <=50 MiB; request/multipart envelope may be 51 MiB.
+- KnowledgeHub accepts exactly one .pdf, .md, or .txt file per upload session. Do not globally broaden legacy file extensions.
+- Canonical key is KnowledgeHub/Documents/{documentId}/{fileId}.{extension}; preserve old manifests and System/Attachments/System/Avatar behavior.
+- source_sha256 is additive protobuf field 9; preserve fields 1-8.
+- No public gRPC route, static file exposure, direct filesystem access, physical purge, dependency installation, or secret in tracked files.
+- The owner writes all product code and tests.
+
+## Review Focus
+
+- Missing/mismatched JWT key, issuer, or audience must fail closed; test configuration validation and keep secrets out of Git.
+- Permission denial/timeout must short-circuit before MVC form binding and create no managed Temp artifacts; test false, unauthenticated, unavailable, and cancellation.
+- Purpose header omission preserves legacy behavior; unknown values fail closed; purpose must persist in old-compatible manifests and gate finalization.
+- KnowledgeHub key parsing and ReceiptKeyHash must use the same exact four-segment namespace; test traversal, wrong IDs, wrong extension, delete receipt, and finalize-after-delete.
+- A short-circuited authorization filter can bypass AuditActionFilter; test denied-attempt audit and preserve existing AuditProto behavior without logging JWT/body/key.
+
+---
+
+
+
 Date: 2026-11-21  
 Status: PROPOSED - owner execution plan; review before starting  
 Branch: feature/knowledgehub-learning  
@@ -7,13 +42,13 @@ Accepted specification: docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-
 Parent plan: docs/superpowers/plans/2026-11-21-knowledgehub-p03-implementation-plan.md  
 Repository rules: AGENTS.md
 
-## Goal
+## Outcome details
 
 Extend the existing Blocks FileService without creating a second storage system. A KnowledgeHub-purpose upload must be authorized by SystemService before MVC parses the multipart form and before FileService writes a session, batch, file, or manifest into its managed Temp area. Authorized files can then be finalized under the exact KnowledgeHub/Documents namespace, previewed, and deleted through the existing private storage lifecycle.
 
 This workstream must leave legacy System Attachment and Avatar behavior unchanged.
 
-## Architecture
+## Lifecycle flow
 
 ~~~text
 Browser
@@ -50,7 +85,7 @@ KnowledgeHub/Documents/<document-id>/<file-id>.<ext>
 
 The authorization filter runs before MVC model binding. It can prevent MVC from parsing/buffering IFormFile form fields and can prevent FileStorage Temp writes on denial. It cannot guarantee that the browser, Kestrel, or a reverse proxy has not already received/transmitted bytes at the network layer. Request-size limits remain mandatory.
 
-## Tech Stack
+## Tooling details
 
 - .NET 10 / C#.
 - ASP.NET Core MVC authorization filters.
@@ -61,7 +96,7 @@ The authorization filter runs before MVC model binding. It can prevent MVC from 
 
 Do not add NuGet packages. Grpc.AspNetCore.Web, Grpc.Net.Client.Web, Grpc.Net.ClientFactory, Grpc.Tools, and Google.Protobuf already exist in Blocks.FileService.csproj.
 
-## Specification
+## Detailed specification contract
 
 Read the accepted P03 specification, especially sections 4, 7, 17, 18, and 19. The owner-approved option A requires SystemService CheckPermission with:
 
@@ -93,7 +128,7 @@ Stage purpose is the HTTP header X-Upload-Purpose: KnowledgeHubDocument. Do not 
 - Preserve audit logging. Authorization-filter short-circuiting can bypass action filters; explicitly test denied-attempt audit behavior.
 - The owner writes all product code and tests.
 
-## Review Focus Before Coding
+## Detailed review focus before coding
 
 1. Confirm all FileServiceHost.Build test fixtures supply JWT issuer, audience, and key. ConfigureAuthentication currently has a fallback key when Jwt:Key is absent; remove it so the service cannot silently authenticate with a test-only default.
 2. Check actual local FileService and SystemService JWT issuer/audience/key configuration without printing or committing secrets. They must validate the same user tokens. Do not put secret values in AppHost.cs.
@@ -103,6 +138,27 @@ Stage purpose is the HTTP header X-Upload-Purpose: KnowledgeHubDocument. Do not 
 6. The existing AuditActionFilter is an action filter. A pre-model-binding authorization short-circuit may bypass it. Denied attempts must still be auditable through the existing AuditProto path without logging the JWT, file bytes, or storage key.
 7. UploadSessionStore.WriteGate serializes staging/finalize/delete mutations globally. Keep P03 uploads sequential; do not redesign locks without a separate measured need.
 8. ReceiptKeyHash currently has only Avatar and System Attachments canonicalization. A KnowledgeHub key must get its own explicit canonicalization branch.
+
+## File Map
+
+| Action | File | Responsibility |
+| --- | --- | --- |
+| Modify | src/services/Blocks.FileService/Blocks.FileService.csproj | Generate the existing SystemProto client. |
+| Modify | src/services/Blocks.FileService/Configs/ConfigService.cs | Register SystemProto client and authorization filter. |
+| Modify | src/services/Blocks.FileService/Configs/ConfigureAuthentication.cs | Remove fallback JWT key and validate issuer/audience/key. |
+| Modify | src/services/Blocks.FileService/Controllers/UploadFileController.cs | Attach filter, read validated purpose marker, pass it to Insert, raise request envelope limit. |
+| Create | src/services/Blocks.FileService/Infrastructure/Filters/KnowledgeHubUploadPermissionFilter.cs | Check KnowledgeHub ADD before form model binding. |
+| Modify | src/services/Blocks.FileService/Services/CoreFeature/UploadFile/IUploadFileService.cs | Add purpose-aware Insert and metadata finalize method. |
+| Modify | src/services/Blocks.FileService/Services/CoreFeature/UploadFile/UploadFileService.cs | Purpose validation, stage idempotency, namespace finalize, hash result, receipt key. |
+| Modify | src/services/Blocks.FileService/Infrastructure/Storage/UploadSessionStore.cs | Persist optional purpose and validate Document target. |
+| Modify | src/services/Blocks.FileService/Infrastructure/Storage/FileStorage.cs | Resolve exact four-segment KnowledgeHub key. |
+| Create | src/services/Blocks.FileService/DTOs/CoreFeature/UploadFile/FinalizedAttachment.cs | Attachment plus trusted SHA256. |
+| Modify | src/services/Blocks.FileService/Protos/file.proto | Add source_sha256 field 9. |
+| Modify | src/services/Blocks.FileService/Services/gRPC/FileGrpcService.cs | Map trusted hash into field 9. |
+| Modify | src/platform/Blocks.AppHost/AppHost.cs | Configure FileService -> SystemService HTTPS endpoint. |
+| Create | test/FileService.RemovalChecks/KnowledgeHubUploadPermissionChecks.cs | Permission, stage, namespace, retry, and compatibility tests. |
+| Modify | test/FileService.RemovalChecks/Program.cs | Add permissions harness mode. |
+| Modify | test/FileService.RemovalChecks/UpgradeChecks.cs | Protobuf field and size-limit assertions. |
 
 ## Task FS-00 - Preflight and inspect current call sites
 
@@ -133,6 +189,15 @@ Stage purpose is the HTTP header X-Upload-Purpose: KnowledgeHubDocument. Do not 
 
 **Files:** no product files changed.
 
+**Interfaces:**
+- Consumes: current FileService, SystemService, AppHost, and RemovalChecks source.
+- Produces: a baseline note with all Insert/UploadDataAsync callers, test modes, limits, proto field numbers, and current failures.
+
+- [ ] Step 1: Run git status, branch, and HEAD checks; preserve all pre-existing changes.
+- [ ] Step 2: Inspect every call site and record current contracts/limits.
+- [ ] Step 3: Run the existing FileService.RemovalChecks all mode and record baseline output.
+- [ ] Step 4: Confirm the five Review Focus cases have an owning task/test below.
+
 **Checkpoint:** you can explain the HTTP stage path, actor binding, manifest structure, finalize path, preview/delete path, and test harness modes.
 
 ## Task FS-01 - Generate the existing SystemProto client
@@ -158,6 +223,16 @@ dotnet build src/services/Blocks.FileService/Blocks.FileService.csproj
 ~~~
 
 Expected generated client namespace/type: Blocks.SystemService.Protos.SystemProto.SystemProtoClient, including CheckPermissionAsync.
+
+**Interfaces:**
+- Consumes: src/services/Blocks.SystemService/Protos/system.proto.
+- Produces: Blocks.SystemService.Protos.SystemProto.SystemProtoClient with CheckPermissionAsync, available to ConfigService.
+
+- [ ] Step 1: Add an UpgradeChecks assertion that the SystemProto client contract is linked from the source proto.
+- [ ] Step 2: Run the focused upgrade check and confirm the new assertion fails before the csproj entry exists.
+- [ ] Step 3: Add the Protobuf client entry in Blocks.FileService.csproj.
+- [ ] Step 4: Run dotnet build src/services/Blocks.FileService/Blocks.FileService.csproj and the focused upgrade check; both must pass.
+- [ ] Step 5: Review the diff and commit the client-generation change.
 
 **Done when:** the FileService project compiles and the new client is generated from the source proto.
 
@@ -206,6 +281,17 @@ Do not log the key. Do not hard-code secrets in AppHost or appsettings.json. The
 ### FS-02.4 - Regression
 
 Run the existing gRPC-Web audit test and FileService upgrade checks. Verify AuditProto still reaches SystemService using the configured HTTPS endpoint and still forwards expected service authorization metadata where applicable.
+
+**Interfaces:**
+- Consumes: SystemProto.SystemProtoClient from FS-01 and the existing AuditProto client.
+- Produces: both clients configured against GrpcClients:SystemService; FileService JWT validation requires configured key/issuer/audience.
+
+- [ ] Step 1: Add a DB-free configuration test proving missing Jwt:Key, Jwt:Issuer, or Jwt:Audience is rejected.
+- [ ] Step 2: Run that focused test and confirm it fails with the current fallback behavior.
+- [ ] Step 3: Register SystemProto in ConfigService and configure the HTTPS endpoint in AppHost.
+- [ ] Step 4: Remove the fallback key and add startup validation for key, issuer, and audience.
+- [ ] Step 5: Run FileService build, configuration test, gRPC-Web audit regression, and Backend.Upgrade.Check.ps1 -Check all.
+- [ ] Step 6: Review that no secret is tracked; commit the configuration change.
 
 **Checkpoint:** FileService starts only with configured JWT trust and can create both gRPC-Web clients. No secret appears in tracked files.
 
@@ -270,6 +356,18 @@ Audit fields may include actor ID, username, action UPLOAD_FILE, service name, o
 Verify the browser's X-Upload-Purpose header is allowed by the current Gateway/FileService CORS configuration. If not, add only the required header to the existing allowed-header policy. Do not widen Gateway FileService route exposure or allow FileProto gRPC.
 
 **Tests to add in FS-07:** no SystemService call for legacy requests; exact CheckPermission request for purpose requests; false/timeout/unavailable fail closed; unknown purpose rejected; action/form binding does not run on denial; no managed Temp artifacts.
+
+**Interfaces:**
+- Consumes: SystemProto.SystemProtoClient and authenticated HttpContext.
+- Produces: KnowledgeHubUploadPermissionFilter.OnAuthorizationAsync(AuthorizationFilterContext) and HttpContext.Items["ValidatedUploadPurpose"] only after ADD succeeds.
+
+- [ ] Step 1: Add focused tests for missing purpose, unknown purpose, ADD allowed, ADD denied, invalid JWT claim, SystemService unavailable, and request cancellation.
+- [ ] Step 2: Run the tests and confirm they fail because the filter does not exist.
+- [ ] Step 3: Implement the filter, attach it to UploadFileController.Post, and register it in ConfigService.
+- [ ] Step 4: Ensure expected errors set context.Result; do not throw from the authorization filter.
+- [ ] Step 5: Add the denied-attempt audit path if the existing action filter is bypassed; test exactly one audit event and no secret/body fields.
+- [ ] Step 6: Run focused permission tests and verify the action/form binding does not execute on denial.
+- [ ] Step 7: Review and commit the filter and audit behavior.
 
 **Done when:** the authorization decision is complete before MVC form model binding and is derived only from the validated JWT.
 
@@ -338,6 +436,18 @@ For KnowledgeHubDocument only:
 
 Legacy upload retry behavior remains unchanged.
 
+**Interfaces:**
+- Consumes: ValidatedUploadPurpose from FS-03.
+- Produces: Insert(List<IFormFile> files, string folderName, CancellationToken cancellationToken = default, string? uploadPurpose = null) and an UploadSession.Purpose field defaulting to null.
+
+- [ ] Step 1: Add failing tests for old manifest deserialization, target-specific extension/one-file validation, same-session same-content retry, and changed-content conflict.
+- [ ] Step 2: Run the focused session tests and record the expected failures.
+- [ ] Step 3: Update Controller request envelope to 51 MiB and pass only the server-validated purpose marker.
+- [ ] Step 4: Add the optional purpose to Insert and the backward-compatible manifest.
+- [ ] Step 5: Implement KnowledgeHub-only validation and idempotent retry while preserving legacy behavior.
+- [ ] Step 6: Run sessions and lifecycle harness modes; confirm actual bytes remain capped at 50 MiB.
+- [ ] Step 7: Review and commit the stage/manifest change.
+
 **Checkpoint:** KnowledgeHub purpose is persisted, old manifests still load, same-content retry is idempotent, and different-content retry cannot replace an existing session.
 
 ## Task FS-05 - Add the KnowledgeHub/Documents active storage key and finalize path
@@ -395,6 +505,18 @@ PreviewFileAsync and DeleteDataAsync already call ResolveActiveKey. They should 
 
 **Tests:** valid/invalid namespace, traversal, wrong GUID, wrong extension, same-target retry, wrong-target conflict, corrupted destination, partial finalize preserving source, delete receipt retry, reject deleted target, legacy Attachment/Avatar regression.
 
+**Interfaces:**
+- Consumes: UploadSession.Purpose from FS-04.
+- Produces: ResolveActiveKey accepting only KnowledgeHub/Documents/{documentId}/{fileId}.{extension}; UploadDataAsync finalizes the Document target and DeleteData/PreviewFile resolve the same key.
+
+- [ ] Step 1: Add failing FileStorage path tests and receipt hash tests for valid four-segment keys and invalid/traversal keys.
+- [ ] Step 2: Run the focused paths/lifecycle checks and confirm the KnowledgeHub cases fail.
+- [ ] Step 3: Add the exact KnowledgeHub branch to ResolveActiveKey.
+- [ ] Step 4: Add KnowledgeHub target validation/finalization to UploadFileService.
+- [ ] Step 5: Add an explicit ReceiptKeyHash prefix branch for KnowledgeHub/Documents; distinguish it from System/Attachments by prefix, not segment count.
+- [ ] Step 6: Run paths, sessions, and lifecycle modes, including legacy Attachment/Avatar cases.
+- [ ] Step 7: Review and commit the namespace/receipt change.
+
 ## Task FS-06 - Return trusted SHA256 without changing shared DTOs
 
 ### FS-06.1 - Add a FileService-specific result type
@@ -432,6 +554,17 @@ Do not change or reuse field numbers 1-8. Do not add a new RPC.
 UploadData must call UploadDataWithMetadataAsync and map SourceSha256 to ModelAttachmentProto.SourceSha256. Keep all existing field mappings intact.
 
 **Tests:** verify the source hash is 64 hex characters and matches the staged manifest; verify FileProto field 9 exists and fields 1-8 remain unchanged; verify an old consumer can ignore the additive field.
+
+**Interfaces:**
+- Consumes: finalized ModelAttachment and StoredUploadFile manifest SHA256.
+- Produces: UploadDataWithMetadataAsync returning FinalizedAttachment(Attachment, SourceSha256); existing UploadDataAsync remains a compatibility wrapper; FileGrpcService returns source_sha256 field 9 in lowercase hex.
+
+- [ ] Step 1: Add failing UpgradeChecks assertions for field 9 and the existing field numbers.
+- [ ] Step 2: Run the focused upgrade check and confirm field 9 is absent.
+- [ ] Step 3: Add FinalizedAttachment and the metadata-returning service method; preserve the existing method wrapper.
+- [ ] Step 4: Append protobuf field source_sha256=9 and map it in FileGrpcService.
+- [ ] Step 5: Run build, lifecycle tests, and upgrade tests; assert lowercase 64-character SHA256.
+- [ ] Step 6: Review and commit the additive wire change.
 
 ## Task FS-07 - Add deterministic permission, storage, and compatibility tests
 
@@ -483,6 +616,16 @@ git diff --check
 ~~~
 
 If a harness mode is named differently in the current checkout, use the actual Program.cs mode list rather than renaming unrelated tests.
+
+**Interfaces:**
+- Consumes: filter, stage, namespace, receipt, and protobuf contract from FS-01 through FS-06.
+- Produces: a passing DB-free FileService.RemovalChecks harness with permissions mode.
+
+- [ ] Step 1: Add KnowledgeHubUploadPermissionChecks and its ephemeral SystemProto gRPC-Web responder.
+- [ ] Step 2: Add the permissions mode to Program.cs and keep all mode.
+- [ ] Step 3: Add compatibility assertions to UpgradeChecks.
+- [ ] Step 4: Run permissions, paths, sessions, lifecycle, transport, gateway, boundary, migration, upgrade, and all modes.
+- [ ] Step 5: Record exact PASS/FAIL/NOT RUN and commit the test harness.
 
 **Done when:** all new permission tests pass; all legacy FileService regressions pass; project builds; no real service or database was needed.
 
