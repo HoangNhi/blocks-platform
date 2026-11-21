@@ -310,7 +310,7 @@ Methods:
 - require canonical KnowledgeHub/Documents key containing the expected document ID and file ID;
 - require extension matches the upload intent;
 - require actual file size matches declared size and <=50 MiB;
-- require source_sha256 is 64 hex characters;
+- require source_sha256 is 64 hex characters, then normalize it to lowercase before persistence to match the SQL contract;
 - return an internal typed result, never a public DTO.
 
 **preview_file(user, storage_key):**
