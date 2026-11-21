@@ -1,5 +1,41 @@
 # KnowledgeHub P03-B: KnowledgeHub Database And Backend API - Implementation Plan
 
+> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans only after owner approval of execution. Steps use checkbox syntax for tracking. The owner writes Python and SQL.
+
+**Goal:** Add a durable documents metadata model and owner-scoped FastAPI lifecycle/repository APIs that coordinate with the existing FileService without a distributed transaction.
+
+**Architecture:** FastAPI validates the current user and collection ownership, persists an upload intent, and calls a lifespan-owned private TLS FileServiceClient with per-call user JWT metadata. PostgreSQL stores trusted document metadata/file references; FileService remains the only original-byte store.
+
+**Tech Stack:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy async, PostgreSQL, grpc.aio, generated FileProto stubs, Aspire AppHost.
+
+**Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
+
+## Detailed global constraints
+
+- Use database-first SQL; no Alembic, create_all(), startup DDL, separate test DB, or automatic schema mutation.
+- Apply no SQL without explicit owner authorization of the exact target database and operation.
+- No owner_id in request bodies; derive ownership through an active parent collection joined to JWT actor.
+- Require both SystemService action permission and collection ownership.
+- FileService remains sole original-byte owner; never return storage_key/file_id/SHA/JWT in public DTOs.
+- FileService RPCs use TLS, per-call x-service-authorization, bounded deadlines, and request cancellation.
+- Do not hold a DB transaction across FileService RPC.
+- Retry the same DocumentId and UploadSessionId after uncertain finalize; never create a replacement ID for retry.
+- Collection soft-delete retains documents/originals; P06 hard-deletes vectors; P04 owns durable worker/reconciliation.
+- P03 has no parsing, chunking, embeddings, content search, READY state, or durable worker.
+- The owner writes all Python and SQL.
+
+## Review Focus
+
+- FileService timeout or lost DB commit is uncertain; same-target finalize must be idempotent and registration attempt IDs must fence late responses.
+- Collection soft-delete can race with finalize; the final transaction must lock/recheck the parent and retain, not delete, a finalized original.
+- Foreign/deleted collection IDs and guessed document IDs must return the same safe 404 and must not call FileService.
+- PreviewFile is unary/buffered at 50 MiB; Python receive size, timeout, and concurrency must be bounded.
+- Database-first/no-test-DB policy means mocked tests cannot claim real PostgreSQL FK, grant, or row-lock acceptance.
+
+---
+
+
+
 Date: 2026-11-21  
 Status: PROPOSED - owner execution plan; review before starting  
 Branch: feature/knowledgehub-learning  
@@ -8,7 +44,7 @@ Parent plan: docs/superpowers/plans/2026-11-21-knowledgehub-p03-implementation-p
 Prerequisites: P03-A FileService contract; P00/P01/P02 accepted  
 Repository rules: AGENTS.md
 
-## Goal
+## Outcome details
 
 Add document metadata and lifecycle APIs to the existing FastAPI KnowledgeHub service. KnowledgeHub owns document records and authorization through the active parent collection. FileService remains the only owner of original bytes.
 
@@ -16,7 +52,7 @@ The backend must handle upload intent, FileService finalization, retry/idempoten
 
 This plan does not apply SQL. The owner writes and reviews the SQL file, commits it to Git, and separately authorizes the exact target database/operation before application. Only then should the owner write the SQLAlchemy mapping against the applied schema.
 
-## Architecture
+## Backend flow
 
 ~~~text
 React / Blocks API Gateway
@@ -38,7 +74,7 @@ FastAPI /api/knowledgehub
 
 Browser never receives a storage key, file ID, FileService gRPC endpoint, or local path. FastAPI resolves the document through an active collection owned by the JWT actor before it calls FileService.
 
-## Tech Stack
+## Tooling details
 
 - Python 3.12.
 - FastAPI and Pydantic v2.
@@ -50,7 +86,7 @@ Browser never receives a storage key, file ID, FileService gRPC endpoint, or loc
 
 Do not add Alembic, use create_all(), add a second database, or add dependencies unless the owner separately approves a design change.
 
-## Specification
+## Detailed specification contract
 
 Read accepted P03 sections 8-15, 17-19 and P00 database/permission rules. P03-A must complete the FileService contract first:
 
@@ -80,7 +116,7 @@ Read accepted P03 sections 8-15, 17-19 and P00 database/permission rules. P03-A 
 - Use the existing response envelope for JSON endpoints. Download is a binary response.
 - The owner writes all Python and SQL.
 
-## Review Focus Before Coding
+## Detailed review focus before coding
 
 1. The current Python service already has PermissionClient, SystemProto stubs, lifespan management, strict Settings validation, and health checks. Reuse these patterns; do not create a second JWT/permission implementation.
 2. The current PermissionClient forwards the user JWT per RPC call as x-service-authorization metadata. FileServiceClient must do the same, but use file.FileProto methods.
@@ -94,6 +130,27 @@ Read accepted P03 sections 8-15, 17-19 and P00 database/permission rules. P03-A 
 10. The current API error envelope uses HTTP 200 for ordinary business/auth/permission errors. Preserve this behavior and do not treat HTTP 200 as application success.
 11. AppHost is also modified by P03-A. Do not edit it concurrently; first complete the FileService SystemService endpoint change, then add KnowledgeHub's FileService endpoint.
 12. Keep a sessionStorage correlation for UploadSessionId only if needed for retry after page refresh. Never store JWT, file bytes, file key, or user secrets. Server state remains the source of truth.
+
+## File Map
+
+| Action | File | Responsibility |
+| --- | --- | --- |
+| Create | docs/database/2026-11-21-knowledgehub-p03-documents.sql | Documents table, constraints, indexes, updated_at trigger; draft/review only. |
+| Modify | src/services/Blocks.KnowledgeHubService/src/knowledgehub/models.py | Explicit DocumentModel mapping after authorized SQL application. |
+| Modify | src/services/Blocks.KnowledgeHubService/src/knowledgehub/schemas.py | Intent/document/list/delete DTOs and CollectionResponse DocumentCount mapping. |
+| Create | src/services/Blocks.KnowledgeHubService/src/knowledgehub/rpc/file_pb2.py | Generated FileProto messages. |
+| Create | src/services/Blocks.KnowledgeHubService/src/knowledgehub/rpc/file_pb2_grpc.py | Generated FileProto client stub. |
+| Modify | src/services/Blocks.KnowledgeHubService/src/knowledgehub/config.py | FileService HTTPS URL, CA, timeout settings. |
+| Create | src/services/Blocks.KnowledgeHubService/src/knowledgehub/file_service.py | Secure gRPC client, metadata, deadlines, mapping, lifespan dependency. |
+| Create | src/services/Blocks.KnowledgeHubService/src/knowledgehub/documents.py | Owner-scoped SQL builders, registration/deletion state transitions, DocumentCount. |
+| Create | src/services/Blocks.KnowledgeHubService/src/knowledgehub/document_routes.py | Upload intent/finalize/list/detail/download/delete endpoints. |
+| Modify | src/services/Blocks.KnowledgeHubService/src/knowledgehub/main.py | FileService lifespan/health and document router. |
+| Modify | src/services/Blocks.KnowledgeHubService/src/knowledgehub/collections.py | Grouped active document counts or delegate to documents.py. |
+| Modify | src/platform/Blocks.AppHost/AppHost.cs | Private KnowledgeHub -> FileService HTTPS endpoint and CA configuration. |
+| Create | tests/test_file_service.py | Mocked FileServiceClient contract tests. |
+| Create | tests/test_documents.py | SQL builders, owner predicates, idempotency and lifecycle tests. |
+| Create | tests/test_document_endpoints.py | FastAPI endpoint tests with mocked DB/FileService. |
+| Modify | tests/test_config.py, test_database.py, test_proto_stubs.py, test_schemas.py, test_endpoints.py | Settings, lifespan, generated proto, DTO, and collection count regressions. |
 
 ## Task BE-00 - Preflight and inspect current contracts
 
