@@ -350,6 +350,14 @@ Implementation impact:
 - Register a SystemProto.SystemProtoClient in FileService ConfigService, using the existing SystemService gRPC-Web client pattern and the private HTTPS endpoint. The existing SystemService server already maps SystemProto through gRPC-Web.
 - Reuse the existing FileService-to-SystemService AppHost reference. Configure the SystemService client address to the internal HTTPS endpoint and verify TLS trust; do not route the permission RPC through API Gateway.
 - Add a narrow permission-client abstraction or equivalent test seam so denial, RPC failure, metadata, deadline, cancellation, and no-write behavior can be tested without a live SystemService.
+- Relevant FileService implementation touchpoints are:
+  - Blocks.FileService.csproj: generate the SystemProto client from the existing system.proto.
+  - Configs/ConfigService.cs: register the SystemProto client with the existing gRPC-Web handler pattern.
+  - Controllers/UploadFileController.cs: bind the optional UploadPurpose form field and pass it to the service.
+  - Services/CoreFeature/UploadFile/IUploadFileService.cs and UploadFileService.cs: pass the purpose, authorize it, and preserve the legacy path.
+  - Infrastructure/Storage/UploadSessionStore.cs: persist and validate the purpose in the upload-session manifest.
+  - Blocks.AppHost/AppHost.cs: configure FileService's SystemService client to the internal HTTPS endpoint using the existing FileService-to-SystemService reference. This setting is also used by the existing AuditProto client, so audit behavior must be regression-tested.
+  - test/FileService.RemovalChecks/Program.cs (and focused helper files if needed): verify authorization and no-write behavior.
 - Preserve legacy uploads whose UploadPurpose is absent; they retain existing authorization behavior and cannot be finalized into the KnowledgeHub namespace. Unknown non-empty purpose values fail closed.
 - UploadDataAsync must require the manifest purpose to be KnowledgeHubDocument whenever the requested target is KnowledgeHub/Documents. A client cannot bypass the permission check by omitting the purpose marker and later requesting a KnowledgeHub target.
 
