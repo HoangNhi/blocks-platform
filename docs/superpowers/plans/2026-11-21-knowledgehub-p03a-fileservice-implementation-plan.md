@@ -346,7 +346,7 @@ Legacy upload retry behavior remains unchanged.
 
 **Modify:** src/services/Blocks.FileService/Infrastructure/Storage/FileStorage.cs.
 
-Extend ResolveActiveKey with one explicit branch for exactly five slash-separated segments:
+Extend ResolveActiveKey with one explicit branch for exactly four slash-separated segments:
 
 ~~~text
 KnowledgeHub/Documents/<document-guid>/<file-guid>.<extension>
@@ -411,7 +411,7 @@ Do not add KnowledgeHub-only fields to Blocks.Shared ModelAttachment.
 
 **Modify:** IUploadFileService.cs and UploadFileService.cs.
 
-Add UploadDataWithMetadataAsync returning the FileService-specific finalized result. Refactor the current finalization implementation so the new method returns each ModelAttachment plus the matching StoredUploadFile.Sha256.
+Add UploadDataWithMetadataAsync returning the FileService-specific finalized result. Refactor the current finalization implementation so the new method returns each ModelAttachment plus the matching StoredUploadFile.Sha256 normalized with ToLowerInvariant(), because the PostgreSQL source_sha256 contract stores lowercase hexadecimal.
 
 Keep the existing UploadDataAsync signature as a compatibility wrapper that calls the metadata method and returns only ModelAttachment values. This avoids breaking existing internal test callers.
 
