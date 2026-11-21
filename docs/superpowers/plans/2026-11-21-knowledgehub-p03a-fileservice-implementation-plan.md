@@ -10,7 +10,7 @@
 
 **Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
 
-## Detailed global constraints
+## Global Constraints
 
 - Permission tuple is controller=knowledgehub and action=2 (ADD), with actor ID derived from the validated JWT name claim.
 - Per-call metadata is x-service-authorization: Bearer <current request JWT>; use private HTTPS SystemService, bounded deadline, and request cancellation.
@@ -111,7 +111,7 @@ Read the accepted P03 specification, especially sections 4, 7, 17, 18, and 19. T
 
 Stage purpose is the HTTP header X-Upload-Purpose: KnowledgeHubDocument. Do not put the purpose marker in multipart form data.
 
-## Global Constraints
+## Detailed global constraints
 
 - Do not modify the source SystemService system.proto contract; CheckPermission already exists.
 - Generate the client from src/services/Blocks.SystemService/Protos/system.proto, not C# obj output.
@@ -650,3 +650,12 @@ Handoff to P03-B:
 - stage header and ADD check behavior;
 - actual configured HTTPS endpoint/CA names (never secret values);
 - test harness evidence and any NOT RUN items.
+
+**Interfaces:**
+- Consumes: all FS-01 through FS-07 outputs.
+- Produces: an owner-reviewed FileService contract that P03-B can consume without guessing.
+
+- [ ] Step 1: Inspect the complete diff for accidental legacy behavior changes and unrelated edits.
+- [ ] Step 2: Verify every Review Focus item has a passing test or an explicitly recorded NOT RUN live check.
+- [ ] Step 3: Verify no secret, direct storage path, public gRPC route, or physical purge was introduced.
+- [ ] Step 4: Commit the final FileService workstream and share the handoff values with P03-B.
