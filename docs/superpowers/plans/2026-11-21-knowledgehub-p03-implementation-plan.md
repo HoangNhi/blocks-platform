@@ -270,6 +270,7 @@ The main files are:
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.test.tsx | Delete/finalize stale mutation and invalidation. |
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentUploader.test.tsx | File type/size/drop/keyboard behavior. |
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.test.tsx | Search/filter/page/empty/error/real rows. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.test.tsx | Status and action gating. |
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.test.tsx | Correct target, pending lock, visible failure. |
 
 Do not change the global MainLayout, router, theme, or existing shadcn component source. Existing checked-in Radix primitives are sufficient. Use ui/card, ui/button, ui/input, ui/progress, ui/badge, ui/table, ui/dialog, ui/skeleton, ui/sonner, and Lucide.
