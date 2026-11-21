@@ -1,8 +1,7 @@
 const SYSTEM_BASE = "/System";
 const CATALOG_BASE = "/Catalog";
 const FILE_BASE = "/File";
-const KNOWLEDGEHUB_BASE = "/api/KnowledgeHub";
-
+const KNOWLEDGEHUB_BASE = "/api/knowledgehub";
 export const API_ENDPOINTS = {
   System: {
     User: {
@@ -76,6 +75,6 @@ export const API_ENDPOINTS = {
     },
   },
   KnowledgeHub: {
-    COLLECTIONS: KNOWLEDGEHUB_BASE + "/Collections",
-  }
+    COLLECTIONS: KNOWLEDGEHUB_BASE + "/collections",
+  },
 };
