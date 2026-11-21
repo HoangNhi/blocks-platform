@@ -212,6 +212,15 @@ Stage contract:
 
 **Files:** no product files changed.
 
+**Interfaces:**
+- Consumes: P02 UI frame, cache boundary, Axios API client, and existing UI primitives.
+- Produces: baseline notes and verified P03 API field names from P03-B.
+
+- [ ] Step 1: Record branch, HEAD, git status, and frontend test/build/lint baseline.
+- [ ] Step 2: Inspect the current component props, cache session identity, API client, and Stitch reference.
+- [ ] Step 3: Confirm exact API response casing from P03-B; do not invent DTO fields.
+- [ ] Step 4: Commit no product changes; proceed when the baseline is understood.
+
 ## Task FE-01 - Add document types, endpoints, and API adapter
 
 ### FE-01.1 - Add types
@@ -285,6 +294,17 @@ Download returns a Blob and must reject a soft JSON error envelope. Never constr
 
 **Tests:** create api/documents.api.test.ts for exact URLs, PascalCase request/response, soft 400/403/404/503 envelope rejection, stage FormData fields/header/progress callback, and download blob-error handling.
 
+**Interfaces:**
+- Produces: documentsApi.createUploadIntent(collectionId, input), stage(uploadSessionId, file, onProgress, signal), finalize(documentId), list(collectionId, params, signal), detail(documentId, signal), download(documentId, signal), and remove(documentId).
+- Produces: postMultipart<T> and DownloadFileConfig.timeout in src/lib/api.ts.
+
+- [ ] Step 1: Add failing API tests for endpoint URLs, error envelopes, stage header/FormData, progress, and blob errors.
+- [ ] Step 2: Run the focused API test and confirm the new methods are absent/failing.
+- [ ] Step 3: Add document types and endpoint constants.
+- [ ] Step 4: Add postMultipart using the existing Axios instance; remove JSON Content-Type for FormData in the final request interceptor.
+- [ ] Step 5: Extend downloadFile timeout and implement documents.api.ts.
+- [ ] Step 6: Run documents.api.test.ts and existing API client tests; commit.
+
 ## Task FE-02 - Add actor/collection-scoped query keys and read hooks
 
 ### FE-02.1 - Query keys
@@ -320,6 +340,16 @@ Enable only when actorId, active selected collection, and VIEW permission exist.
 Use useKnowledgeHubSession where a pending async operation can outlive the current actor.
 
 **Tests:** two actors and two collections produce different keys; no request without actor/collection/VIEW; changing collection cancels/stops stale result from rendering.
+
+**Interfaces:**
+- Produces: documentKeys.all/actor/collection/list/detail.
+- Produces: useDocuments({ actorId, collectionId, canView, q, registrationStatus, pageIndex, pageSize }).
+
+- [ ] Step 1: Add failing tests for actor/collection query key isolation and disabled query states.
+- [ ] Step 2: Run focused hook tests and confirm the new query keys/hooks are absent.
+- [ ] Step 3: Implement document-query-keys.ts and useDocuments.ts using the existing TanStack Query conventions.
+- [ ] Step 4: Add cancellation and stale-result assertions.
+- [ ] Step 5: Run useDocuments.test.tsx and existing collection hook tests; commit.
 
 ## Task FE-03 - Implement sequential upload orchestration and real progress
 
@@ -366,6 +396,16 @@ Retry behavior:
 - Abort does not claim server rollback.
 - Upload purpose header is present.
 
+**Interfaces:**
+- Produces: useDocumentUploads({ actorId, collectionId, canAdd }) with enqueueFiles(files), retry(documentId), cancel(), and per-file queue state.
+- Produces: one intent/session/document per file, sequential stage/finalize calls, and invalidation of document list + selected collection detail.
+
+- [ ] Step 1: Add deferred-promise tests for sequential queue, real progress, registration, retry, abort, and actor switch.
+- [ ] Step 2: Run the hook tests and confirm the queue behavior is missing.
+- [ ] Step 3: Implement the hook with one UploadSessionId per file and a single active queue worker.
+- [ ] Step 4: Add the sessionStorage correlation for UploadSessionId only; clear it after registration.
+- [ ] Step 5: Run hook tests and confirm no late actor-A mutation touches actor-B cache/toasts; commit.
+
 ## Task FE-04 - Build the uploader and progress UI
 
 ### FE-04.1 - Uploader
@@ -398,6 +438,16 @@ For each selected file show:
 Do not show READY, parsing, embedding, chunking, or fake 100% while registration is pending.
 
 **Tests:** create components/DocumentUploader.test.tsx and cover file type/size, keyboard activation, drag/drop, pending state, and progress/registering copy.
+
+**Interfaces:**
+- DocumentUploader receives accept/disabled/onFilesSelected and renders the existing upload-card hierarchy.
+- UploadProgressList receives the queue state from useDocumentUploads; Progress is rendered only for active byte transfer.
+
+- [ ] Step 1: Add component tests for file picker, drag/drop, keyboard, type/size validation, and upload/registering states.
+- [ ] Step 2: Run the tests and confirm the components do not exist.
+- [ ] Step 3: Build DocumentUploader with existing Card/Button/Input primitives.
+- [ ] Step 4: Build UploadProgressList with Progress/Badge/Skeleton/Sonner; keep transfer and registration states separate.
+- [ ] Step 5: Run component tests and review the Stitch visual hierarchy; commit.
 
 ## Task FE-05 - Build the repository table, row actions, and delete dialog
 
@@ -456,6 +506,17 @@ Use existing Radix Dialog components:
 
 **Tests:** create DocumentRepository.test.tsx, DocumentRow.test.tsx, and DocumentDeleteDialog.test.tsx. Test server paging/search/filter, all states, action gating, correct document ID, pending close prevention, error preservation, and cleanup-pending toast.
 
+**Interfaces:**
+- DocumentRepository receives actorId, collectionId, canView, canDelete and uses useDocuments/useDocumentMutations.
+- DocumentRow receives one DocumentDto and callbacks; only REGISTERED exposes download/delete.
+- DocumentDeleteDialog receives the selected DocumentDto, pending state, confirm, and error.
+
+- [ ] Step 1: Add failing tests for empty/loading/error, server search/filter/page, row status/actions, and delete dialog behavior.
+- [ ] Step 2: Run the component tests and confirm the repository components are absent.
+- [ ] Step 3: Implement DocumentRepository with ui/table and server pagination; do not modify global DataTable.
+- [ ] Step 4: Implement DocumentRow and DocumentDeleteDialog with existing Badge/Button/Dialog/Sonner.
+- [ ] Step 5: Run component tests and confirm cleanup-pending is not misrepresented as delete failure; commit.
+
 ## Task FE-06 - Integrate into the existing KnowledgeHub page
 
 **Modify:** src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.tsx.
@@ -492,6 +553,16 @@ Change DocumentCount comment from "Always 0 in P02" to a real count of active RE
 Replace disabled-placeholder assertions with real repository/uploader composition assertions. Preserve non-ready CollectionState tests.
 
 **Optional test updates:** KnowledgeHubPage.test.tsx and renderKnowledgeHub.tsx only if the current harness needs the P02 cache boundary or outlet permission context. Do not rewrite the test helper unnecessarily.
+
+**Interfaces:**
+- RepositoryFrame props: actorId, collectionId, canAdd, canView, canDelete plus the existing collection state.
+- KnowledgeHubPage passes its existing selected collection, actor, and permission values; AskResearchFrame remains unchanged.
+
+- [ ] Step 1: Update RepositoryFrame tests to preserve all non-ready CollectionState branches.
+- [ ] Step 2: Replace only the ready-state placeholder with DocumentUploader, UploadProgressList, and DocumentRepository.
+- [ ] Step 3: Pass actor/collection/permission props from KnowledgeHubPage; keep selector, count badge, tabs, and shell unchanged.
+- [ ] Step 4: Update DocumentCount comment and invalidate/refetch collection detail after mutations.
+- [ ] Step 5: Run KnowledgeHubPage/RepositoryFrame tests and commit integration.
 
 ## Task FE-07 - Verify API client, cache isolation, responsive layout, and mockup fidelity
 
@@ -535,6 +606,17 @@ Capture:
 Keep existing Blocks MainLayout, collection selector/count badge, and tab hierarchy. Do not copy prototype fake documents, fake progress, AI answer modal, or second sidebar. No horizontal page overflow at 390px.
 
 ### FE-07.4 - Commands
+
+**Interfaces:**
+- Consumes: all P03 API/hooks/components and P02 visual reference.
+- Produces: passing frontend tests/build/lint and visual evidence for desktop/mobile.
+
+- [ ] Step 1: Run focused API, hook, and component tests.
+- [ ] Step 2: Run the complete frontend test suite.
+- [ ] Step 3: Run production build and lint; fix only P03-related failures.
+- [ ] Step 4: Capture desktop/mobile states and compare with the Stitch reference.
+- [ ] Step 5: Inspect git diff for fake data, unsupported READY/parser states, new dependencies, or global UI changes.
+- [ ] Step 6: Record PASS/FAIL/NOT RUN and commit the frontend workstream.
 
 Run from repository root:
 
