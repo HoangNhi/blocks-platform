@@ -1,5 +1,36 @@
 # KnowledgeHub P03: File Lifecycle And Document Repository - Implementation Plan
 
+> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans only after owner approval of execution. Steps use checkbox syntax for tracking. The owner writes product code and SQL.
+
+**Goal:** Coordinate P03-A FileService, P03-B KnowledgeHub database/backend, and P03-C React work so the owner can implement a secure document lifecycle task by task.
+
+**Architecture:** FileService owns original bytes and upload/delete receipts; FastAPI owns document metadata and active-collection authorization; React uses Gateway APIs and the existing Blocks UI shell.
+
+**Tech Stack:** .NET 10/C#, SystemProto gRPC-Web, Python 3.12/FastAPI/SQLAlchemy, PostgreSQL, grpc.aio, Aspire, React 19/TypeScript/TanStack Query/shadcn primitives.
+
+**Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md (owner accepted 2026-11-21).
+
+## Global Constraints
+
+- Owner writes all product code and SQL; this is a manual learning plan.
+- No SQL apply, DB/test DB creation, permission/menu/grant changes, dependency installs, deployment, or physical file cleanup without separate authorization.
+- Collection soft-delete retains documents and original files; P06 hard-deletes vectors.
+- FileService checks KnowledgeHub ADD before MVC multipart model binding for X-Upload-Purpose: KnowledgeHubDocument.
+- FileService remains sole original-byte store; KnowledgeHub owns metadata/ownership; browser only calls Gateway.
+- No P03 parsing, chunks, embeddings, content search, READY, or durable worker.
+
+## Review Focus
+
+- Stage authorization must happen before MVC parses multipart; denial/unavailable creates no managed Temp artifacts.
+- FileService namespace, SHA field 9, receipt hashing, and legacy Attachment/Avatar compatibility must agree.
+- No DB transaction may remain open across FileService gRPC; retries reuse the same DocumentId and UploadSessionId.
+- Every document operation requires action permission and an active parent collection owned by the JWT actor.
+- React must preserve P02 visual/cache boundaries and distinguish byte transfer from registration.
+
+---
+
+
+
 Date: 2026-11-21  
 Status: PROPOSED - owner execution plan; review before starting  
 Branch: feature/knowledgehub-learning  
@@ -8,7 +39,7 @@ Accepted specification: docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-
 P02 UI guide: docs/superpowers/plans/2026-11-15-knowledgehub-p02-frontend-ui-implementation-guide.md  
 Repository rules: AGENTS.md
 
-## 0. Manual learning and safety contract
+## Owner learning and safety contract
 
 The owner writes and runs all production C#, Python, SQL, TypeScript/React, and tests. This plan explains what to learn, which files to create or edit, the exact responsibility of each edit, and how to verify the result. It is not permission for an agent to implement product code.
 
@@ -25,7 +56,7 @@ P00 explicitly rejects a separate KnowledgeHub test database. Keep DB-free unit,
 
 The P03 specification is ACCEPTED by the owner. Product-code implementation remains owner-performed under the project learning workflow.
 
-## 1. Outcome
+## Outcome details
 
 Deliver a real document repository in the existing Blocks KnowledgeHub feature:
 
@@ -37,7 +68,7 @@ Deliver a real document repository in the existing Blocks KnowledgeHub feature:
 6. A deleted collection retains its document rows and original files. P06, not P03, hard-deletes its vectors.
 7. The UI uses the approved Stitch hierarchy and existing shadcn/Radix primitives. It shows real data and honest states, never fabricated documents or processing progress.
 
-## 2. Why this plan is split into three workstreams
+## Workstream rationale
 
 P03 spans three independently testable codebases. Keeping one giant task list would make the owner switch between .NET, Python/SQL, and React in every task. The three detailed plans each produce a testable subsystem, then the master plan coordinates integration.
 
@@ -123,6 +154,16 @@ Execution is sequential: preflight -> FileService -> SQL draft/review -> Knowled
 | B3 | KnowledgeHub AppHost reference and runtime config | A and B2 | Verify endpoint/certificate configuration without exposing secrets. |
 | C | React types/API/hooks/components/tests | B API contract | Use mocked API until owner-authorized Gateway integration. |
 | I | Integrated acceptance and visual review | A+B+C | Report PASS/FAIL/NOT RUN per criterion; do not infer live acceptance from mocks. |
+
+## Master execution checklist
+
+- [ ] 0. Recheck AGENTS.md, accepted P03 specification, branch, HEAD, and pre-existing git changes.
+- [ ] A. Complete P03-A and its DB-free FileService harness before implementing the Python FileService client.
+- [ ] B1. Draft/review the documents SQL; stop for separate owner authorization before applying it.
+- [ ] B2. Complete Python models, FileServiceClient, lifecycle, routes, and mocked tests.
+- [ ] B3. Add the KnowledgeHub -> FileService AppHost HTTPS/CA configuration after P03-A's AppHost edit.
+- [ ] C. Complete React APIs/hooks/components/tests against mocked P03-B contracts.
+- [ ] I. Run integrated owner-authorized acceptance and visual review; report PASS/FAIL/NOT RUN.
 
 ## 6. Cross-workstream file ownership
 
@@ -232,6 +273,24 @@ The main files are:
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.test.tsx | Correct target, pending lock, visible failure. |
 
 Do not change the global MainLayout, router, theme, or existing shadcn component source. Existing checked-in Radix primitives are sufficient. Use ui/card, ui/button, ui/input, ui/progress, ui/badge, ui/table, ui/dialog, ui/skeleton, ui/sonner, and Lucide.
+
+## Specification coverage matrix
+
+| Accepted P03 section | Plan coverage |
+| --- | --- |
+| 4-5: source baseline and scope | Master preflight; A FS-00; B BE-00; C FE-00. |
+| 6: registration/document/collection lifecycles | A FS-04/FS-05; B BE-08/BE-09/BE-11. |
+| 7: FileService namespace, stage, finalize, SHA, preview/delete | A FS-01 through FS-07. |
+| 8: authenticated RPC, AppHost, health, worker boundary | A FS-02/FS-03; B BE-04 through BE-07. |
+| 9: database-first documents schema and DocumentCount | B BE-01/BE-02/BE-08/BE-10. |
+| 10-11: upload intent, finalize, idempotency, collection race | A FS-04/FS-05; B BE-08/BE-09/BE-11; C FE-03. |
+| 12: repository list/detail/search/filter/paging | B BE-08/BE-09; C FE-02/FE-05/FE-06. |
+| 13: authorized original download | B BE-06/BE-09; C FE-01/FE-05. |
+| 14: document logical delete and cleanup | A FS-05; B BE-08/BE-09/BE-11; C FE-05. |
+| 15: error envelope/status mapping | A FS-03; B BE-06/BE-09; C FE-01. |
+| 16: mockup fidelity and React interaction | C FE-01 through FE-07. |
+| 17-18: acceptance and verification boundaries | A FS-07/FS-08; B BE-11/BE-12; C FE-07; Master I. |
+| 19-21: risks and downstream handoff | A FS-08; B BE-12; C FE-07; Master acceptance/handover. |
 
 ## 10. Integrated acceptance sequence
 
