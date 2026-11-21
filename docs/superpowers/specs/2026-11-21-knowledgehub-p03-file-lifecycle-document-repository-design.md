@@ -980,14 +980,14 @@ Do not claim real permission, TLS, FileService, DB, or Gateway acceptance from m
 1. **SystemService permission dependency:** KnowledgeHub-purpose stage now depends synchronously on SystemService CheckPermission. SystemService outage intentionally blocks that upload purpose; legacy upload purposes retain their existing path. No permission cache or fail-open fallback is allowed.
 2. **Global FileService WriteGate:** staging/finalize/delete operations serialize. P03 frontend queues one upload at a time. A per-session lock redesign is not included without measured contention and a separate review.
 3. **Buffered PreviewFile:** 50 MiB unary response has memory cost in FileService and Python. P03 bounds size, receive-message limit, timeout, and concurrency. Streaming is a future design if measurements require it.
-3. **Multipart overhead:** request envelope must be larger than the actual file-byte cap; preserve the 50 MiB file limit.
-4. **Stage-session retention:** an abandoned or parent-deleted Temp session may remain. P03 records the intent/state and never deletes uncertain data. P04/P11 must define safe Temp reconciliation.
-5. **Pending document file cleanup:** P03 persists cleanup state and retry-safe operation; P04/P11 must assign the durable worker or authorized operational reconciliation owner.
-6. **Worker access after JWT expiry:** P04 service identity/delegation is mandatory before asynchronous original reads.
-7. **Collection deletion:** P04 cancels/fences processing; P06 hard-deletes all vector versions; P08 defines historical sessions/citations. P03 does not perform those operations.
-8. **FileService single-writer deployment:** preserve the existing one-writer/private-persistent-volume assumption. Do not scale FileService horizontally against separate local storage roots.
-9. **FileService JWT configuration:** verify the real AppHost FileService signing key/issuer/audience configuration matches SystemService. Missing/mismatched configuration must fail closed; never rely on a test fallback key in real runtime.
-10. **Untrusted content:** P03 stores and downloads originals only. It does not parse, render, or execute uploaded content.
+4. **Multipart overhead:** request envelope must be larger than the actual file-byte cap; preserve the 50 MiB file limit.
+5. **Stage-session retention:** an abandoned or parent-deleted Temp session may remain. P03 records the intent/state and never deletes uncertain data. P04/P11 must define safe Temp reconciliation.
+6. **Pending document file cleanup:** P03 persists cleanup state and retry-safe operation; P04/P11 must assign the durable worker or authorized operational reconciliation owner.
+7. **Worker access after JWT expiry:** P04 service identity/delegation is mandatory before asynchronous original reads.
+8. **Collection deletion:** P04 cancels/fences processing; P06 hard-deletes all vector versions; P08 defines historical sessions/citations. P03 does not perform those operations.
+9. **FileService single-writer deployment:** preserve the existing one-writer/private-persistent-volume assumption. Do not scale FileService horizontally against separate local storage roots.
+10. **FileService JWT configuration:** verify the real AppHost FileService signing key/issuer/audience configuration matches SystemService. Missing/mismatched configuration must fail closed; never rely on a test fallback key in real runtime.
+11. **Untrusted content:** P03 stores and downloads originals only. It does not parse, render, or execute uploaded content.
 
 ## 20. Learning Outcomes
 
