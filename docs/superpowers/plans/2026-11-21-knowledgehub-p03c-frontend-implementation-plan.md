@@ -10,7 +10,7 @@
 
 **Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
 
-## Detailed global constraints
+## Global Constraints
 
 - Preserve the Stitch hierarchy, existing MainLayout, collection selector/count badge, and tabs.
 - Do not install shadcn, run its CLI, add dependencies, or overwrite checked-in UI primitives.
@@ -114,7 +114,7 @@ Stage contract:
 - Current bearer token is supplied by the existing Axios interceptor.
 - Do not set multipart boundary manually.
 
-## Global Constraints
+## Detailed global constraints
 
 - Preserve the approved Stitch visual hierarchy and existing Blocks MainLayout.
 - Keep RepositoryFrame inside the existing KnowledgeHubPage tab.
