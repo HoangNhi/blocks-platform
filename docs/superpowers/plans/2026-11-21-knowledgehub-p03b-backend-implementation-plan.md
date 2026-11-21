@@ -215,6 +215,7 @@ If SQL application has not been authorized, leave this mapping task BLOCKED rath
 Add request/response types following existing PascalCase JSON field conventions:
 - DocumentUploadIntentRequest: UploadSessionId, OriginalFileName, DeclaredSizeBytes.
 - DocumentUploadIntentResponse: DocumentId, UploadSessionId, RegistrationStatus.
+- Server-derived MIME mapping is explicit: .pdf -> application/pdf, .md -> text/markdown, .txt -> text/plain.
 - DocumentResponse: Id, CollectionId, Title, OriginalFileName, FileExtension, ContentType, SizeBytes, RegistrationStatus, CreatedAt, UpdatedAt, RegisteredAt.
 - DocumentPageResponse: Data, TotalRow, PageIndex, PageSize.
 - DocumentDeleteResponse: Id and CleanupStatus.
@@ -300,7 +301,8 @@ Implement one lifespan-owned client with:
 
 Methods:
 
-**finalize_upload(user, document_id, upload_session_id):**
+**finalize_upload(user, document_id, upload_session_id, original_filename, file_extension, declared_size_bytes):**
+- pass the expected intent metadata from the already owner-scoped DocumentModel; do not query the database from the transport client;
 - call UploadData with related_id=document_id, service_path=KnowledgeHub, folder_name=Documents, temp_folder=upload_session_id;
 - attach per-call metadata x-service-authorization: Bearer <user.token>;
 - set file_rpc_timeout_seconds and propagate coroutine cancellation;
@@ -309,7 +311,7 @@ Methods:
 - require related_id equals document_id;
 - require canonical KnowledgeHub/Documents key containing the expected document ID and file ID;
 - require extension matches the upload intent;
-- require actual file size matches declared size and <=50 MiB;
+- read the protobuf DoubleValue file_size.value, require it is a positive integral byte count, matches declared_size_bytes, and is <=50 MiB;
 - require source_sha256 is 64 hex characters, then normalize it to lowercase before persistence to match the SQL contract;
 - return an internal typed result, never a public DTO.
 
