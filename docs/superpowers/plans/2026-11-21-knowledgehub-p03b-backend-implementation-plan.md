@@ -10,7 +10,7 @@
 
 **Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
 
-## Detailed global constraints
+## Global Constraints
 
 - Use database-first SQL; no Alembic, create_all(), startup DDL, separate test DB, or automatic schema mutation.
 - Apply no SQL without explicit owner authorization of the exact target database and operation.
@@ -98,7 +98,7 @@ Read accepted P03 sections 8-15, 17-19 and P00 database/permission rules. P03-A 
 - PreviewFile and DeleteData receive only keys loaded from the KnowledgeHub database.
 - FileService RPCs use the current validated user's token as per-call x-service-authorization metadata.
 
-## Global Constraints
+## Detailed global constraints
 
 - No separate test database, test schema, automatic DDL, startup migrations, Alembic, or create_all().
 - Do not apply the proposed SQL without explicit owner authorization of the exact database and operation.
