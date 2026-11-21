@@ -149,6 +149,7 @@ The main files are:
 | Modify | src/services/Blocks.FileService/Configs/ConfigureAuthentication.cs | Remove the insecure fallback JWT key; require configured issuer, audience, and key. |
 | Modify | src/services/Blocks.FileService/Controllers/UploadFileController.cs | Attach pre-model-binding authorization filter and pass only its validated purpose to Insert. |
 | Create | src/services/Blocks.FileService/Infrastructure/Filters/KnowledgeHubUploadPermissionFilter.cs | Check KnowledgeHub ADD through SystemService before form binding. |
+| Create | src/services/Blocks.FileService/DTOs/CoreFeature/UploadFile/FinalizedAttachment.cs | Carry existing attachment metadata plus trusted source SHA256 without changing Blocks.Shared. |
 | Modify | src/services/Blocks.FileService/Services/CoreFeature/UploadFile/IUploadFileService.cs | Carry optional upload purpose and finalized metadata contract. |
 | Modify | src/services/Blocks.FileService/Services/CoreFeature/UploadFile/UploadFileService.cs | Target-specific validation, retry, namespace finalization, and SHA metadata. |
 | Modify | src/services/Blocks.FileService/Infrastructure/Storage/UploadSessionStore.cs | Persist/validate purpose and KnowledgeHub Document target; preserve old manifests. |
