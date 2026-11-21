@@ -1,5 +1,42 @@
 # KnowledgeHub P03-C: React Document Repository - Implementation Plan
 
+> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans only after owner approval of execution. Steps use checkbox syntax for tracking. The owner writes React code and tests.
+
+**Goal:** Replace the P02 Repository placeholder with real upload, progress, search/filter/paging, download, and logical delete while preserving the approved Stitch layout and existing Blocks shell.
+
+**Architecture:** KnowledgeHubPage passes actor, selected collection, and permission state to RepositoryFrame. New typed document APIs and actor-scoped TanStack Query hooks drive the uploader and repository components through the existing Axios/Gateway path.
+
+**Tech Stack:** React 19, TypeScript, TanStack Query v5, Axios, existing Radix-based shadcn primitives, Vitest, React Testing Library, Lucide, Sonner.
+
+**Spec:** docs/superpowers/specs/2026-11-21-knowledgehub-p03-file-lifecycle-document-repository-design.md
+
+## Detailed global constraints
+
+- Preserve the Stitch hierarchy, existing MainLayout, collection selector/count badge, and tabs.
+- Do not install shadcn, run its CLI, add dependencies, or overwrite checked-in UI primitives.
+- Use the existing Axios instance and Gateway; browser never calls private FileService/Python endpoints.
+- One file per upload intent/session; queue selected files sequentially.
+- Use actual onUploadProgress bytes. 100% stage transfer is not registration success.
+- Search title/original_filename only; no content search.
+- Only active REGISTERED documents have download/delete actions.
+- No READY, parser progress, page count, chunk count, embeddings, or fake sample rows.
+- Query keys include actor and collection; preserve P02 stale-session protections.
+- Browser storage may hold only a short-lived UploadSessionId correlation; never JWT, bytes, storage key, or hash.
+- Backend remains authoritative for permission, ownership, file type, and size.
+- The owner writes all React code and tests.
+
+## Review Focus
+
+- FormData must remove the Axios JSON Content-Type default so the browser sets the boundary; X-Upload-Purpose is a header.
+- Actual byte progress and registration state are separate; never fabricate a combined percentage.
+- A late mutation from actor A must not toast, invalidate, or render into actor B's cache.
+- Download must unwrap soft JSON error envelopes returned as blobs and use a bounded timeout.
+- Visual review must preserve the Stitch hierarchy and work at 390px without horizontal page overflow.
+
+---
+
+
+
 Date: 2026-11-21  
 Status: PROPOSED - owner execution plan; review before starting  
 Branch: feature/knowledgehub-learning  
@@ -8,13 +45,13 @@ Parent plan: docs/superpowers/plans/2026-11-21-knowledgehub-p03-implementation-p
 Prerequisite: P03-B API contracts and mocked endpoint tests  
 Repository rules: AGENTS.md and docs/superpowers/plans/2026-11-15-knowledgehub-p02-frontend-ui-implementation-guide.md
 
-## Goal
+## Outcome details
 
 Replace the P02 Repository placeholder with a real upload and document repository while preserving the approved Stitch hierarchy, existing Blocks MainLayout, collection selector, count badge, and tabs.
 
 The UI must show real API data, actual browser upload byte progress, a separate registration state, metadata search/filter/paging, authorized download, and logical delete. It must never show fake documents, fake percentages, READY, parser progress, page counts, chunks, or embedding state in P03.
 
-## Architecture
+## Component flow
 
 ~~~text
 KnowledgeHubPage
@@ -43,7 +80,7 @@ KnowledgeHubPage
 
 Use the existing Axios API client and Gateway endpoints. Browser never calls Python's internal port or FileService's private gRPC endpoint.
 
-## Tech Stack
+## Tooling details
 
 - React 19 / TypeScript.
 - TanStack Query v5.
@@ -54,7 +91,7 @@ Use the existing Axios API client and Gateway endpoints. Browser never calls Pyt
 
 Do not install shadcn, run shadcn CLI, add dependencies, or overwrite checked-in UI primitives.
 
-## Specification
+## Detailed specification contract
 
 Read accepted P03 sections 10, 12-16, 17, and the P02 UI implementation guide.
 
@@ -95,7 +132,7 @@ Stage contract:
 - If sessionStorage is used, store only the UploadSessionId correlation keyed by actor/document for retry after ordinary page refresh; server API remains source of truth.
 - The owner writes all React code and tests.
 
-## Review Focus Before Coding
+## Detailed review focus before coding
 
 1. The current RepositoryFrame is an honest disabled placeholder. Replace only its contents/props; do not add fake seed documents.
 2. KnowledgeHubPage already computes actorId, canView, canCreate, canEdit, canDelete, selectedId, and selected collection. Reuse those values.
@@ -107,6 +144,36 @@ Stage contract:
 8. The current useCollectionMutations uses KnowledgeHubCacheBoundary session identity. New document mutations/uploads must use the same guard so a late response from actor A cannot invalidate, toast, or update actor B's view.
 9. Use a deliberate retry path. Re-finalize the same DocumentId first. If FileService confirms the staged session is missing, ask the user to reselect the same original file and reuse the stored UploadSessionId when available. Never generate a new UploadSessionId for an existing intent silently.
 10. UI permission checks are usability only. Backend ADD/VIEW/DELETE checks and collection ownership remain authoritative.
+
+## File Map
+
+| Action | File | Responsibility |
+| --- | --- | --- |
+| Modify | src/apps/Blocks.Web/src/config/constants.ts | Add KnowledgeHub document endpoints. |
+| Modify | src/apps/Blocks.Web/src/lib/api.ts | Multipart helper, FormData header handling, download timeout. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/types/collections.types.ts | DocumentCount now represents actual registered count. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/types/documents.types.ts | Document/status/intent/page/delete DTO types. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/api/documents.api.ts | Typed document API and FileService stage call through Gateway. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/document-query-keys.ts | Actor/collection-scoped query keys. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocuments.ts | Server-side list/search/filter/paging. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.ts | Finalize/download/delete and cache invalidation. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentUploads.ts | Sequential upload queue and truthful progress/retry. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentUploader.tsx | Accessible picker/drop zone. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/UploadProgressList.tsx | Byte progress and separate registration state. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.tsx | Search/filter/paging/table states. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.tsx | Metadata/status/download/delete actions. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.tsx | Accessible delete confirmation. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.tsx | Compose real P03 components in the existing frame. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/routes/KnowledgeHubPage.tsx | Pass actor/collection/permissions into RepositoryFrame. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.test.tsx | Replace placeholder tests with real composition. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/api/documents.api.test.ts | API envelope, FormData/header, download tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocuments.test.tsx | Query key and server query tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentUploads.test.tsx | Sequential queue, progress, retry, actor race tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.test.tsx | Mutation and cache invalidation tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentUploader.test.tsx | File selection/validation/drop tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.test.tsx | Repository states/search/filter/page tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.test.tsx | Status and action gating tests. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.test.tsx | Delete dialog/error/pending tests. |
 
 ## Task FE-00 - Preflight and inspect existing UI
 
