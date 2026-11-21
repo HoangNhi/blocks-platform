@@ -349,7 +349,8 @@ Reuse the existing P01 Settings validation style. Do not expose secrets in error
 **Create:** src/services/Blocks.KnowledgeHubService/src/knowledgehub/file_service.py.
 
 Implement one lifespan-owned client with:
-- grpc.aio secure channel using file_grpc_url and file_grpc_ca_file;
+- parse file_grpc_url with urllib.parse.urlparse and pass host:port (not the full https URL) to grpc.aio.secure_channel;
+- grpc.aio secure channel using file_grpc_ca_file as root certificates;
 - FileProtoStub from knowledgehub.rpc.file_pb2_grpc;
 - channel option grpc.max_receive_message_length >= 64 * 1024 * 1024;
 - a one-at-a-time asyncio.Semaphore for PreviewFile initially;
