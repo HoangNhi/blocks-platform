@@ -373,7 +373,7 @@ The FileService stage endpoint currently accepts multiple files and has a 50 MiB
 - Validate .pdf, .md, .txt case-insensitively for KnowledgeHub purpose.
 - Browser MIME is untrusted. FileService/server derives stored content type from the validated extension; parsing later validates the actual content.
 
-Existing callers that omit UploadPurpose retain their existing behavior. Unknown purpose values fail closed.
+Existing callers that omit the X-Upload-Purpose header retain their existing behavior. Unknown non-empty header values fail closed.
 
 ### 7.3. Stage retry semantics
 
