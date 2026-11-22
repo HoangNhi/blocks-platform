@@ -3231,3 +3231,1318 @@ dotnet build src/platform/Blocks.AppHost/Blocks.AppHost.csproj
 
 Không có test nào được kết nối database. SQL compilation và mock session không chứng minh PostgreSQL lock behavior; live check vẫn NOT RUN đến khi owner authorize.
 
+
+
+---
+
+# C. React Frontend – uploader, progress và document repository
+
+## C-00. File Map
+
+| Action | File | Required code |
+| --- | --- | --- |
+| Modify | src/apps/Blocks.Web/src/config/constants.ts | Thêm endpoint constants. |
+| Modify | src/apps/Blocks.Web/src/lib/api.ts | Thêm postMultipart, xóa JSON Content-Type với FormData, download timeout. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/types/collections.types.ts | Bỏ comment DocumentCount luôn bằng 0. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/types/documents.types.ts | Document DTO, query, upload queue types. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/api/documents.api.ts | Typed API adapter. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/document-query-keys.ts | Actor/collection-scoped keys. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocuments.ts | Query list/search/filter/page. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.ts | Download/delete/invalidation. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentUploads.ts | Sequential queue and actual byte progress. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentUploader.tsx | Accessible file picker/drop zone. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/UploadProgressList.tsx | Transfer and registration states. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.tsx | Search/filter/table/paging. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.tsx | Metadata and actions. |
+| Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.tsx | Delete confirmation. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.tsx | Replace P02 placeholder. |
+| Modify | src/apps/Blocks.Web/src/features/knowledgehub/routes/KnowledgeHubPage.tsx | Pass actor/collection/permissions. |
+
+## C-01. Endpoint constants
+
+**File:** src/apps/Blocks.Web/src/config/constants.ts
+
+Thay KnowledgeHub block hiện tại:
+
+~~~ts
+KnowledgeHub: {
+  COLLECTIONS: KNOWLEDGEHUB_BASE + "/collections",
+},
+~~~
+
+bằng:
+
+~~~ts
+KnowledgeHub: {
+  COLLECTIONS: KNOWLEDGEHUB_BASE + "/collections",
+  COLLECTION_DOCUMENTS: (id: string) =>
+    KNOWLEDGEHUB_BASE + "/collections/" + encodeURIComponent(id) + "/documents",
+  COLLECTION_UPLOAD_INTENTS: (id: string) =>
+    KNOWLEDGEHUB_BASE + "/collections/" + encodeURIComponent(id) + "/documents/upload-intents",
+  DOCUMENT: (id: string) =>
+    KNOWLEDGEHUB_BASE + "/documents/" + encodeURIComponent(id),
+  DOCUMENT_FINALIZE: (id: string) =>
+    KNOWLEDGEHUB_BASE + "/documents/" + encodeURIComponent(id) + "/finalize",
+  DOCUMENT_DOWNLOAD: (id: string) =>
+    KNOWLEDGEHUB_BASE + "/documents/" + encodeURIComponent(id) + "/download",
+},
+~~~
+
+Giữ API_ENDPOINTS.File.UploadFile.POST hiện tại.
+
+## C-02. Multipart helper trong api.ts
+
+**File:** src/apps/Blocks.Web/src/lib/api.ts
+
+Thêm AxiosHeaders vào import:
+
+~~~ts
+import axios, {
+  AxiosError,
+  AxiosHeaders,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+} from "axios";
+~~~
+
+Thay DownloadFileConfig:
+
+~~~ts
+export type DownloadFileConfig = Pick<
+  AxiosRequestConfig,
+  "signal" | "unwrapBlobErrors" | "timeout"
+>;
+~~~
+
+Trong request interceptor, thay callback success bằng:
+
+~~~ts
+(config) => {
+  config.headers = AxiosHeaders.from(config.headers);
+
+  if (
+    typeof FormData !== "undefined" &&
+    config.data instanceof FormData
+  ) {
+    config.headers.delete("Content-Type");
+  }
+
+  const token = getAccessToken();
+  if (token) config.headers.Authorization = "Bearer " + token;
+
+  return config;
+},
+~~~
+
+Trong ApiClient thêm method:
+
+~~~ts
+async postMultipart<T>(
+  endpoint: string,
+  data: FormData,
+  config?: AxiosRequestConfig
+): Promise<ApiResponse<T>> {
+  const response = await this.axiosInstance.post(endpoint, data, config);
+  return response.data;
+}
+~~~
+
+Thay downloadFile:
+
+~~~ts
+downloadFile(url: string, config?: DownloadFileConfig) {
+  return this.axiosInstance.get(url, {
+    responseType: "blob",
+    signal: config?.signal,
+    timeout: config?.timeout,
+    unwrapBlobErrors: config?.unwrapBlobErrors,
+  });
+}
+~~~
+
+Không tạo Axios instance mới và không duplicate refresh-token interceptor.
+
+## C-03. Document types
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/types/documents.types.ts
+
+~~~ts
+export type DocumentRegistrationStatus =
+  | "AWAITING_UPLOAD"
+  | "REGISTERING"
+  | "REGISTRATION_FAILED"
+  | "REGISTERED";
+
+export interface DocumentDto {
+  Id: string;
+  CollectionId: string;
+  Title: string;
+  OriginalFileName: string;
+  FileExtension: ".pdf" | ".md" | ".txt";
+  ContentType: string;
+  SizeBytes: number;
+  RegistrationStatus: DocumentRegistrationStatus;
+  CreatedAt: string;
+  UpdatedAt: string;
+  RegisteredAt: string | null;
+}
+
+export interface DocumentPageDto {
+  Data: DocumentDto[];
+  TotalRow: number;
+  PageIndex: number;
+  PageSize: number;
+}
+
+export interface DocumentListParams {
+  q?: string;
+  registration_status?: DocumentRegistrationStatus;
+  page_index: number;
+  page_size: number;
+}
+
+export interface DocumentUploadIntentRequest {
+  UploadSessionId: string;
+  OriginalFileName: string;
+  DeclaredSizeBytes: number;
+}
+
+export interface DocumentUploadIntentDto {
+  DocumentId: string;
+  UploadSessionId: string;
+  RegistrationStatus: string;
+}
+
+export interface DocumentDeleteDto {
+  Id: string;
+  CleanupStatus: "PENDING" | "COMPLETED" | "FAILED";
+}
+
+export type UploadQueueStatus =
+  | "queued"
+  | "creating-intent"
+  | "uploading"
+  | "registering"
+  | "registered"
+  | "failed";
+
+export interface UploadQueueItem {
+  key: string;
+  file: File;
+  uploadSessionId: string;
+  documentId: string | null;
+  status: UploadQueueStatus;
+  loadedBytes: number;
+  totalBytes: number;
+  error: string | null;
+}
+~~~
+
+Không thêm storage_key/file_id/SHA/JWT vào public type.
+
+## C-04. documents.api.ts
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/api/documents.api.ts
+
+~~~ts
+import api, { type ApiResponse } from "@/lib/api";
+import { API_ENDPOINTS } from "@/config/constants";
+import type {
+  DocumentDeleteDto,
+  DocumentDto,
+  DocumentListParams,
+  DocumentPageDto,
+  DocumentUploadIntentDto,
+  DocumentUploadIntentRequest,
+} from "../types/documents.types";
+
+export class DocumentApiError extends Error {
+  constructor(readonly statusCode: number, message: string) {
+    super(message);
+    this.name = "DocumentApiError";
+  }
+}
+
+function unwrap<T>(result: ApiResponse<T>): T {
+  if (!result.Success) {
+    throw new DocumentApiError(
+      result.StatusCode,
+      result.Message || "Không thể thực hiện yêu cầu."
+    );
+  }
+  if (result.Data == null) {
+    throw new Error("Phản hồi KnowledgeHub không có dữ liệu.");
+  }
+  return result.Data;
+}
+
+export const documentsApi = {
+  list: async (
+    collectionId: string,
+    params: DocumentListParams,
+    signal?: AbortSignal
+  ) =>
+    unwrap<DocumentPageDto>(
+      await api.get<DocumentPageDto>(
+        API_ENDPOINTS.KnowledgeHub.COLLECTION_DOCUMENTS(collectionId),
+        { params, signal }
+      )
+    ),
+
+  createUploadIntent: async (
+    collectionId: string,
+    body: DocumentUploadIntentRequest
+  ) =>
+    unwrap<DocumentUploadIntentDto>(
+      await api.post<DocumentUploadIntentDto>(
+        API_ENDPOINTS.KnowledgeHub.COLLECTION_UPLOAD_INTENTS(collectionId),
+        body
+      )
+    ),
+
+  stage: async (
+    uploadSessionId: string,
+    file: File,
+    onProgress: (loaded: number, total: number) => void,
+    signal?: AbortSignal
+  ) => {
+    const form = new FormData();
+    form.append("files", file);
+    form.append("FolderName", uploadSessionId);
+
+    return unwrap(
+      await api.postMultipart<unknown>(
+        API_ENDPOINTS.File.UploadFile.POST,
+        form,
+        {
+          signal,
+          timeout: 120000,
+          headers: {
+            "X-Upload-Purpose": "KnowledgeHubDocument",
+          },
+          onUploadProgress: (event) =>
+            onProgress(event.loaded, event.total ?? file.size),
+        }
+      )
+    );
+  },
+
+  finalize: async (documentId: string) =>
+    unwrap<DocumentDto>(
+      await api.post<DocumentDto>(
+        API_ENDPOINTS.KnowledgeHub.DOCUMENT_FINALIZE(documentId)
+      )
+    ),
+
+  download: async (
+    documentId: string,
+    signal?: AbortSignal
+  ): Promise<Blob> => {
+    const response = await api.downloadFile(
+      API_ENDPOINTS.KnowledgeHub.DOCUMENT_DOWNLOAD(documentId),
+      {
+        signal,
+        timeout: 120000,
+        unwrapBlobErrors: true,
+      }
+    );
+    return response.data as Blob;
+  },
+
+  remove: async (documentId: string) =>
+    unwrap<DocumentDeleteDto>(
+      await api.delete<DocumentDeleteDto>(
+        API_ENDPOINTS.KnowledgeHub.DOCUMENT(documentId)
+      )
+    ),
+};
+~~~
+
+Stage phải gửi:
+- FormData field files: đúng một File.
+- FormData field FolderName: UploadSessionId.
+- HTTP header X-Upload-Purpose: KnowledgeHubDocument.
+- Không tự set Content-Type multipart boundary.
+
+## C-05. Query keys và useDocuments
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/document-query-keys.ts
+
+~~~ts
+import type { DocumentListParams } from "../types/documents.types";
+
+export const documentKeys = {
+  all: ["knowledgehub-documents"] as const,
+  actor: (actorId: string) =>
+    ["knowledgehub-documents", actorId] as const,
+  collection: (actorId: string, collectionId: string) =>
+    [...documentKeys.actor(actorId), collectionId] as const,
+  list: (
+    actorId: string,
+    collectionId: string,
+    params: DocumentListParams
+  ) =>
+    [...documentKeys.collection(actorId, collectionId), "list", params] as const,
+};
+~~~
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocuments.ts
+
+~~~ts
+import { useQuery } from "@tanstack/react-query";
+import { documentsApi } from "../api/documents.api";
+import { documentKeys } from "./document-query-keys";
+import type { DocumentListParams } from "../types/documents.types";
+
+export function useDocuments(
+  actorId: string | null,
+  collectionId: string | null,
+  canView: boolean,
+  params: DocumentListParams
+) {
+  return useQuery({
+    queryKey: documentKeys.list(
+      actorId ?? "signed-out",
+      collectionId ?? "no-collection",
+      params
+    ),
+    enabled: Boolean(actorId && collectionId && canView),
+    queryFn: ({ signal }) => {
+      if (!collectionId) throw new Error("Chưa chọn bộ sưu tập");
+      return documentsApi.list(collectionId, params, signal);
+    },
+    retry: false,
+  });
+}
+~~~
+
+## C-06. Upload queue – tuần tự, không fake progress
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentUploads.ts
+
+~~~ts
+import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { documentsApi } from "../api/documents.api";
+import { documentKeys } from "./document-query-keys";
+import { collectionKeys } from "./collection-query-keys";
+import { useKnowledgeHubSession } from "./KnowledgeHubCacheBoundary";
+import type { UploadQueueItem } from "../types/documents.types";
+
+const MAX_BYTES = 52_428_800;
+const ACCEPTED = new Set([".pdf", ".md", ".txt"]);
+
+function validateFile(file: File): string | null {
+  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  if (!ACCEPTED.has(extension)) return "Chỉ chấp nhận PDF, Markdown và TXT.";
+  if (file.size <= 0 || file.size > MAX_BYTES) {
+    return "Tệp phải lớn hơn 0 và không vượt quá 50 MiB.";
+  }
+  return null;
+}
+
+const storageKey = (actorId: string, documentId: string) =>
+  "kh-upload:" + actorId + ":" + documentId;
+
+export function useDocumentUploads(
+  actorId: string | null,
+  collectionId: string | null,
+  canAdd: boolean
+) {
+  const [items, setItems] = useState<UploadQueueItem[]>([]);
+  const [running, setRunning] = useState(false);
+  const currentSession = useKnowledgeHubSession();
+  const queryClient = useQueryClient();
+
+  const isCurrent = (guard: typeof currentSession.current) =>
+    guard === currentSession.current;
+
+  const updateItem = (key: string, patch: Partial<UploadQueueItem>) => {
+    setItems((current) =>
+      current.map((item) => item.key === key ? { ...item, ...patch } : item)
+    );
+  };
+
+  const enqueueFiles = useCallback(async (files: File[]) => {
+    const guard = currentSession.current;
+    if (!actorId || !collectionId || !canAdd || guard.actorId !== actorId) {
+      throw new Error("Bạn không có quyền tải tài liệu lên.");
+    }
+    if (running) return;
+
+    setRunning(true);
+    try {
+      // FileService WriteGate is global: upload one file at a time.
+      for (const file of files) {
+        if (!isCurrent(guard)) return;
+
+        const validationError = validateFile(file);
+        const key = crypto.randomUUID();
+        const uploadSessionId = crypto.randomUUID();
+
+        setItems((current) => [...current, {
+          key,
+          file,
+          uploadSessionId,
+          documentId: null,
+          status: validationError ? "failed" : "creating-intent",
+          loadedBytes: 0,
+          totalBytes: file.size,
+          error: validationError,
+        }]);
+
+        if (validationError) continue;
+
+        try {
+          const intent = await documentsApi.createUploadIntent(collectionId, {
+            UploadSessionId: uploadSessionId,
+            OriginalFileName: file.name,
+            DeclaredSizeBytes: file.size,
+          });
+
+          if (!isCurrent(guard)) return;
+
+          updateItem(key, {
+            documentId: intent.DocumentId,
+            status: "uploading",
+          });
+
+          sessionStorage.setItem(
+            storageKey(actorId, intent.DocumentId),
+            uploadSessionId
+          );
+
+          await documentsApi.stage(
+            uploadSessionId,
+            file,
+            (loaded, total) => {
+              if (!isCurrent(guard)) return;
+              updateItem(key, {
+                status: "uploading",
+                loadedBytes: loaded,
+                totalBytes: total || file.size,
+              });
+            }
+          );
+
+          if (!isCurrent(guard)) return;
+
+          updateItem(key, {
+            status: "registering",
+            loadedBytes: file.size,
+            totalBytes: file.size,
+          });
+
+          await documentsApi.finalize(intent.DocumentId);
+          if (!isCurrent(guard)) return;
+
+          updateItem(key, {
+            status: "registered",
+            loadedBytes: file.size,
+            error: null,
+          });
+
+          sessionStorage.removeItem(storageKey(actorId, intent.DocumentId));
+
+          void queryClient.invalidateQueries({
+            queryKey: documentKeys.collection(actorId, collectionId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: collectionKeys.detail(actorId, collectionId),
+          });
+          toast.success("Đã tải và đăng ký " + file.name);
+        } catch (error) {
+          if (!isCurrent(guard)) return;
+          updateItem(key, {
+            status: "failed",
+            error: error instanceof Error
+              ? error.message
+              : "Không thể tải tài liệu.",
+          });
+        }
+      }
+    } finally {
+      if (isCurrent(guard)) setRunning(false);
+    }
+  }, [actorId, collectionId, canAdd, running, currentSession, queryClient]);
+
+  const retry = useCallback(async (documentId: string, file: File) => {
+    const guard = currentSession.current;
+    if (!actorId || !collectionId || guard.actorId !== actorId) return;
+
+    const uploadSessionId = sessionStorage.getItem(
+      storageKey(actorId, documentId)
+    );
+    if (!uploadSessionId) {
+      toast.error("Không còn UploadSessionId. Hãy tạo upload intent mới.");
+      return;
+    }
+
+    const validationError = validateFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    try {
+      await documentsApi.stage(uploadSessionId, file, () => undefined);
+      await documentsApi.finalize(documentId);
+      if (!isCurrent(guard)) return;
+
+      sessionStorage.removeItem(storageKey(actorId, documentId));
+      void queryClient.invalidateQueries({
+        queryKey: documentKeys.collection(actorId, collectionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: collectionKeys.detail(actorId, collectionId),
+      });
+      toast.success("Đã đăng ký tài liệu");
+    } catch (error) {
+      if (isCurrent(guard)) {
+        toast.error(error instanceof Error ? error.message : "Không thể retry.");
+      }
+    }
+  }, [actorId, collectionId, currentSession, queryClient]);
+
+  return { items, running, enqueueFiles, retry };
+}
+~~~
+
+Retry phải dùng cùng UploadSessionId. Nếu browser mất sessionStorage hoặc file bytes, không tự tạo session mới cho document cũ.
+
+## C-07. Download/delete mutations
+
+**CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentMutations.ts
+
+~~~ts
+import { useEffect, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { documentsApi } from "../api/documents.api";
+import { documentKeys } from "./document-query-keys";
+import { collectionKeys } from "./collection-query-keys";
+import { useKnowledgeHubSession } from "./KnowledgeHubCacheBoundary";
+
+type DeleteArgs = {
+  id: string;
+  guard: ReturnType<typeof useKnowledgeHubSession>["current"];
+};
+
+export function useDocumentMutations(
+  actorId: string | null,
+  collectionId: string | null
+) {
+  const client = useQueryClient();
+  const session = useKnowledgeHubSession();
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const isCurrent = (guard: typeof session.current) =>
+    mounted.current && guard === session.current;
+
+  const capture = () => {
+    const guard = session.current;
+    if (!actorId || guard.actorId !== actorId) {
+      throw new Error("Tài khoản đã thay đổi; vui lòng thử lại.");
+    }
+    return guard;
+  };
+
+  const remove = useMutation({
+    mutationFn: (args: DeleteArgs) => documentsApi.remove(args.id),
+    retry: false,
+    onSuccess: (result, args) => {
+      if (!isCurrent(args.guard) || !args.guard.actorId) return;
+
+      if (collectionId) {
+        void client.invalidateQueries({
+          queryKey: documentKeys.collection(args.guard.actorId, collectionId),
+        });
+        void client.invalidateQueries({
+          queryKey: collectionKeys.detail(args.guard.actorId, collectionId),
+        });
+      }
+
+      if (result.CleanupStatus === "COMPLETED") {
+        toast.success("Đã xóa tài liệu");
+      } else {
+        toast.warning(
+          "Tài liệu đã được gỡ khỏi repository; dọn tệp gốc vẫn đang chờ."
+        );
+      }
+    },
+  });
+
+  const deleteDocument = async (id: string) => {
+    const guard = capture();
+    const result = await remove.mutateAsync({ id, guard });
+    return isCurrent(guard) ? result : null;
+  };
+
+  const downloadDocument = async (id: string, fileName: string) => {
+    const guard = capture();
+    const blob = await documentsApi.download(id);
+    if (!isCurrent(guard)) return;
+
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      anchor.click();
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  return { remove, deleteDocument, downloadDocument };
+}
+~~~
+
+## C-08. Tạo DocumentUploader và UploadProgressList
+
+**CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentUploader.tsx
+
+~~~tsx
+import { useRef, useState } from "react";
+import { CloudUpload, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+export function DocumentUploader({
+  disabled,
+  onFilesSelected,
+}: {
+  disabled: boolean;
+  onFilesSelected: (files: File[]) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  return (
+    <Card className="border-dashed bg-muted/40 py-0 shadow-none">
+      <CardContent
+        className={
+          "flex flex-col items-center gap-3 p-7 text-center " +
+          (dragging ? "ring-2 ring-primary" : "")
+        }
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!disabled) setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          if (!disabled && event.dataTransfer.files.length) {
+            onFilesSelected(Array.from(event.dataTransfer.files));
+          }
+        }}
+      >
+        <div className="rounded-xl bg-background p-3">
+          <CloudUpload className="size-7 text-primary" aria-hidden="true" />
+        </div>
+        <h2 className="text-base font-semibold">Kho tài liệu & Import</h2>
+        <p className="max-w-lg text-sm text-muted-foreground">
+          Chọn hoặc kéo thả PDF, Markdown, TXT. Mỗi tệp tối đa 50 MiB.
+        </p>
+        <input
+          ref={input}
+          type="file"
+          accept=".pdf,.md,.txt"
+          multiple
+          className="sr-only"
+          disabled={disabled}
+          aria-label="Chọn tài liệu để tải lên"
+          onChange={(event) => {
+            if (event.currentTarget.files?.length) {
+              onFilesSelected(Array.from(event.currentTarget.files));
+            }
+            event.currentTarget.value = "";
+          }}
+        />
+        <Button disabled={disabled} onClick={() => input.current?.click()}>
+          <FileText className="size-4" />
+          Chọn tài liệu
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+~~~
+
+**CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/UploadProgressList.tsx
+
+~~~tsx
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import type { UploadQueueItem } from "../types/documents.types";
+
+function formatBytes(value: number) {
+  if (value < 1024) return value + " B";
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+  return (value / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+export function UploadProgressList({ items }: { items: UploadQueueItem[] }) {
+  if (!items.length) return null;
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Tiến trình tải tài liệu</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {items.map((item) => {
+          const percent = item.totalBytes
+            ? Math.min(100, Math.round(item.loadedBytes / item.totalBytes * 100))
+            : 0;
+
+          return (
+            <div key={item.key} className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(item.file.size)}
+                  </p>
+                </div>
+                {item.status === "registered" && (
+                  <Badge variant="secondary">
+                    <CheckCircle2 className="mr-1 size-3" /> Đã đăng ký
+                  </Badge>
+                )}
+                {item.status === "registering" && (
+                  <Badge variant="secondary">
+                    <Loader2 className="mr-1 size-3 animate-spin" /> Đang đăng ký
+                  </Badge>
+                )}
+              </div>
+
+              {item.status === "uploading" && (
+                <>
+                  <Progress value={percent} />
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(item.loadedBytes)} / {formatBytes(item.totalBytes)}
+                    {" · "}{percent}%
+                  </p>
+                </>
+              )}
+
+              {item.status === "registering" && (
+                <p className="text-xs text-muted-foreground">
+                  Đã truyền bytes. Đang xác nhận và đăng ký tài liệu.
+                </p>
+              )}
+
+              {item.error && (
+                <p role="alert" className="text-xs text-destructive">
+                  {item.error}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+~~~
+
+## C-09. DocumentRow và DocumentDeleteDialog
+
+**CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.tsx
+
+~~~tsx
+import { Download, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { DocumentDto } from "../types/documents.types";
+
+function formatBytes(value: number) {
+  if (value < 1024) return value + " B";
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+  return (value / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+export function DocumentRow({
+  document,
+  canDelete,
+  onDownload,
+  onDelete,
+}: {
+  document: DocumentDto;
+  canDelete: boolean;
+  onDownload: (item: DocumentDto) => void;
+  onDelete: (item: DocumentDto) => void;
+}) {
+  const registered = document.RegistrationStatus === "REGISTERED";
+  const statusLabel = {
+    AWAITING_UPLOAD: "Chờ tải lên",
+    REGISTERING: "Đang đăng ký",
+    REGISTRATION_FAILED: "Đăng ký thất bại",
+    REGISTERED: "Đã lưu",
+  }[document.RegistrationStatus];
+
+  return (
+    <tr>
+      <td className="min-w-0 p-2">
+        <p className="truncate font-medium">{document.Title}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {document.OriginalFileName}
+        </p>
+      </td>
+      <td className="p-2 uppercase">{document.FileExtension.replace(".", "")}</td>
+      <td className="p-2">{formatBytes(document.SizeBytes)}</td>
+      <td className="p-2">
+        <Badge variant={registered ? "secondary" : "outline"}>
+          {statusLabel}
+        </Badge>
+      </td>
+      <td className="p-2 text-right">
+        <div className="flex justify-end gap-1">
+          {registered && (
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={"Tải xuống " + document.Title}
+              onClick={() => onDownload(document)}
+            >
+              <Download className="size-4" />
+            </Button>
+          )}
+          {registered && canDelete && (
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={"Xóa " + document.Title}
+              onClick={() => onDelete(document)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+~~~
+
+**CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.tsx
+
+~~~tsx
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import type { DocumentDto } from "../types/documents.types";
+
+export function DocumentDeleteDialog({
+  target,
+  pending,
+  error,
+  onOpenChange,
+  onConfirm,
+}: {
+  target: DocumentDto | null;
+  pending: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog
+      open={target !== null}
+      onOpenChange={(open) => {
+        if (!pending) onOpenChange(open);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Xóa tài liệu?</DialogTitle>
+          <DialogDescription>
+            Tài liệu sẽ bị gỡ khỏi repository. Việc dọn tệp gốc có thể hoàn tất sau.
+          </DialogDescription>
+        </DialogHeader>
+        {target && (
+          <p className="break-words text-sm font-medium">
+            {target.OriginalFileName}
+          </p>
+        )}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+            Hủy
+          </Button>
+          <Button disabled={pending} onClick={onConfirm}>
+            {pending ? "Đang xóa..." : "Xóa tài liệu"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+~~~
+
+## C-10. DocumentRepository – search/filter/paging từ server
+
+**CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRepository.tsx
+
+Implementation bắt buộc:
+- useState cho q, registration_status, page_index.
+- useDocuments(actorId, collectionId, canView, params).
+- ui/table, ui/input, ui/select, ui/button, ui/skeleton.
+- Search chỉ title/original filename.
+- page_index reset về 1 khi query/filter đổi.
+- Download/delete gọi useDocumentMutations.
+- Empty/loading/error state không dùng fake data.
+- Chỉ REGISTERED mới hiện action download/delete.
+- Dialog target là đúng DocumentDto được chọn.
+
+Code khung component:
+
+~~~tsx
+import { useState } from "react";
+import { Search, ChevronLeft, ChevronRight, FolderOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { useDocuments } from "../hooks/useDocuments";
+import { useDocumentMutations } from "../hooks/useDocumentMutations";
+import { DocumentDeleteDialog } from "./DocumentDeleteDialog";
+import { DocumentRow } from "./DocumentRow";
+import type { DocumentDto, DocumentRegistrationStatus } from "../types/documents.types";
+
+export function DocumentRepository({
+  actorId, collectionId, canView, canDelete,
+}: {
+  actorId: string | null;
+  collectionId: string | null;
+  canView: boolean;
+  canDelete: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<DocumentRegistrationStatus | "ALL">("ALL");
+  const [pageIndex, setPageIndex] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState<DocumentDto | null>(null);
+
+  const params = {
+    q: query || undefined,
+    registration_status: status === "ALL" ? undefined : status,
+    page_index: pageIndex,
+    page_size: 20,
+  };
+
+  const list = useDocuments(actorId, collectionId, canView, params);
+  const mutations = useDocumentMutations(actorId, collectionId);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await mutations.deleteDocument(deleteTarget.Id);
+      setDeleteTarget(null);
+    } catch {
+      // mutation.error is shown in the dialog.
+    }
+  };
+
+  return (
+    <Card className="gap-3 py-4 shadow-none">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FolderOpen className="size-4" />
+          Tài liệu trong bộ sưu tập
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-4">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              value={query}
+              placeholder="Tìm theo tên tài liệu..."
+              aria-label="Tìm tài liệu theo tên"
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPageIndex(1);
+              }}
+            />
+          </div>
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value as DocumentRegistrationStatus | "ALL");
+              setPageIndex(1);
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-52" aria-label="Lọc trạng thái">
+              <SelectValue placeholder="Tất cả trạng thái" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+              <SelectItem value="AWAITING_UPLOAD">Chờ tải lên</SelectItem>
+              <SelectItem value="REGISTERING">Đang đăng ký</SelectItem>
+              <SelectItem value="REGISTRATION_FAILED">Đăng ký thất bại</SelectItem>
+              <SelectItem value="REGISTERED">Đã lưu</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {list.isLoading && (
+          <div className="grid gap-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+
+        {list.isError && (
+          <div role="alert" className="grid gap-2 text-sm">
+            <p>Không thể tải danh sách tài liệu.</p>
+            <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
+              Thử lại
+            </Button>
+          </div>
+        )}
+
+        {list.isSuccess && list.data.Data.length === 0 && (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có tài liệu phù hợp trong bộ sưu tập này.
+          </div>
+        )}
+
+        {list.isSuccess && list.data.Data.length > 0 && (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tài liệu</TableHead>
+                  <TableHead>Loại</TableHead>
+                  <TableHead>Dung lượng</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.data.Data.map((item) => (
+                  <DocumentRow
+                    key={item.Id}
+                    document={item}
+                    canDelete={canDelete}
+                    onDownload={(doc) =>
+                      void mutations.downloadDocument(doc.Id, doc.OriginalFileName)
+                    }
+                    onDelete={setDeleteTarget}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Trang {list.data.PageIndex} · {list.data.TotalRow} tài liệu
+              </p>
+              <div className="flex gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  aria-label="Trang trước"
+                  disabled={pageIndex <= 1 || list.isFetching}
+                  onClick={() => setPageIndex((value) => Math.max(1, value - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  aria-label="Trang sau"
+                  disabled={
+                    pageIndex >= Math.max(1, Math.ceil(list.data.TotalRow / list.data.PageSize)) ||
+                    list.isFetching
+                  }
+                  onClick={() => setPageIndex((value) => value + 1)}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      <DocumentDeleteDialog
+        target={deleteTarget}
+        pending={mutations.remove.isPending}
+        error={mutations.remove.error?.message ?? null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={() => void confirmDelete()}
+      />
+    </Card>
+  );
+}
+~~~
+
+## C-11. Thay RepositoryFrame và nối KnowledgeHubPage
+
+**File:** src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.tsx
+
+Thay toàn bộ placeholder bằng:
+
+~~~tsx
+import { useDocumentUploads } from "../hooks/useDocumentUploads";
+import { CollectionState, type CollectionContentState } from "./CollectionState";
+import { DocumentUploader } from "./DocumentUploader";
+import { UploadProgressList } from "./UploadProgressList";
+import { DocumentRepository } from "./DocumentRepository";
+
+export function RepositoryFrame({
+  state,
+  actorId,
+  collectionId,
+  canAdd,
+  canView,
+  canDelete,
+}: {
+  state: CollectionContentState;
+  actorId: string | null;
+  collectionId: string | null;
+  canAdd: boolean;
+  canView: boolean;
+  canDelete: boolean;
+}) {
+  const uploads = useDocumentUploads(actorId, collectionId, canAdd);
+
+  if (state !== "ready") return <CollectionState state={state} />;
+
+  return (
+    <div className="grid min-w-0 gap-5">
+      <DocumentUploader
+        disabled={!canAdd || uploads.running}
+        onFilesSelected={(files) => void uploads.enqueueFiles(files)}
+      />
+      <UploadProgressList items={uploads.items} />
+      <DocumentRepository
+        actorId={actorId}
+        collectionId={collectionId}
+        canView={canView}
+        canDelete={canDelete}
+      />
+    </div>
+  );
+}
+~~~
+
+**File:** src/apps/Blocks.Web/src/features/knowledgehub/routes/KnowledgeHubPage.tsx
+
+Tìm:
+
+~~~tsx
+<RepositoryFrame state={state} />
+~~~
+
+Thay bằng:
+
+~~~tsx
+<RepositoryFrame
+  state={state}
+  actorId={actorId}
+  collectionId={selectedId}
+  canAdd={canCreate}
+  canView={canView}
+  canDelete={canDelete}
+/>
+~~~
+
+Không thay selector, collection CRUD, tabs, AskResearchFrame, selection hook hoặc MainLayout.
+
+**File:** src/apps/Blocks.Web/src/features/knowledgehub/types/collections.types.ts
+
+Thay:
+
+~~~ts
+DocumentCount: number; // Always 0 in P02
+~~~
+
+bằng:
+
+~~~ts
+DocumentCount: number;
+~~~
+
+## C-12. Tests và visual acceptance
+
+### API tests
+- Success=false trong HTTP 200 bị reject.
+- FormData có đúng files và FolderName.
+- X-Upload-Purpose là request header.
+- JSON Content-Type bị xóa cho FormData.
+- Download Blob JSON error envelope bị unwrap.
+- timeout/signal/progress được truyền qua Axios.
+
+### Hook tests
+- Actor A và Actor B có query key khác nhau.
+- Collection A và Collection B có query key khác nhau.
+- Không gọi API nếu thiếu actor/collection/VIEW.
+- Upload queue chỉ có một stage request active tại một thời điểm.
+- Progress dựa trên onUploadProgress.
+- 100% transfer không đồng nghĩa registered.
+- finalize success mới invalidate document list và collection detail.
+- Actor A pending -> actor B login -> A response resolve: không toast/invalidate cache B.
+- Retry giữ nguyên UploadSessionId.
+
+### Component tests
+- file picker/drop zone nhận PDF/MD/TXT.
+- file sai extension hoặc >50 MiB hiển thị lỗi.
+- empty/loading/error state.
+- filter/search/page gọi server params.
+- non-registered không có download/delete.
+- delete dialog không đóng khi pending.
+- cleanup PENDING/FAILED hiển thị cảnh báo, không nói document delete thất bại.
+
+### Visual review
+Compare với docs/knowledgehub/references/stitch_blocks_interface/screen.png:
+- 1280x1024, zoom 100%, DPR 1.
+- 1440x900.
+- 390x844.
+
+Capture:
+1. Collection rỗng thật.
+2. Uploader idle/dragging.
+3. Upload đang truyền bytes.
+4. Upload 100% nhưng đang registering.
+5. Failed/retry.
+6. Document row thật.
+7. Search/filter/paging.
+8. Delete dialog và cleanup pending warning.
+
+Giữ hierarchy MainLayout -> collection selector/count -> tabs -> repository frame. Không thêm second sidebar, fake documents, fake progress, AI answer modal hoặc READY.
+
+~~~powershell
+npm --prefix src/apps/Blocks.Web test -- src/features/knowledgehub
+npm --prefix src/apps/Blocks.Web test
+npm --prefix src/apps/Blocks.Web run build
+npm --prefix src/apps/Blocks.Web run lint
+git diff --check
+~~~
+
