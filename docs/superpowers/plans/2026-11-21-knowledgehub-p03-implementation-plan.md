@@ -716,45 +716,356 @@ private static void ValidateSessionShape(UploadSession session)
 
 ## A-08. Thêm KnowledgeHub/Documents vào FileStorage
 
-**File:** src/services/Blocks.FileService/Infrastructure/Storage/FileStorage.cs
+**File cần sửa:** \`src/services/Blocks.FileService/Infrastructure/Storage/FileStorage.cs\`
 
-Trong ResolveActiveKey, giữ nguyên các nhánh System/Avatar và System/Attachments. Chèn nhánh sau trước exception cuối cùng:
+### A-08.1. Hiểu đúng mục tiêu trước khi sửa
+
+Task này chỉ làm một việc: cho FileService nhận diện logical storage key của KnowledgeHub và ánh xạ nó sang đường dẫn vật lý trong vùng private \`Files\` đang có.
+
+Logical key:
+
+~~~text
+KnowledgeHub/Documents/{documentId}/{fileId}.{extension}
+~~~
+
+Ví dụ:
+
+~~~text
+KnowledgeHub/Documents/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222.pdf
+~~~
+
+Đường dẫn vật lý tương ứng:
+
+~~~text
+{FileStorage:RootPath}/Files/KnowledgeHub/Documents/{documentId}/{fileId}.pdf
+~~~
+
+**Không tạo StorageArea mới. Không sửa constructor. Không sửa enum StorageArea. Không tạo thư mục bằng tay.** Source hiện tại đã có \`StorageArea.Files\`; phương thức \`Resolve(...)\` chịu trách nhiệm ghép path, kiểm tra path không thoát khỏi Files root và từ chối symlink/reparse point.
+
+Cũng cần phân biệt:
+- A-08 chỉ giúp \`ResolveActiveKey()\` hiểu logical key và trả về physical path.
+- A-10 mới là nơi finalize copy bytes vào physical path và gọi \`Directory.CreateDirectory()\`.
+- Preview/Delete dùng \`ResolveActiveKey()\` để tìm đúng file đã finalize.
+
+### A-08.2. Mở đúng method và tìm anchor
+
+Mở \`FileStorage.cs\`, tìm method:
 
 ~~~csharp
-if (segments.Length == 4 &&
-    string.Equals(segments[0], "KnowledgeHub", StringComparison.Ordinal) &&
-    string.Equals(segments[1], "Documents", StringComparison.Ordinal))
+public string ResolveActiveKey(string key)
+~~~
+
+Trong source hiện tại, method đã có:
+1. Guard chặn key rỗng, absolute path, slash kép, backslash, dấu hai chấm và traversal.
+2. \`key.Split('/')\` thành segments.
+3. Nhánh \`System/Avatar\`.
+4. Nhánh \`System/Attachments\`.
+5. Exception cuối method:
+
+~~~csharp
+throw new BusinessException("Đường dẫn tệp không hợp lệ hoặc mục tiêu chưa đăng ký", 400);
+~~~
+
+**MODIFY – REPLACE METHOD:** thay toàn bộ method \`ResolveActiveKey\`, từ dòng khai báo method đến dấu \`}\` đóng method, bằng code dưới đây. Không thay các method \`Resolve\`, \`ResolveAvatar\`, \`ValidateSegment\`, \`ValidateFileNameWithGuid\` hoặc constructor.
+
+### A-08.3. Code hoàn chỉnh sau khi thay
+
+~~~csharp
+public string ResolveActiveKey(string key)
 {
-    var documentIdText = segments[2];
-    if (documentIdText.Length != 36 ||
-        !Guid.TryParseExact(documentIdText, "D", out var documentId) ||
-        documentId == Guid.Empty ||
-        documentId.ToString("D") != documentIdText)
-        throw new BusinessException("DocumentId không hợp lệ", 400);
+    // 1. Reject malformed logical keys before splitting.
+    if (string.IsNullOrWhiteSpace(key) ||
+        key.StartsWith('/') ||
+        key.EndsWith('/') ||
+        key.Contains("//") ||
+        key.Contains('\\') ||
+        key.Contains(':') ||
+        key.Contains(".."))
+    {
+        throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
+    }
 
-    var fileName = segments[3];
-    ValidateFileNameWithGuid(fileName);
+    // 2. Validate every segment using the existing path-segment guard.
+    var segments = key.Split('/');
+    foreach (var segment in segments)
+    {
+        ValidateSegment(segment);
+    }
 
-    var fileIdText = Path.GetFileNameWithoutExtension(fileName);
-    var extension = Path.GetExtension(fileName);
+    // 3. Legacy avatar key:
+    // System/Avatar/<file-id>.<ext>
+    if (segments.Length == 3 &&
+        string.Equals(
+            segments[0],
+            "System",
+            StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(
+            segments[1],
+            "Avatar",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var fileName = segments[2];
+        return ResolveAvatar(fileName);
+    }
 
-    if (extension is not (".pdf" or ".md" or ".txt") ||
-        fileIdText.Length != 36 ||
-        !Guid.TryParseExact(fileIdText, "D", out var fileId) ||
-        fileId == Guid.Empty ||
-        fileId.ToString("D") != fileIdText)
-        throw new BusinessException("KnowledgeHub file key không hợp lệ", 400);
+    // 4. Legacy attachment key:
+    // System/Attachments/<related-id>/<file-id>.<ext>
+    if (segments.Length == 4 &&
+        string.Equals(
+            segments[0],
+            "System",
+            StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(
+            segments[1],
+            "Attachments",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var relatedId = segments[2];
 
-    return Resolve(
-        StorageArea.Files,
-        "KnowledgeHub",
-        "Documents",
-        documentIdText,
-        fileName);
+        if (relatedId.Length != 36 ||
+            !Guid.TryParseExact(relatedId, "D", out var relatedGuid) ||
+            relatedGuid == Guid.Empty)
+        {
+            throw new BusinessException(
+                "Định danh liên kết không hợp lệ",
+                400);
+        }
+
+        var fileName = segments[3];
+        ValidateFileNameWithGuid(fileName);
+
+        return Resolve(
+            StorageArea.Files,
+            "System",
+            "Attachments",
+            relatedId,
+            fileName);
+    }
+
+    // 5. KnowledgeHub document key:
+    // KnowledgeHub/Documents/<document-id>/<file-id>.<extension>
+    // This namespace is intentionally case-sensitive and canonical.
+    if (segments.Length == 4 &&
+        string.Equals(
+            segments[0],
+            "KnowledgeHub",
+            StringComparison.Ordinal) &&
+        string.Equals(
+            segments[1],
+            "Documents",
+            StringComparison.Ordinal))
+    {
+        var documentIdText = segments[2];
+
+        // Document ID must be a non-zero canonical GUID in D format.
+        if (documentIdText.Length != 36 ||
+            !Guid.TryParseExact(
+                documentIdText,
+                "D",
+                out var documentId) ||
+            documentId == Guid.Empty ||
+            documentId.ToString("D") != documentIdText)
+        {
+            throw new BusinessException(
+                "DocumentId không hợp lệ",
+                400);
+        }
+
+        var fileName = segments[3];
+
+        // Reuse the existing validator: basename must be a GUID plus extension.
+        ValidateFileNameWithGuid(fileName);
+
+        var fileIdText = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+
+        // KnowledgeHub only accepts lowercase .pdf, .md, or .txt keys.
+        if (extension is not (".pdf" or ".md" or ".txt") ||
+            fileIdText.Length != 36 ||
+            !Guid.TryParseExact(
+                fileIdText,
+                "D",
+                out var fileId) ||
+            fileId == Guid.Empty ||
+            fileId.ToString("D") != fileIdText)
+        {
+            throw new BusinessException(
+                "KnowledgeHub file key không hợp lệ",
+                400);
+        }
+
+        // Resolve into the existing private Files area.
+        // Resolve() also enforces the root boundary and rejects symlinks.
+        return Resolve(
+            StorageArea.Files,
+            "KnowledgeHub",
+            "Documents",
+            documentIdText,
+            fileName);
+    }
+
+    // 6. Unknown namespace/shape is never treated as an arbitrary path.
+    throw new BusinessException(
+        "Đường dẫn tệp không hợp lệ hoặc mục tiêu chưa đăng ký",
+        400);
 }
 ~~~
 
-Key có đúng bốn segment: KnowledgeHub / Documents / documentId / fileId.extension.
+### A-08.4. Vì sao từng bước cần thiết?
+
+| Đoạn code | Ý nghĩa |
+|---|---|
+| \`segments.Length == 4\` | Chỉ chấp nhận đúng bốn thành phần; không chấp nhận key thiếu/thừa folder. |
+| \`KnowledgeHub\` + \`Documents\` | Namespace phải đúng tuyệt đối; không nhận namespace do client tự đặt. |
+| \`Guid.TryParseExact(..., "D")\` | ID phải có dạng GUID chuẩn có dấu gạch ngang. |
+| \`Guid.Empty\` | Chặn zero GUID. |
+| \`ToString("D") != originalText\` | Chặn GUID không ở dạng canonical lowercase do FileService sinh ra. |
+| \`ValidateFileNameWithGuid(fileName)\` | Tái sử dụng guard hiện tại để tên file chỉ có GUID + extension, không có path/traversal. |
+| Extension allowlist | Chỉ nhận \`.pdf\`, \`.md\`, \`.txt\`; không nhận \`.exe\`, \`.PDF\` hoặc extension khác. |
+| \`Resolve(StorageArea.Files, ...)\` | Dùng private Files root và các bảo vệ root-boundary/symlink đã có. |
+
+Không tự ghép đường dẫn bằng \`Path.Combine(privateRoot, key)\`. Không dùng key trực tiếp như physical path. \`Path.GetFullPath\` trong resolver hiện có được dùng để chuẩn hóa và kiểm tra ranh giới; tài liệu .NET cũng lưu ý path tương đối phải được xử lý dựa trên base path rõ ràng, không dựa vào current directory thay đổi theo process. <https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath>
+
+### A-08.5. Kết quả mong đợi
+
+Với:
+
+~~~csharp
+var key =
+    "KnowledgeHub/Documents/" +
+    "11111111-1111-1111-1111-111111111111/" +
+    "22222222-2222-2222-2222-222222222222.pdf";
+
+var physicalPath = storage.ResolveActiveKey(key);
+~~~
+
+Kết quả phải trỏ đến:
+
+~~~text
+<FileStorage:RootPath>/Files/KnowledgeHub/Documents/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222.pdf
+~~~
+
+Method này không tự tạo file hoặc folder. Khi A-10 finalize, code sẽ tạo directory và copy original bytes vào đây. Không có URL public/static nào được tạo.
+
+### A-08.6. Bổ sung path tests
+
+**File:** \`test/FileService.RemovalChecks/Program.cs\`
+
+Mở method \`RunPathsChecksAsync()\`. Trong source hiện tại đã có check tên:
+
+~~~csharp
+"leading_double_slash_and_zero_guid_keys_are_rejected"
+~~~
+
+**MODIFY – INSERT:** chèn hai check dưới đây ngay sau check trên và trước check \`intermediate_reparse_point_is_rejected_or_not_run\`. Không xóa các path tests đang có.
+
+**Test 1 – key hợp lệ phải map vào private Files root:**
+
+~~~csharp
+await CheckAsync("knowledgehub_document_key_maps_to_private_files_area", async () =>
+{
+    var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
+    var documentId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    var fileId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+    foreach (var extension in new[] { ".pdf", ".md", ".txt" })
+    {
+        var key =
+            $"KnowledgeHub/Documents/{documentId:D}/{fileId:D}{extension}";
+
+        var actual = storage.ResolveActiveKey(key);
+        var expected = Path.Combine(
+            privateRoot,
+            "Files",
+            "KnowledgeHub",
+            "Documents",
+            documentId.ToString("D"),
+            $"{fileId:D}{extension}");
+
+        Require(
+            Path.GetFullPath(actual) == Path.GetFullPath(expected),
+            $"Key '{key}' must map to the private KnowledgeHub Documents path.");
+    }
+
+    var resolvedDirectory = Path.Combine(
+        privateRoot,
+        "Files",
+        "KnowledgeHub",
+        "Documents",
+        documentId.ToString("D"));
+
+    Require(
+        !Directory.Exists(resolvedDirectory),
+        "ResolveActiveKey must resolve a path without creating document directories.");
+
+    await Task.CompletedTask;
+});
+~~~
+
+**Test 2 – key sai namespace/shape/ID/extension phải trả 400:**
+
+~~~csharp
+await CheckAsync("knowledgehub_document_key_rejects_invalid_shapes", async () =>
+{
+    var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
+    const string documentId = "11111111-1111-1111-1111-111111111111";
+    const string fileId = "22222222-2222-2222-2222-222222222222";
+
+    var invalidKeys = new[]
+    {
+        $"knowledgehub/Documents/{documentId}/{fileId}.pdf",
+        $"KnowledgeHub/documents/{documentId}/{fileId}.pdf",
+        $"KnowledgeHub/Other/{documentId}/{fileId}.pdf",
+        $"KnowledgeHub/Documents/{documentId}/{fileId}.pdf/extra",
+        $"KnowledgeHub/Documents/{documentId}",
+        $"KnowledgeHub/Documents/00000000-0000-0000-0000-000000000000/{fileId}.pdf",
+        $"KnowledgeHub/Documents/{documentId.ToUpperInvariant()}/{fileId}.pdf",
+        $"KnowledgeHub/Documents/{documentId}/{Guid.Empty:D}.pdf",
+        $"KnowledgeHub/Documents/{documentId}/{fileId.ToUpperInvariant()}.pdf",
+        $"KnowledgeHub/Documents/{documentId}/{fileId}.exe",
+        $"KnowledgeHub/Documents/{documentId}/{fileId}.PDF",
+        $"KnowledgeHub/Documents/{documentId}/../{fileId}.pdf",
+        $"KnowledgeHub/Documents/{documentId}/..\\{fileId}.pdf",
+    };
+
+    foreach (var key in invalidKeys)
+    {
+        var rejected = false;
+        try
+        {
+            storage.ResolveActiveKey(key);
+        }
+        catch (BusinessException ex) when (ex.StatusCode == 400)
+        {
+            rejected = true;
+        }
+
+        Require(rejected, $"Invalid KnowledgeHub key '{key}' must be rejected with 400.");
+    }
+
+    await Task.CompletedTask;
+});
+~~~
+
+Các test trên chỉ kiểm tra resolver, không cần database, không cần SystemService và không tạo file tài liệu.
+
+### A-08.7. Chạy kiểm tra
+
+Từ repository root:
+
+~~~powershell
+dotnet build src/services/Blocks.FileService/Blocks.FileService.csproj
+dotnet run --project test/FileService.RemovalChecks -- paths
+git diff --check
+~~~
+
+Kết quả cần thấy:
+- \`knowledgehub_document_key_maps_to_private_files_area\`: PASS.
+- \`knowledgehub_document_key_rejects_invalid_shapes\`: PASS.
+- Các check cũ trong mode \`paths\`: vẫn PASS.
+- Các check legacy System/Avatar và System/Attachments không bị thay đổi.
+
+Nếu test cũ của System/Avatar hoặc System/Attachments fail, không chuyển sang A-09. Không sửa nhánh legacy chỉ để làm test mới pass.
 
 ## A-09. Thay Insert bằng bản hỗ trợ purpose và retry idempotent
 
