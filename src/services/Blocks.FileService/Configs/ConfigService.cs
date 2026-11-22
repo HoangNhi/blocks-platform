@@ -1,6 +1,7 @@
 using Blocks.SystemService.Protos;
 using AutoDependencyRegistration;
 using Grpc.Net.Client.Web;
+using Blocks.FileService.Infrastructure.Filters;
 
 namespace Blocks.FileService.Configs
 {
@@ -36,6 +37,28 @@ namespace Blocks.FileService.Configs
                 o.HttpVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact;
             })
             .ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(GrpcWebMode.GrpcWeb, new HttpClientHandler()));
+
+            builder.Services.AddGrpcClient<SystemProto.SystemProtoClient>(o =>
+            {
+                var address = builder.Configuration["GrpcClients:SystemService"];
+                if (string.IsNullOrWhiteSpace(address))
+                {
+                    throw new InvalidOperationException(
+                        "GrpcClients:SystemService is required for FileService.");
+                }
+
+                o.Address = new Uri(address, UriKind.Absolute);
+            })
+            .ConfigureChannel(o =>
+            {
+                o.HttpVersion = new Version(1, 1);
+                o.HttpVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(GrpcWebMode.GrpcWeb, new HttpClientHandler()));
+
+            builder.Services.AddScoped<IKnowledgeHubUploadPermissionClient, SystemKnowledgeHubUploadPermissionClient>();
+            builder.Services.AddScoped<IuploadAttemptAuditWriter, SystemUploadAttemptAuditWriter>();
+            builder.Services.AddScoped<KnowledgeHubUploadPermissionFilter>();
 
             //ALL SERVICE
             builder.Services.AutoRegisterDependencies();

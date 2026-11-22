@@ -2,6 +2,7 @@ using Blocks.Shared.DTOs.Base;
 using Blocks.FileService.DTOs.Base;
 using Blocks.FileService.Services.CoreFeature.UploadFile;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.FileService.Infrastructure.Filters;
 
 namespace Blocks.FileService.Controllers
 {
@@ -17,8 +18,9 @@ namespace Blocks.FileService.Controllers
         }
 
         [HttpPost]
-        [RequestSizeLimit(52428800)] // 50MB limit
-        [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+        [ServiceFilter(typeof(KnowledgeHubUploadPermissionFilter))]
+        [RequestSizeLimit(53477376)] // 51 MiB multipart envelope
+        [RequestFormLimits(MultipartBodyLengthLimit = 53477376)]
         public async Task<IActionResult> Post(List<IFormFile> files, [FromForm] string FolderName)
         {
             await _service.Insert(files, FolderName, HttpContext.RequestAborted);

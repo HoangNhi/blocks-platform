@@ -30,6 +30,18 @@ namespace Blocks.FileService.Configs
 
         public static void ExecuteConfigAuthentication(this WebApplicationBuilder builder)
         {
+            var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+            var jwtAudience = builder.Configuration["Jwt:Audience"];
+            var jwtKey = builder.Configuration["Jwt:Key"];
+
+            if (string.IsNullOrWhiteSpace(jwtIssuer) ||
+                string.IsNullOrWhiteSpace(jwtAudience) ||
+                string.IsNullOrWhiteSpace(jwtKey))
+            {
+                throw new InvalidOperationException(
+                    "FileService requires configured Jwt:Issuer, Jwt:Audience, and Jwt:Key.");
+            }
+
             builder.Services
                 .AddAuthentication(options =>
                 {
@@ -44,9 +56,9 @@ namespace Blocks.FileService.Configs
                         ValidateIssuer = true,
                         ValidateAudience = true,
                         ValidateIssuerSigningKey = true,
-                        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                        ValidAudience = builder.Configuration["Jwt:Audience"],
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? "default_key_for_test_if_missing")),
+                        ValidIssuer = jwtIssuer,
+                        ValidAudience = jwtAudience,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
                         NameClaimType = "unique_name",
                         ClockSkew = TimeSpan.Zero
                     };

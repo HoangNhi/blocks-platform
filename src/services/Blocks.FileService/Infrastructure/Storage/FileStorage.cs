@@ -153,6 +153,7 @@ namespace Blocks.FileService.Infrastructure.Storage
 
         public string ResolveActiveKey(string key)
         {
+            // 1. Reject malformed logical keys before splitting.
             if (string.IsNullOrWhiteSpace(key) ||
                 key.StartsWith('/') ||
                 key.EndsWith('/') ||
@@ -164,37 +165,129 @@ namespace Blocks.FileService.Infrastructure.Storage
                 throw new BusinessException("Đường dẫn tệp không hợp lệ", 400);
             }
 
+            // 2. Validate every segment using the existing path-segment guard.
             var segments = key.Split('/');
             foreach (var segment in segments)
             {
                 ValidateSegment(segment);
             }
+
+            // 3. Legacy avatar key:
             // System/Avatar/<file-id>.<ext>
             if (segments.Length == 3 &&
-                string.Equals(segments[0], "System", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(segments[1], "Avatar", StringComparison.OrdinalIgnoreCase))
+                string.Equals(
+                    segments[0],
+                    "System",
+                    StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    segments[1],
+                    "Avatar",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 var fileName = segments[2];
                 return ResolveAvatar(fileName);
             }
 
+            // 4. Legacy attachment key:
             // System/Attachments/<related-id>/<file-id>.<ext>
             if (segments.Length == 4 &&
-                string.Equals(segments[0], "System", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(segments[1], "Attachments", StringComparison.OrdinalIgnoreCase))
+                string.Equals(
+                    segments[0],
+                    "System",
+                    StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    segments[1],
+                    "Attachments",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 var relatedId = segments[2];
-                if (relatedId.Length != 36 || !Guid.TryParseExact(relatedId, "D", out var relatedGuid) || relatedGuid == Guid.Empty)
+
+                if (relatedId.Length != 36 ||
+                    !Guid.TryParseExact(relatedId, "D", out var relatedGuid) ||
+                    relatedGuid == Guid.Empty)
                 {
-                    throw new BusinessException("Định danh liên kết không hợp lệ", 400);
+                    throw new BusinessException(
+                        "Định danh liên kết không hợp lệ",
+                        400);
                 }
 
                 var fileName = segments[3];
                 ValidateFileNameWithGuid(fileName);
-                return Resolve(StorageArea.Files, "System", "Attachments", relatedId, fileName);
+
+                return Resolve(
+                    StorageArea.Files,
+                    "System",
+                    "Attachments",
+                    relatedId,
+                    fileName);
             }
 
-            throw new BusinessException("Đường dẫn tệp không hợp lệ hoặc mục tiêu chưa đăng ký", 400);
+            // 5. KnowledgeHub document key:
+            // KnowledgeHub/Documents/<document-id>/<file-id>.<extension>
+            // This namespace is intentionally case-sensitive and canonical.
+            if (segments.Length == 4 &&
+                string.Equals(
+                    segments[0],
+                    "KnowledgeHub",
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    segments[1],
+                    "Documents",
+                    StringComparison.Ordinal))
+            {
+                var documentIdText = segments[2];
+
+                // Document ID must be a non-zero canonical GUID in D format.
+                if (documentIdText.Length != 36 ||
+                    !Guid.TryParseExact(
+                        documentIdText,
+                        "D",
+                        out var documentId) ||
+                    documentId == Guid.Empty ||
+                    documentId.ToString("D") != documentIdText)
+                {
+                    throw new BusinessException(
+                        "DocumentId không hợp lệ",
+                        400);
+                }
+
+                var fileName = segments[3];
+
+                // Reuse the existing validator: basename must be a GUID plus extension.
+                ValidateFileNameWithGuid(fileName);
+
+                var fileIdText = Path.GetFileNameWithoutExtension(fileName);
+                var extension = Path.GetExtension(fileName);
+
+                // KnowledgeHub only accepts lowercase .pdf, .md, or .txt keys.
+                if (extension is not (".pdf" or ".md" or ".txt") ||
+                    fileIdText.Length != 36 ||
+                    !Guid.TryParseExact(
+                        fileIdText,
+                        "D",
+                        out var fileId) ||
+                    fileId == Guid.Empty ||
+                    fileId.ToString("D") != fileIdText)
+                {
+                    throw new BusinessException(
+                        "KnowledgeHub file key không hợp lệ",
+                        400);
+                }
+
+                // Resolve into the existing private Files area.
+                // Resolve() also enforces the root boundary and rejects symlinks.
+                return Resolve(
+                    StorageArea.Files,
+                    "KnowledgeHub",
+                    "Documents",
+                    documentIdText,
+                    fileName);
+            }
+
+            // 6. Unknown namespace/shape is never treated as an arbitrary path.
+            throw new BusinessException(
+                "Đường dẫn tệp không hợp lệ hoặc mục tiêu chưa đăng ký",
+                400);
         }
 
         public string ResolveSession(Guid actorId, Guid folderId)

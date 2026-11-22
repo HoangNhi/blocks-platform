@@ -522,6 +522,86 @@ async Task RunPathsChecksAsync()
             }
         });
 
+        await CheckAsync("knowledgehub_document_key_maps_to_private_files_area", async () =>
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
+            var documentId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            var fileId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+            foreach (var extension in new[] { ".pdf", ".md", ".txt" })
+            {
+                var key =
+                    $"KnowledgeHub/Documents/{documentId:D}/{fileId:D}{extension}";
+
+                var actual = storage.ResolveActiveKey(key);
+                var expected = Path.Combine(
+                    privateRoot,
+                    "Files",
+                    "KnowledgeHub",
+                    "Documents",
+                    documentId.ToString("D"),
+                    $"{fileId:D}{extension}");
+
+                Require(
+                    Path.GetFullPath(actual) == Path.GetFullPath(expected),
+                    $"Key '{key}' must map to the private KnowledgeHub Documents path.");
+            }
+
+            var resolvedDirectory = Path.Combine(
+                privateRoot,
+                "Files",
+                "KnowledgeHub",
+                "Documents",
+                documentId.ToString("D"));
+
+            Require(
+                !Directory.Exists(resolvedDirectory),
+                "ResolveActiveKey must resolve a path without creating document directories.");
+
+            await Task.CompletedTask;
+        });
+
+        await CheckAsync("knowledgehub_document_key_rejects_invalid_shapes", async () =>
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
+            const string documentId = "11111111-1111-1111-1111-111111111111";
+            const string fileId = "22222222-2222-2222-2222-222222222222";
+
+            var invalidKeys = new[]
+            {
+                $"knowledgehub/Documents/{documentId}/{fileId}.pdf",
+                $"KnowledgeHub/documents/{documentId}/{fileId}.pdf",
+                $"KnowledgeHub/Other/{documentId}/{fileId}.pdf",
+                $"KnowledgeHub/Documents/{documentId}/{fileId}.pdf/extra",
+                $"KnowledgeHub/Documents/{documentId}",
+                $"KnowledgeHub/Documents/00000000-0000-0000-0000-000000000000/{fileId}.pdf",
+                $"KnowledgeHub/Documents/{documentId.ToUpperInvariant()}/{fileId}.pdf",
+                $"KnowledgeHub/Documents/{documentId}/{Guid.Empty:D}.pdf",
+                $"KnowledgeHub/Documents/{documentId}/{fileId.ToUpperInvariant()}.pdf",
+                $"KnowledgeHub/Documents/{documentId}/{fileId}.exe",
+                $"KnowledgeHub/Documents/{documentId}/{fileId}.PDF",
+                $"KnowledgeHub/Documents/{documentId}/../{fileId}.pdf",
+                $"KnowledgeHub/Documents/{documentId}/..\\{fileId}.pdf",
+            };
+
+            foreach (var key in invalidKeys)
+            {
+                var rejected = false;
+                try
+                {
+                    storage.ResolveActiveKey(key);
+                }
+                catch (BusinessException ex) when (ex.StatusCode == 400)
+                {
+                    rejected = true;
+                }
+
+                Require(rejected, $"Invalid KnowledgeHub key '{key}' must be rejected with 400.");
+            }
+
+            await Task.CompletedTask;
+        });
+
         await CheckAsync("intermediate_reparse_point_is_rejected_or_not_run", async () =>
         {
             var linkTarget = Path.Combine(fixtureDir, "inter-target");
