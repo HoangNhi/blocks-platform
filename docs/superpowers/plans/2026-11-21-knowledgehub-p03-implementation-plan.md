@@ -464,6 +464,12 @@ Không để fallback key. Trước runtime integration, owner phải xác nhậ
 
 **File:** src/services/Blocks.FileService/Controllers/UploadFileController.cs
 
+**MODIFY – INSERT:** thêm using ở đầu file:
+
+~~~csharp
+using Blocks.FileService.Infrastructure.Filters;
+~~~
+
 Tìm Post hiện tại có RequestSizeLimit(52428800) và RequestFormLimits(MultipartBodyLengthLimit = 52428800).
 
 **MODIFY – REPLACE METHOD:** thay toàn bộ Post bằng:
@@ -2274,25 +2280,19 @@ async def lifespan(app: FastAPI):
 
 **MODIFY – UPDATE health:** thêm dependency FileServiceClient và check:
 
+Trong health endpoint hiện tại:
+1. Thêm parameter:
 ~~~python
-@app.get("/health")
-async def health(
-    request: Request,
-    permission_client: PermissionClient = Depends(get_permission_client),
-    file_service_client: FileServiceClient = Depends(get_file_service_client),
-):
-    if not await permission_client.check_channel_health():
-        return JSONResponse(status_code=503, content={"status": "unhealthy"})
-
-    if not await file_service_client.check_channel_health():
-        return JSONResponse(status_code=503, content={"status": "unhealthy"})
-
-    engine = getattr(request.app.state, "db_engine", None)
-    if not await check_db_health(engine, timeout=2.0):
-        return JSONResponse(status_code=503, content={"status": "unhealthy"})
-
-    return {"status": "healthy"}
+file_service_client: FileServiceClient = Depends(get_file_service_client),
 ~~~
+2. Giữ nguyên check PermissionClient và DB hiện có.
+3. Chèn sau check PermissionClient:
+~~~python
+if not await file_service_client.check_channel_health():
+    return JSONResponse(status_code=503, content={"status": "unhealthy"})
+~~~
+
+Không thay helper DB health bằng một tên function mới; giữ đúng tên helper đang có trong main.py.
 
 Giữ /alive độc lập. Cuối file, sau app.include_router(api_router), thêm:
 
