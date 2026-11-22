@@ -3934,17 +3934,25 @@ export function useDocumentMutations(
 
   const downloadDocument = async (id: string, fileName: string) => {
     const guard = capture();
-    const blob = await documentsApi.download(id);
-    if (!isCurrent(guard)) return;
-
-    const objectUrl = URL.createObjectURL(blob);
     try {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = fileName;
-      anchor.click();
-    } finally {
-      URL.revokeObjectURL(objectUrl);
+      const blob = await documentsApi.download(id);
+      if (!isCurrent(guard)) return;
+
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = fileName;
+        anchor.click();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    } catch (error) {
+      if (isCurrent(guard)) {
+        toast.error(
+          error instanceof Error ? error.message : "Không thể tải tài liệu."
+        );
+      }
     }
   };
 
