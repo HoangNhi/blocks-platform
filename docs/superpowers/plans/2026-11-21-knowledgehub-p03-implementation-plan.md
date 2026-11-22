@@ -935,6 +935,26 @@ public async Task Insert(
             uploadPurpose);
 
         await _sessions.WriteAsync(session, cancellationToken);
+
+        // Preserve legacy replacement behavior: once the new manifest points
+        // to the new batch, best-effort delete the previous staged batch.
+        // KnowledgeHub same-content retries returned above and never replace it.
+        if (existingSession != null)
+        {
+            var oldBatchDir = _storage.Resolve(
+                StorageArea.Temp,
+                actorId.ToString("D"),
+                folderGuid.ToString("D"),
+                "batches",
+                existingSession.BatchId.ToString("D"));
+
+            if (Directory.Exists(oldBatchDir))
+            {
+                try { Directory.Delete(oldBatchDir, recursive: true); }
+                catch { /* Do not fail after the new manifest has been committed. */ }
+            }
+        }
+
         newBatchDir = null;
     }
     catch
