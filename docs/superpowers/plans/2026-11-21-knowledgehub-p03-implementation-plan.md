@@ -4688,3 +4688,118 @@ npm --prefix src/apps/Blocks.Web run lint
 git diff --check
 ~~~
 
+
+
+---
+
+# D. Integrated verification và handover
+
+## D-01. Thứ tự chạy local checks
+
+### FileService
+
+~~~powershell
+dotnet build src/services/Blocks.FileService/Blocks.FileService.csproj
+dotnet run --project test/FileService.RemovalChecks -- permissions
+dotnet run --project test/FileService.RemovalChecks -- paths
+dotnet run --project test/FileService.RemovalChecks -- sessions
+dotnet run --project test/FileService.RemovalChecks -- lifecycle
+dotnet run --project test/FileService.RemovalChecks -- transport
+dotnet run --project test/FileService.RemovalChecks -- gateway
+dotnet run --project test/FileService.RemovalChecks -- boundary
+dotnet run --project test/FileService.RemovalChecks -- migration
+dotnet run --project test/FileService.RemovalChecks -- upgrade
+dotnet run --project test/FileService.RemovalChecks -- all
+~~~
+
+### KnowledgeHub Python
+
+~~~powershell
+uv run --locked --project src/services/Blocks.KnowledgeHubService python -m unittest discover -s src/services/Blocks.KnowledgeHubService/tests -v
+~~~
+
+Không tạo test DB. Chỉ mock AsyncSession, compile PostgreSQL SQL, mock gRPC và FastAPI dependency overrides.
+
+### React
+
+~~~powershell
+npm --prefix src/apps/Blocks.Web test -- src/features/knowledgehub
+npm --prefix src/apps/Blocks.Web test
+npm --prefix src/apps/Blocks.Web run build
+npm --prefix src/apps/Blocks.Web run lint
+~~~
+
+### Aspire và repository regression
+
+~~~powershell
+dotnet build src/platform/Blocks.AppHost/Blocks.AppHost.csproj
+& ./test/Backend.Upgrade.Check.ps1 -Check all
+git diff --check
+~~~
+
+## D-02. Owner-authorized live acceptance
+
+Các bước dưới đây chỉ chạy khi owner cho phép dùng runtime và dữ liệu disposable:
+
+| Scenario | Expected |
+| --- | --- |
+| Actor có KnowledgeHub ADD | Tạo intent, stage, finalize và thấy document của mình. |
+| Actor không có ADD | Purpose upload bị 403 trước MVC multipart binding; không có managed Temp artifacts. |
+| SystemService unavailable | Fail closed; không có managed Temp artifacts. |
+| Legacy FileService upload không có purpose header | System Attachment/Avatar vẫn hoạt động. |
+| Actor B đoán DocumentId của A | Uniform 404; không gọi FileService. |
+| Retry cùng UploadSessionId/nội dung | Cùng FileId/storage key/SHA; không tạo bản sao. |
+| Retry cùng session nhưng nội dung khác | 409; không thay manifest/batch cũ. |
+| Collection soft-delete trước finalize | Finalize bị chặn; không tạo document active. |
+| Collection soft-delete trong lúc FileService finalize | Original được giữ ở trạng thái PARENT_DELETED_RETAINED; không gọi DeleteData. |
+| Document delete | DB logical delete commit trước; document lập tức inaccessible; cleanup COMPLETED hoặc FAILED. |
+| FileService download | Original bytes được trả qua FastAPI; browser không biết storage key. |
+| 50 MiB boundary | FileService và gRPC message limit xử lý đúng; concurrency download tối đa 1/API process. |
+| Health | /health kiểm tra DB + SystemService + FileService; /alive độc lập. |
+
+Không thay đổi menu/role/grant trong SystemService nếu chưa có authorization riêng. Không cố tình làm DB mất kết nối hoặc xóa dữ liệu thật để test.
+
+## D-03. Visual acceptance
+
+So sánh mockup đã duyệt tại:
+- 1280x1024, zoom 100%, DPR 1.
+- 1440x900.
+- 390x844.
+
+Kiểm tra:
+1. MainLayout/sidebar/header không đổi.
+2. Collection selector và DocumentCount badge không đổi hierarchy.
+3. Tabs Repository/Research giữ nguyên.
+4. Uploader và table theo đúng hierarchy trong Stitch reference.
+5. Không horizontal overflow ở 390px.
+6. Dialog và action không bị cắt.
+7. Loading/empty/error/permission denied states không hiển thị fake data.
+8. Byte transfer progress tách biệt registration state.
+
+Nếu có screenshot evidence, lưu ở docs/knowledgehub/evidence/p03/ và không sửa ảnh reference gốc.
+
+## D-04. Cách bạn thực hiện từng task
+
+Mỗi task đi theo cùng một vòng:
+
+1. Mở source file và tìm đúng anchor được nêu.
+2. Nếu source khác anchor, dừng và so sánh trước khi chép.
+3. Viết failing test hoặc thêm assertion trước.
+4. Chép block code vào đúng file/vị trí.
+5. Chạy focused test trong task đó.
+6. Đọc diff, chạy git diff --check.
+7. Commit một task hoặc một nhóm thay đổi nhỏ.
+8. Chỉ chuyển task khi Done condition đạt.
+
+Không chép đồng thời A/B/C. A phải chốt protobuf và FileService contract trước B. B phải chốt API contract trước C. AppHost chỉ được sửa tuần tự vì A và B cùng sửa một file.
+
+## D-05. Những phần chưa được thực thi
+
+- Các code block trong plan là implementation code để owner chép và review; chưa được compile hoặc test trong repository.
+- Product source code chưa được sửa trong lần lập plan này.
+- SQL chưa được apply.
+- Không có test database nào được tạo.
+- Chưa chạy live SystemService permission, TLS, Gateway, PostgreSQL hoặc upload/download runtime.
+- Chưa có screenshot visual acceptance.
+- Chỉ tạo docs/knowledgehub/outcomes/P03.md sau khi owner chạy checks và ghi đúng PASS/FAIL/NOT RUN.
+
