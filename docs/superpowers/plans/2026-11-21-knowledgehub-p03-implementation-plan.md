@@ -504,6 +504,7 @@ Không thêm UploadPurpose vào FromForm. 51 MiB chỉ là request envelope; Fil
 
 ~~~csharp
 using Blocks.Shared.DTOs.Base;
+using Blocks.FileService.DTOs.Common;
 using Blocks.FileService.DTOs.CoreFeature.UploadFile;
 
 namespace Blocks.FileService.Services.CoreFeature.UploadFile
@@ -596,7 +597,8 @@ private static void ValidateSessionShape(UploadSession session)
     if (session.State is not ("Staged" or "Finalizing" or "Finalized"))
         throw new BusinessException("Trạng thái phiên tải lên không hợp lệ", 409);
 
-    if (session.Purpose is not null and not "KnowledgeHubDocument")
+    if (session.Purpose != null &&
+        session.Purpose != "KnowledgeHubDocument")
         throw new BusinessException("Purpose trong manifest không hợp lệ", 409);
 
     if (session.Files == null ||
@@ -752,6 +754,14 @@ Key có đúng bốn segment: KnowledgeHub / Documents / documentId / fileId.ext
 ## A-09. Thay Insert bằng bản hỗ trợ purpose và retry idempotent
 
 **File:** src/services/Blocks.FileService/Services/CoreFeature/UploadFile/UploadFileService.cs
+
+**MODIFY – INSERT:** thêm using ở đầu file hiện tại:
+
+~~~csharp
+using Blocks.FileService.DTOs.CoreFeature.UploadFile;
+~~~
+
+Source đã có using Blocks.FileService.DTOs.Common; giữ nguyên using đó.
 
 Tìm Insert ở đầu class và thay toàn bộ method bằng:
 
@@ -2302,7 +2312,7 @@ Trong knowledgeHub builder chain, thêm:
     fileService.GetEndpoint("https"))
 .WithEnvironment(
     "KNOWLEDGEHUB_FILE_GRPC_CA_FILE",
-    builder.AddParameter("knowledgehub-file-grpc-ca-file"))
+    builder.AddParameter("knowledgehub-grpc-ca-file"))
 ~~~
 
 Nếu CA parameter hiện tại dùng cho SystemService cũng xác thực được certificate của FileService, có thể tái sử dụng parameter hiện có thay vì tạo parameter mới. Owner phải kiểm tra CA thực tế; không giả định hai endpoint cùng certificate chain.
@@ -2548,7 +2558,20 @@ async def claim_registration(
     document_id: UUID,
     actor_id: UUID,
 ):
-    pair = await get_document_and_parent(session, document_id, actor_id)
+    # Lock document and parent. Collection soft-delete updates the parent row.
+    result = await session.execute(
+        select(DocumentModel, CollectionModel)
+        .join(
+            CollectionModel,
+            CollectionModel.id == DocumentModel.collection_id,
+        )
+        .where(
+            DocumentModel.id == document_id,
+            CollectionModel.owner_id == actor_id,
+        )
+        .with_for_update()
+    )
+    pair = result.one_or_none()
     if pair is None:
         return None
 
@@ -2646,14 +2669,15 @@ async def commit_finalized_reference(
     document.content_type = DOCUMENT_MIME_TYPES[document.file_extension]
     document.registration_attempt_id = None
     document.registration_lease_until = None
-    document.registered_at = datetime.now(timezone.utc)
 
     if collection.deleted_at is None:
         document.registration_status = "REGISTERED"
+        document.registered_at = datetime.now(timezone.utc)
         document.last_error_code = None
         document.last_error_at = None
     else:
         document.registration_status = "PARENT_DELETED_RETAINED"
+        document.registered_at = None
 
     await session.flush()
     return document
@@ -2696,23 +2720,31 @@ async def soft_delete_document(
     document_id: UUID,
     actor_id: UUID,
 ) -> DocumentModel | None:
+    # Lock parent and document so collection deletion and document deletion serialize.
     result = await session.execute(
-        update(DocumentModel)
+        select(DocumentModel, CollectionModel)
+        .join(
+            CollectionModel,
+            CollectionModel.id == DocumentModel.collection_id,
+        )
         .where(
             DocumentModel.id == document_id,
-            DocumentModel.collection_id == CollectionModel.id,
             CollectionModel.owner_id == actor_id,
             CollectionModel.deleted_at.is_(None),
             DocumentModel.deleted_at.is_(None),
             DocumentModel.registration_status == "REGISTERED",
         )
-        .values(
-            deleted_at=func.now(),
-            cleanup_status="PENDING",
-        )
-        .returning(DocumentModel)
+        .with_for_update()
     )
-    return result.scalar_one_or_none()
+    pair = result.one_or_none()
+    if pair is None:
+        return None
+
+    document, collection = pair
+    document.deleted_at = datetime.now(timezone.utc)
+    document.cleanup_status = "PENDING"
+    await session.flush()
+    return document
 
 
 async def update_cleanup_status(
@@ -3257,6 +3289,7 @@ Không có test nào được kết nối database. SQL compilation và mock ses
 | Create | src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentDeleteDialog.tsx | Delete confirmation. |
 | Modify | src/apps/Blocks.Web/src/features/knowledgehub/components/RepositoryFrame.tsx | Replace P02 placeholder. |
 | Modify | src/apps/Blocks.Web/src/features/knowledgehub/routes/KnowledgeHubPage.tsx | Pass actor/collection/permissions. |
+| Modify | src/apps/Blocks.Web/src/Router.tsx | Mount KnowledgeHubCacheBoundary around KnowledgeHub route. |
 
 ## C-01. Endpoint constants
 
@@ -3621,7 +3654,7 @@ export function useDocuments(
 **CREATE – FULL FILE:** src/apps/Blocks.Web/src/features/knowledgehub/hooks/useDocumentUploads.ts
 
 ~~~ts
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -3653,6 +3686,7 @@ export function useDocumentUploads(
 ) {
   const [items, setItems] = useState<UploadQueueItem[]>([]);
   const [running, setRunning] = useState(false);
+  const runningRef = useRef(false);
   const currentSession = useKnowledgeHubSession();
   const queryClient = useQueryClient();
 
@@ -3670,8 +3704,9 @@ export function useDocumentUploads(
     if (!actorId || !collectionId || !canAdd || guard.actorId !== actorId) {
       throw new Error("Bạn không có quyền tải tài liệu lên.");
     }
-    if (running) return;
+    if (runningRef.current) return;
 
+    runningRef.current = true;
     setRunning(true);
     try {
       // FileService WriteGate is global: upload one file at a time.
@@ -3764,9 +3799,10 @@ export function useDocumentUploads(
         }
       }
     } finally {
+      runningRef.current = false;
       if (isCurrent(guard)) setRunning(false);
     }
-  }, [actorId, collectionId, canAdd, running, currentSession, queryClient]);
+  }, [actorId, collectionId, canAdd, currentSession, queryClient]);
 
   const retry = useCallback(async (documentId: string, file: File) => {
     const guard = currentSession.current;
