@@ -4099,7 +4099,8 @@ export function UploadProgressList({ items }: { items: UploadQueueItem[] }) {
 **CREATE:** src/apps/Blocks.Web/src/features/knowledgehub/components/DocumentRow.tsx
 
 ~~~tsx
-import { Download, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import { Download, Trash2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { DocumentDto } from "../types/documents.types";
@@ -4112,16 +4113,25 @@ function formatBytes(value: number) {
 
 export function DocumentRow({
   document,
+  canAdd,
   canDelete,
   onDownload,
   onDelete,
+  onRetry,
 }: {
   document: DocumentDto;
+  canAdd: boolean;
   canDelete: boolean;
   onDownload: (item: DocumentDto) => void;
   onDelete: (item: DocumentDto) => void;
+  onRetry: (item: DocumentDto, file: File) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const registered = document.RegistrationStatus === "REGISTERED";
+  const retryable =
+    document.RegistrationStatus === "AWAITING_UPLOAD" ||
+    document.RegistrationStatus === "REGISTRATION_FAILED";
+
   const statusLabel = {
     AWAITING_UPLOAD: "Chờ tải lên",
     REGISTERING: "Đang đăng ký",
@@ -4140,12 +4150,34 @@ export function DocumentRow({
       <td className="p-2 uppercase">{document.FileExtension.replace(".", "")}</td>
       <td className="p-2">{formatBytes(document.SizeBytes)}</td>
       <td className="p-2">
-        <Badge variant={registered ? "secondary" : "outline"}>
-          {statusLabel}
-        </Badge>
+        <Badge variant={registered ? "secondary" : "outline"}>{statusLabel}</Badge>
       </td>
       <td className="p-2 text-right">
         <div className="flex justify-end gap-1">
+          {retryable && canAdd && (
+            <>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".pdf,.md,.txt"
+                className="sr-only"
+                aria-label={"Chọn lại tệp " + document.Title}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) onRetry(document, file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={"Thử lại " + document.Title}
+                onClick={() => inputRef.current?.click()}
+              >
+                <RefreshCw className="size-4" />
+              </Button>
+            </>
+          )}
           {registered && (
             <Button
               size="icon"
@@ -4271,12 +4303,14 @@ import { DocumentRow } from "./DocumentRow";
 import type { DocumentDto, DocumentRegistrationStatus } from "../types/documents.types";
 
 export function DocumentRepository({
-  actorId, collectionId, canView, canDelete,
+  actorId, collectionId, canAdd, canView, canDelete, onRetry,
 }: {
   actorId: string | null;
   collectionId: string | null;
+  canAdd: boolean;
   canView: boolean;
   canDelete: boolean;
+  onRetry: (documentId: string, file: File) => void;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<DocumentRegistrationStatus | "ALL">("ALL");
@@ -4386,11 +4420,13 @@ export function DocumentRepository({
                   <DocumentRow
                     key={item.Id}
                     document={item}
+                    canAdd={canAdd}
                     canDelete={canDelete}
                     onDownload={(doc) =>
                       void mutations.downloadDocument(doc.Id, doc.OriginalFileName)
                     }
                     onDelete={setDeleteTarget}
+                    onRetry={(doc, file) => onRetry(doc.Id, file)}
                   />
                 ))}
               </TableBody>
@@ -4481,8 +4517,12 @@ export function RepositoryFrame({
       <DocumentRepository
         actorId={actorId}
         collectionId={collectionId}
+        canAdd={canAdd}
         canView={canView}
         canDelete={canDelete}
+        onRetry={(documentId, file) => {
+          void uploads.retry(documentId, file);
+        }}
       />
     </div>
   );
@@ -4524,6 +4564,35 @@ bằng:
 
 ~~~ts
 DocumentCount: number;
+~~~
+
+**File:** src/apps/Blocks.Web/src/Router.tsx
+
+Source hiện tại đang mount trực tiếp:
+
+~~~tsx
+<Route path="/knowledgehub" element={<KnowledgeHubPage />} />
+~~~
+
+P02 hooks đã dùng useKnowledgeHubSession, nên route phải được bọc bởi KnowledgeHubCacheBoundary. Nếu không, useCollectionMutations và P03 hooks không có session context.
+
+**MODIFY – INSERT:** thêm import:
+
+~~~tsx
+import { KnowledgeHubCacheBoundary } from "./features/knowledgehub/hooks/KnowledgeHubCacheBoundary";
+~~~
+
+**MODIFY – REPLACE ROUTE:**
+
+~~~tsx
+<Route
+  path="/knowledgehub"
+  element={
+    <KnowledgeHubCacheBoundary>
+      <KnowledgeHubPage />
+    </KnowledgeHubCacheBoundary>
+  }
+/>
 ~~~
 
 ## C-12. Tests và visual acceptance
