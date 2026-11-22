@@ -443,11 +443,10 @@ var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtIssuer) ||
     string.IsNullOrWhiteSpace(jwtAudience) ||
-    string.IsNullOrWhiteSpace(jwtKey) ||
-    Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    string.IsNullOrWhiteSpace(jwtKey))
 {
     throw new InvalidOperationException(
-        "FileService requires configured Jwt:Issuer, Jwt:Audience, and a Jwt:Key of at least 32 UTF-8 bytes.");
+        "FileService requires configured Jwt:Issuer, Jwt:Audience, and Jwt:Key.");
 }
 ~~~
 
@@ -2312,10 +2311,10 @@ Trong knowledgeHub builder chain, thêm:
     fileService.GetEndpoint("https"))
 .WithEnvironment(
     "KNOWLEDGEHUB_FILE_GRPC_CA_FILE",
-    builder.AddParameter("knowledgehub-grpc-ca-file"))
+    knowledgeHubGrpcCaFile)
 ~~~
 
-Nếu CA parameter hiện tại dùng cho SystemService cũng xác thực được certificate của FileService, có thể tái sử dụng parameter hiện có thay vì tạo parameter mới. Owner phải kiểm tra CA thực tế; không giả định hai endpoint cùng certificate chain.
+Trong AppHost hiện tại đã có biến knowledgeHubGrpcCaFile cho SystemService. Code trên tái sử dụng biến này; chỉ giữ cách này nếu CA đó xác thực được certificate của FileService. Nếu certificate chain khác, tạo parameter riêng và truyền parameter đó. Owner phải kiểm tra CA thực tế; không tắt certificate validation.
 
 Không thêm FileService vào Gateway route. Chỉ AppHost service-to-service reference.
 
