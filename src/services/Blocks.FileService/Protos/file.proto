@@ -33,6 +33,7 @@ message ModelAttachmentProto {
   google.protobuf.DoubleValue file_size = 6;
   string file_url = 7;
   string full_file_name = 8;
+  string source_sha256 = 9;
 }
 
 message DeleteDataRequest {

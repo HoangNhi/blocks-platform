@@ -29,7 +29,7 @@ var skipped = 0;
 
 var knownModes = new HashSet<string>
 {
-    "removal", "paths", "sessions", "lifecycle", "transport", "gateway", "migration", "boundary", "upgrade", "all"
+    "removal", "paths", "sessions", "lifecycle", "permissions", "transport", "gateway", "migration", "boundary", "upgrade", "all"
 };
 if (!knownModes.Contains(mode))
 {
@@ -55,6 +55,11 @@ if (mode is "sessions" or "all")
 if (mode is "lifecycle" or "all")
 {
     await RunLifecycleChecksAsync();
+}
+
+if (mode is "permissions" or "all")
+{
+    await KnowledgeHubUploadPermissionChecks.RunAsync(CheckAsync);
 }
 
 if (mode is "transport" or "all")
@@ -564,8 +569,8 @@ async Task RunPathsChecksAsync()
         await CheckAsync("knowledgehub_document_key_rejects_invalid_shapes", async () =>
         {
             var storage = scope.ServiceProvider.GetRequiredService<FileStorage>();
-            const string documentId = "11111111-1111-1111-1111-111111111111";
-            const string fileId = "22222222-2222-2222-2222-222222222222";
+            const string documentId = "aaaaaaaa-1111-1111-1111-111111111111";
+            const string fileId = "bbbbbbbb-2222-2222-2222-222222222222";
 
             var invalidKeys = new[]
             {

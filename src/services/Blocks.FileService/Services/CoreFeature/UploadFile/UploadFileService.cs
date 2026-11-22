@@ -1,5 +1,6 @@
 using AutoDependencyRegistration.Attributes;
 using Blocks.FileService.DTOs.Common;
+using Blocks.FileService.DTOs.CoreFeature.UploadFile;
 using Blocks.FileService.Infrastructure.Storage;
 using Blocks.Shared.DTOs.Base;
 using Blocks.Shared.Exceptions;
@@ -52,8 +53,15 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             return actorId;
         }
 
-        public async Task Insert(List<IFormFile> files, string FolderName, CancellationToken cancellationToken = default)
+        public async Task Insert(List<IFormFile> files, string FolderName, CancellationToken cancellationToken = default, string? uploadPurpose = null)
         {
+            const string knowledgeHubPurpose = "KnowledgeHubDocument";
+
+            if (uploadPurpose is not null && !string.Equals(uploadPurpose, knowledgeHubPurpose, StringComparison.Ordinal))
+            {
+                throw new BusinessException("Upload purpose không được hỗ trợ", 400);
+            }
+
             if (files == null || files.Count == 0)
             {
                 throw new BusinessException("Danh sách tệp rỗng", 400);
@@ -67,9 +75,13 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 throw new BusinessException("Thư mục lưu trữ không hợp lệ", 400);
             }
 
-            var actorId = GetActorId();
+            var isKnowledgeHub = uploadPurpose == knowledgeHubPurpose;
+            if (isKnowledgeHub && files.Count != 1)
+                throw new BusinessException("KnowledgeHub chỉ cho phép tải lên một tệp mỗi lần", 400);
 
+            var actorId = GetActorId();
             long declaredTotal = 0;
+
             foreach (var file in files)
             {
                 if (file == null || file.Length <= 0)
@@ -84,9 +96,13 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                 }
 
                 ValidateUploadFileName(file.FileName);
-
                 var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-                if (!IsValidExtension(ext))
+
+                var validExtensions = isKnowledgeHub
+                    ? ext is ".pdf" or ".md" or ".txt"
+                    : IsValidExtension(ext);
+
+                if (!validExtensions)
                 {
                     throw new BusinessException("Định dạng tệp không được hỗ trợ", 400);
                 }
@@ -94,9 +110,22 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
 
             await _sessions.WriteGate.WaitAsync(cancellationToken);
             string? newBatchDir = null;
+
             try
             {
                 var existingSession = await _sessions.ReadAsync(actorId, folderGuid, cancellationToken);
+
+                if (isKnowledgeHub && existingSession != null)
+                {
+                    var sameContent = await IsSameKnowledgeHubStageAsync(
+                        existingSession, files, cancellationToken
+                    );
+
+                    if (sameContent) return;
+
+                    throw new BusinessException("UploadSessionId đã được sử dụng cho nội dung khác", 409);
+                }
+
                 if (existingSession != null && (existingSession.State == "Finalized" || existingSession.State == "Finalizing"))
                 {
                     throw new BusinessException("Phiên tải lên đang hoặc đã hoàn tất không thể thay thế", 409);
@@ -157,9 +186,20 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                     "Staged",
                     storedFiles,
                     null,
-                    null);
+                    null,
+                    uploadPurpose);
 
                 await _sessions.WriteAsync(session, cancellationToken);
+
+                if (existingSession != null)
+                {
+                    var oldBatchDir = _storage.Resolve(StorageArea.Temp, actorId.ToString("D"), folderGuid.ToString("D"), "batches", existingSession.BatchId.ToString("D"));
+                    if (Directory.Exists(oldBatchDir))
+                    {
+                        try { Directory.Delete(oldBatchDir, recursive: true); } catch { }
+                    }
+                }
+
                 newBatchDir = null;
             }
             catch
@@ -183,8 +223,25 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             string tempFolder,
             CancellationToken cancellationToken = default)
         {
-            if (!string.Equals(servicePath, "System", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(folderName, "Attachments", StringComparison.OrdinalIgnoreCase))
+            var finalized = await UploadDataWithMetadataAsync(relatedId, servicePath, folderName, tempFolder, cancellationToken);
+            return finalized.Select(fa => fa.Attachment).ToList();
+        }
+
+        public async Task<List<FinalizedAttachment>> UploadDataWithMetadataAsync(
+            string relatedId,
+            string servicePath,
+            string folderName,
+            string tempFolder,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var isAttachment = string.Equals(servicePath, "System", StringComparison.OrdinalIgnoreCase) &&
+                               string.Equals(folderName, "Attachments", StringComparison.OrdinalIgnoreCase);
+
+            var isKnowledgeHubDocument = string.Equals(servicePath, "KnowledgeHub", StringComparison.OrdinalIgnoreCase) &&
+                                          string.Equals(folderName, "Documents", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAttachment && !isKnowledgeHubDocument)
             {
                 throw new BusinessException("Mục tiêu lưu trữ không hợp lệ hoặc chưa được đăng ký", 400);
             }
@@ -196,14 +253,14 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             if (string.IsNullOrWhiteSpace(tempFolder) || tempFolder.Length != 36 ||
-                !Guid.TryParseExact(tempFolder, "D", out var folderGuid) || folderGuid == Guid.Empty)
+                           !Guid.TryParseExact(tempFolder, "D", out var folderGuid) || folderGuid == Guid.Empty)
             {
                 throw new BusinessException("Thư mục lưu trữ tạm không hợp lệ", 400);
             }
 
             var actorId = GetActorId();
-
             await _sessions.WriteGate.WaitAsync(cancellationToken);
+
             try
             {
                 var session = await _sessions.ReadAsync(actorId, folderGuid, cancellationToken);
@@ -212,133 +269,165 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
                     throw new BusinessException("Phiên tải lên không tồn tại", 409);
                 }
 
-                if (session.Target != null && session.Target.Kind != "Attachment")
+                var expectedPurpose = isKnowledgeHubDocument ? "KnowledgeHubDocument" : null;
+
+                if (session.Purpose != expectedPurpose)
                 {
-                    throw new BusinessException("Phiên tải lên đã liên kết với mục tiêu khác", 409);
+                    throw new BusinessException("Upload purpose không khớp mục tiêu finalize", 409);
                 }
+
+                if (isKnowledgeHubDocument && session.Files.Count != 1)
+                {
+                    throw new BusinessException("KnowledgeHub chỉ cho phép một tệp", 409);
+                }
+
+                var targetKind = isKnowledgeHubDocument ? "Document" : "Attachment";
+                var targetService = isKnowledgeHubDocument ? "KnowledgeHub" : "System";
+                var targetModule = isKnowledgeHubDocument ? "Documents" : "Attachments";
+
+                if (session.Target != null &&
+                    (session.Target.Kind != targetKind ||
+                    session.Target.Service != targetService ||
+                    session.Target.Module != targetModule ||
+                    session.Target.RelatedId != relatedGuid))
+                    throw new BusinessException(
+                        "Phiên tải lên đã liên kết với mục tiêu khác", 409);
+
+                string BuildKey(StoredUploadFile file) => isKnowledgeHubDocument
+                    ? $"KnowledgeHub/Documents/{relatedGuid:D}/{file.Id:D}{file.Extension}"
+                    : $"System/Attachments/{relatedGuid:D}/{file.Id:D}{file.Extension}";
 
                 if (session.State == "Finalized")
                 {
-                    if (session.Target?.Kind != "Attachment" || session.Target?.RelatedId != relatedGuid)
-                    {
-                        throw new BusinessException("Phiên tải lên đã hoàn tất cho mục tiêu khác", 409);
-                    }
+                    if (session.Target?.Kind != targetKind ||
+                        session.Target.RelatedId != relatedGuid ||
+                        session.Result == null ||
+                        session.Result.Count != session.Files.Count)
+                        throw new BusinessException(
+                            "Kết quả phiên tải lên không khớp mục tiêu", 409);
 
-                    if (session.Result == null || session.Result.Count == 0)
-                    {
-                        throw new BusinessException("Kết quả phiên tải lên bị thiếu", 409);
-                    }
+                    var completed = new List<FinalizedAttachment>();
 
                     foreach (var item in session.Result)
                     {
-                        var resolvedPath = _storage.ResolveActiveKey(item.FileUrl);
-                        if (!File.Exists(resolvedPath))
-                        {
-                            throw new BusinessException("Tệp đã bị xóa hoặc không thể phục hồi", 409);
-                        }
+                        var stored = session.Files.Single(f => f.Id == item.Id);
+                        if (!string.Equals(item.FileUrl, BuildKey(stored), StringComparison.Ordinal))
+                            throw new BusinessException("Storage key không khớp manifest", 409);
 
-                        var fi = new FileInfo(resolvedPath);
-                        var matchingStored = session.Files.FirstOrDefault(f => f.Id == item.Id);
-                        if (matchingStored != null)
-                        {
-                            if (fi.Length != matchingStored.Length)
-                            {
-                                throw new BusinessException("Tệp đích không khớp độ dài manifest", 409);
-                            }
-                            using var s = File.OpenRead(resolvedPath);
-                            var h = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(s, cancellationToken));
-                            if (!string.Equals(h, matchingStored.Sha256, StringComparison.OrdinalIgnoreCase))
-                            {
-                                throw new BusinessException("Tệp đích không khớp SHA256 manifest", 409);
-                            }
-                        }
+                        var path = _storage.ResolveActiveKey(item.FileUrl);
+                        if (!File.Exists(path))
+                            throw new BusinessException(
+                                "Tệp đã bị xóa hoặc không thể phục hồi", 409);
+
+                        await VerifyFileAsync(path, stored, cancellationToken);
+
+                        completed.Add(new FinalizedAttachment(
+                            item,
+                            stored.Sha256.ToLowerInvariant()));
                     }
 
-                    return session.Result;
+                    return completed;
                 }
 
-                if (session.State == "Finalizing")
-                {
-                    if (session.Target?.Kind != "Attachment" || session.Target?.RelatedId != relatedGuid)
-                    {
-                        throw new BusinessException("Phiên tải lên đang hoàn tất cho mục tiêu khác", 409);
-                    }
-                }
+                if (session.State == "Finalizing" &&
+                (session.Target?.Kind != targetKind ||
+                 session.Target.RelatedId != relatedGuid))
+                    throw new BusinessException(
+                        "Phiên tải lên đang hoàn tất cho mục tiêu khác", 409);
 
-                var batchDir = _storage.Resolve(StorageArea.Temp, actorId.ToString("D"), folderGuid.ToString("D"), "batches", session.BatchId.ToString("D"));
+                var batchDir = _storage.Resolve(
+                    StorageArea.Temp,
+                    actorId.ToString("D"),
+                    folderGuid.ToString("D"),
+                    "batches",
+                    session.BatchId.ToString("D"));
+
                 if (!Directory.Exists(batchDir))
-                {
-                    throw new BusinessException("Thư mục lô tệp không tồn tại", 404);
-                }
+                    throw new BusinessException(
+                        "Thư mục lô tệp không tồn tại", 404);
 
-                var attachments = new List<ModelAttachment>();
-                foreach (var storedFile in session.Files)
+                var attachments = session.Files.Select(stored => new ModelAttachment
                 {
-                    var destFileName = $"{storedFile.Id:D}{storedFile.Extension}";
-                    attachments.Add(new ModelAttachment
-                    {
-                        Id = storedFile.Id,
-                        RelatedId = relatedGuid,
-                        FileName = Path.GetFileNameWithoutExtension(storedFile.OriginalName),
-                        FileExtension = storedFile.Extension,
-                        FileSize = storedFile.Length,
-                        FileUrl = $"System/Attachments/{relatedGuid:D}/{destFileName}"
-                    });
-                }
+                    Id = stored.Id,
+                    RelatedId = relatedGuid,
+                    FileName = Path.GetFileNameWithoutExtension(stored.OriginalName),
+                    FileExtension = stored.Extension,
+                    FileSize = stored.Length,
+                    FileUrl = BuildKey(stored)
+                }).ToList();
 
                 if (session.State != "Finalizing")
                 {
                     session = session with
                     {
                         State = "Finalizing",
-                        Target = new UploadTarget("Attachment", "System", "Attachments", relatedGuid),
+                        Target = new UploadTarget(
+                            targetKind,
+                            targetService,
+                            targetModule,
+                            relatedGuid),
                         Result = attachments
                     };
+
                     await _sessions.WriteAsync(session, cancellationToken);
                 }
 
-                foreach (var storedFile in session.Files)
+                foreach (var stored in session.Files)
                 {
-                    var sourcePath = _storage.Resolve(StorageArea.Temp, actorId.ToString("D"), folderGuid.ToString("D"), "batches", session.BatchId.ToString("D"), $"{storedFile.Id:D}{storedFile.Extension}");
+                    var sourcePath = _storage.Resolve(
+                        StorageArea.Temp,
+                        actorId.ToString("D"),
+                        folderGuid.ToString("D"),
+                        "batches",
+                        session.BatchId.ToString("D"),
+                        $"{stored.Id:D}{stored.Extension}");
+
                     if (!File.Exists(sourcePath))
-                    {
-                        throw new BusinessException("Tệp nguồn trong phiên không tồn tại", 409);
-                    }
+                        throw new BusinessException(
+                            "Tệp nguồn trong phiên không tồn tại", 409);
 
-                    var destFileName = $"{storedFile.Id:D}{storedFile.Extension}";
-                    var destPath = _storage.Resolve(StorageArea.Files, "System", "Attachments", relatedGuid.ToString("D"), destFileName);
+                    var destinationPath = isKnowledgeHubDocument
+                        ? _storage.Resolve(
+                            StorageArea.Files,
+                            "KnowledgeHub",
+                            "Documents",
+                            relatedGuid.ToString("D"),
+                            $"{stored.Id:D}{stored.Extension}")
+                        : _storage.Resolve(
+                            StorageArea.Files,
+                            "System",
+                            "Attachments",
+                            relatedGuid.ToString("D"),
+                            $"{stored.Id:D}{stored.Extension}");
 
-                    if (File.Exists(destPath))
+                    if (File.Exists(destinationPath))
                     {
-                        var fi = new FileInfo(destPath);
-                        if (fi.Length != storedFile.Length)
-                        {
-                            throw new BusinessException("Tệp đích không khớp độ dài manifest", 409);
-                        }
-                        using var s = File.OpenRead(destPath);
-                        var h = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(s, cancellationToken));
-                        if (!string.Equals(h, storedFile.Sha256, StringComparison.OrdinalIgnoreCase))
-                        {
-                            throw new BusinessException("Tệp đích không khớp SHA256 manifest", 409);
-                        }
+                        await VerifyFileAsync(
+                            destinationPath,
+                            stored,
+                            cancellationToken);
                     }
                     else
                     {
-                        RejectDeletedTarget($"System/Attachments/{relatedGuid:D}/{destFileName}");
-                        var destDir = Path.GetDirectoryName(destPath)!;
-                        Directory.CreateDirectory(destDir);
-                        File.Copy(sourcePath, destPath, overwrite: false);
+                        RejectDeletedTarget(BuildKey(stored));
+                        Directory.CreateDirectory(
+                            Path.GetDirectoryName(destinationPath)!);
+                        File.Copy(sourcePath, destinationPath, overwrite: false);
+                        await VerifyFileAsync(
+                            destinationPath,
+                            stored,
+                            cancellationToken);
                     }
-                    await VerifyFileAsync(destPath, storedFile, cancellationToken);
                 }
-
-                session = session with
-                {
-                    State = "Finalized"
-                };
+                session = session with { State = "Finalized" };
                 await _sessions.WriteAsync(session, cancellationToken);
 
-                return attachments;
+                return attachments
+                    .Select(item => new FinalizedAttachment(
+                        item,
+                        session.Files.Single(f => f.Id == item.Id)
+                            .Sha256.ToLowerInvariant()))
+                    .ToList();
             }
             finally
             {
@@ -697,9 +786,30 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
         private static string ReceiptKeyHash(string key)
         {
             var segments = key.Split('/');
-            var canonical = segments.Length == 3
-                ? $"System/Avatar/{segments[2]}"
-                : $"System/Attachments/{segments[2]}/{segments[3]}";
+            string canonical;
+
+            if (segments.Length == 3 &&
+                string.Equals(segments[0], "System", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(segments[1], "Avatar", StringComparison.OrdinalIgnoreCase))
+            {
+                canonical = $"System/Avatar/{segments[2]}";
+            }
+            else if (segments.Length == 4 &&
+                     string.Equals(segments[0], "System", StringComparison.OrdinalIgnoreCase) &&
+                     string.Equals(segments[1], "Attachments", StringComparison.OrdinalIgnoreCase))
+            {
+                canonical = $"System/Attachments/{segments[2]}/{segments[3]}";
+            }
+            else if (segments.Length == 4 && segments[0] == "KnowledgeHub" && segments[1] == "Documents")
+            {
+                canonical = $"KnowledgeHub/Documents/{segments[2]}/{segments[3]}";
+            }
+            else
+            {
+                throw new BusinessException(
+                    "Storage key không hợp lệ để tạo deletion receipt", 400);
+            }
+
             var normalized = OperatingSystem.IsWindows() ? canonical.ToLowerInvariant() : canonical;
             return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant();
         }
@@ -753,15 +863,17 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
         private static void ValidateUploadFileName(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))
-            {
                 throw new BusinessException("Tên tệp không được rỗng", 400);
-            }
 
-            if (fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(':') ||
-                fileName.Contains("..") || fileName.Any(char.IsControl))
-            {
-                throw new BusinessException("Tên tệp chứa ký tự không hợp lệ", 400);
-            }
+            if (fileName.Contains('/') ||
+                fileName.Contains((char)92) ||
+                fileName.Contains(':') ||
+                fileName.Contains("..") ||
+                fileName.Any(char.IsControl) ||
+                fileName.EnumerateRunes().Count() > 255)
+                throw new BusinessException(
+                    "Tên tệp chứa ký tự không hợp lệ hoặc quá dài",
+                    400);
         }
 
         private static bool IsValidExtension(string ext)
@@ -784,6 +896,32 @@ namespace Blocks.FileService.Services.CoreFeature.UploadFile
             }
 
             return "application/octet-stream";
+        }
+
+        private static async Task<bool> IsSameKnowledgeHubStageAsync(UploadSession existing, List<IFormFile> files, CancellationToken cancellationToken)
+        {
+            if (existing.Purpose != "KnowledgeHubDocument"
+                || existing.Files.Count != 1
+                || files.Count != 1
+            )
+            {
+                return false;
+            }
+
+            var stored = existing.Files[0];
+            var incoming = files[0];
+
+            if (!string.Equals(stored.OriginalName, incoming.FileName, StringComparison.Ordinal)
+                || stored.Length != incoming.Length
+                || !string.Equals(stored.Extension, Path.GetExtension(incoming.FileName).ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            using var input = incoming.OpenReadStream();
+            var hash = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(input, cancellationToken));
+
+            return string.Equals(stored.Sha256, hash, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

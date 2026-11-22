@@ -22,7 +22,7 @@ namespace Blocks.FileService.Services.Grpc
             var ct = context?.CancellationToken ?? CancellationToken.None;
             try
             {
-                var result = await _uploadFileService.UploadDataAsync(
+                var result = await _uploadFileService.UploadDataWithMetadataAsync(
                     request.RelatedId,
                     request.ServicePath,
                     request.FolderName,
@@ -35,17 +35,20 @@ namespace Blocks.FileService.Services.Grpc
                 {
                     foreach (var item in result)
                     {
+                        var attachment = item.Attachment;
                         response.Attachments.Add(new ModelAttachmentProto
                         {
-                            Id = item.Id.ToString(),
-                            ReferenceType = item.ReferenceType,
-                            RelatedId = item.RelatedId.ToString(),
-                            FileName = item.FileName ?? string.Empty,
-                            FileExtension = item.FileExtension ?? string.Empty,
-                            FileSize = item.FileSize.HasValue ? item.FileSize.Value : null,
-                            FileUrl = item.FileUrl ?? string.Empty,
-                            FullFileName = item.FullFileName ?? string.Empty
+                            Id = attachment.Id.ToString(),
+                            ReferenceType = attachment.ReferenceType,
+                            RelatedId = attachment.RelatedId.ToString(),
+                            FileName = attachment.FileName ?? string.Empty,
+                            FileExtension = attachment.FileExtension ?? string.Empty,
+                            FileSize = attachment.FileSize.HasValue ? attachment.FileSize.Value : null,
+                            FileUrl = attachment.FileUrl ?? string.Empty,
+                            FullFileName = attachment.FullFileName ?? string.Empty,
+                            SourceSha256 = item.SourceSha256
                         });
+
                     }
                 }
 

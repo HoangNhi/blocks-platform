@@ -573,9 +573,10 @@ internal static class UpgradeChecks
         Require(postMethod != null, "UploadFileController.Post exists");
         var sizeLimit = postMethod!.GetCustomAttribute<RequestSizeLimitAttribute>();
         var limitBytes = (sizeLimit as Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata)?.MaxRequestBodySize;
-        Require(sizeLimit != null && limitBytes == 52428800L, $"RequestSizeLimit must be 52428800, got {limitBytes}");
+        Require(sizeLimit != null && limitBytes == 53477376L, $"RequestSizeLimit must be 53477376, got {limitBytes}");
         var formLimits = postMethod.GetCustomAttribute<RequestFormLimitsAttribute>();
-        Require(formLimits != null && formLimits.MultipartBodyLengthLimit == 52428800L, $"MultipartBodyLengthLimit must be 52428800, got {formLimits?.MultipartBodyLengthLimit}");
+        Require(formLimits != null && formLimits.MultipartBodyLengthLimit == 53477376L, $"MultipartBodyLengthLimit must be 53477376, got {formLimits?.MultipartBodyLengthLimit}");
+        Require(Blocks.FileService.Infrastructure.Storage.FileStorage.MaxFileBytes == 52428800L, $"FileStorage.MaxFileBytes must remain 52428800, got {Blocks.FileService.Infrastructure.Storage.FileStorage.MaxFileBytes}");
 
         var tempRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));
         var fixtureDir = Path.Combine(tempRoot, $"blocks-fs-limits-{Guid.NewGuid():N}");
@@ -630,6 +631,8 @@ internal static class UpgradeChecks
         Require(modelAttachment.FindFieldByNumber(ModelAttachmentProto.FileSizeFieldNumber) != null, "file_size is field 6");
         Require(modelAttachment.FindFieldByNumber(ModelAttachmentProto.FileUrlFieldNumber) != null, "file_url is field 7");
         Require(modelAttachment.FindFieldByNumber(ModelAttachmentProto.FullFileNameFieldNumber) != null, "full_file_name is field 8");
+        Require(ModelAttachmentProto.SourceSha256FieldNumber == 9, $"source_sha256 field number must be 9, got {ModelAttachmentProto.SourceSha256FieldNumber}");
+        Require(modelAttachment.FindFieldByNumber(ModelAttachmentProto.SourceSha256FieldNumber) != null, "source_sha256 is field 9");
 
         var deleteDataReq = fileDesc.MessageTypes.FirstOrDefault(m => m.Name == "DeleteDataRequest");
         Require(deleteDataReq != null && deleteDataReq.FindFieldByNumber(DeleteDataRequest.FilePathsFieldNumber) != null, "DeleteDataRequest field 1");

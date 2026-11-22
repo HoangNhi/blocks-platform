@@ -6,7 +6,7 @@ var systemService = builder
     .AddProject<Projects.Blocks_SystemService>("SystemService")
     .WithReference(fileService);
 
-fileService.WithReference(systemService);
+fileService.WithReference(systemService).WithEnvironment("GrpcClients__SystemService", systemService.GetEndpoint("https"));
 
 var catalogService = builder.AddProject<Projects.Blocks_CatalogService>("CatalogService")
     .WithReference(systemService)
