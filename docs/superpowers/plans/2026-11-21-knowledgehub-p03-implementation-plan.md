@@ -3509,6 +3509,15 @@ function unwrap<T>(result: ApiResponse<T>): T {
   return result.Data;
 }
 
+function ensureSuccess(result: ApiResponse<unknown>): void {
+  if (!result.Success) {
+    throw new DocumentApiError(
+      result.StatusCode,
+      result.Message || "Không thể thực hiện yêu cầu."
+    );
+  }
+}
+
 export const documentsApi = {
   list: async (
     collectionId: string,
@@ -3543,21 +3552,22 @@ export const documentsApi = {
     form.append("files", file);
     form.append("FolderName", uploadSessionId);
 
-    return unwrap(
-      await api.postMultipart<unknown>(
-        API_ENDPOINTS.File.UploadFile.POST,
-        form,
-        {
-          signal,
-          timeout: 120000,
-          headers: {
-            "X-Upload-Purpose": "KnowledgeHubDocument",
-          },
-          onUploadProgress: (event) =>
-            onProgress(event.loaded, event.total ?? file.size),
-        }
-      )
+    const result = await api.postMultipart<unknown>(
+      API_ENDPOINTS.File.UploadFile.POST,
+      form,
+      {
+        signal,
+        timeout: 120000,
+        headers: {
+          "X-Upload-Purpose": "KnowledgeHubDocument",
+        },
+        onUploadProgress: (event) =>
+          onProgress(event.loaded, event.total ?? file.size),
+      }
     );
+
+    // FileService stage returns BaseResponse without Data on success.
+    ensureSuccess(result);
   },
 
   finalize: async (documentId: string) =>
