@@ -22,6 +22,8 @@ class TestConfig(unittest.TestCase):
             "KNOWLEDGEHUB_JWT_AUDIENCE": "BlocksWeb",
             "KNOWLEDGEHUB_SYSTEM_GRPC_URL": "https://localhost:7073",
             "KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE": str(self.ca_file),
+            "KNOWLEDGEHUB_FILE_GRPC_URL": "https://localhost:7074",
+            "KNOWLEDGEHUB_FILE_GRPC_CA_FILE": str(self.ca_file),
             "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub",
         }
 
@@ -170,6 +172,22 @@ class TestConfig(unittest.TestCase):
                 **self.valid_env,
                 "KNOWLEDGEHUB_DATABASE_URL": "postgresql+asyncpg://dev:secret@localhost:5432/other_db",
             },
+            "file_http_url": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_FILE_GRPC_URL": "http://localhost:7074",
+            },
+            "file_relative_ca": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_FILE_GRPC_CA_FILE": "relative/ca.pem",
+            },
+            "file_rpc_timeout_too_large": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_FILE_RPC_TIMEOUT_SECONDS": "120.1",
+            },
+            "file_download_timeout_zero": {
+                **self.valid_env,
+                "KNOWLEDGEHUB_FILE_DOWNLOAD_TIMEOUT_SECONDS": "0",
+            },
         }
         for name, env in cases.items():
             with self.subTest(case=name):
@@ -237,6 +255,8 @@ class TestConfig(unittest.TestCase):
             f"KNOWLEDGEHUB_JWT_AUDIENCE=DotenvAudience\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_URL=https://localhost:7073\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
+            f"KNOWLEDGEHUB_FILE_GRPC_URL=https://localhost:7074\n"
+            f"KNOWLEDGEHUB_FILE_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
             f"KNOWLEDGEHUB_DATABASE_URL=postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub\n",
             encoding="utf-8",
         )
@@ -256,6 +276,8 @@ class TestConfig(unittest.TestCase):
             f"KNOWLEDGEHUB_JWT_AUDIENCE=DotenvAudience\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_URL=https://localhost:7073\n"
             f"KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
+            f"KNOWLEDGEHUB_FILE_GRPC_URL=https://localhost:7074\n"
+            f"KNOWLEDGEHUB_FILE_GRPC_CA_FILE={self.ca_file.as_posix()}\n"
             f"KNOWLEDGEHUB_DATABASE_URL=postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub\n",
             encoding="utf-8",
         )

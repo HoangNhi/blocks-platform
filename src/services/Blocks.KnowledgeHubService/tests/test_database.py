@@ -117,11 +117,13 @@ class TestDatabase(unittest.IsolatedAsyncioTestCase):
         test_app = FastAPI()
 
         mock_client = AsyncMock()
+        mock_file_client = AsyncMock()
         mock_engine = AsyncMock()
 
         with (
             patch("knowledgehub.main.get_settings") as mock_settings,
             patch("knowledgehub.main.PermissionClient", return_value=mock_client),
+            patch("knowledgehub.main.FileServiceClient", return_value=mock_file_client),
             patch("knowledgehub.main.create_db_engine", return_value=mock_engine),
             patch("knowledgehub.main.create_session_factory", return_value=MagicMock()),
         ):
@@ -131,10 +133,39 @@ class TestDatabase(unittest.IsolatedAsyncioTestCase):
 
             async with lifespan(test_app):
                 self.assertEqual(test_app.state.permission_client, mock_client)
+                self.assertEqual(test_app.state.file_service_client, mock_file_client)
                 self.assertEqual(test_app.state.db_engine, mock_engine)
 
             mock_client.close.assert_awaited_once()
+            mock_file_client.close.assert_awaited_once()
             mock_engine.dispose.assert_awaited_once()
             self.assertIsNone(test_app.state.permission_client)
+            self.assertIsNone(test_app.state.file_service_client)
             self.assertIsNone(test_app.state.db_engine)
             self.assertIsNone(test_app.state.db_session_factory)
+
+    async def test_lifespan_shutdown_continues_when_one_close_fails(self):
+        test_app = FastAPI()
+
+        mock_client = AsyncMock()
+        mock_client.close = AsyncMock(side_effect=RuntimeError("perm close error"))
+        mock_file_client = AsyncMock()
+        mock_engine = AsyncMock()
+
+        with (
+            patch("knowledgehub.main.get_settings") as mock_settings,
+            patch("knowledgehub.main.PermissionClient", return_value=mock_client),
+            patch("knowledgehub.main.FileServiceClient", return_value=mock_file_client),
+            patch("knowledgehub.main.create_db_engine", return_value=mock_engine),
+            patch("knowledgehub.main.create_session_factory", return_value=MagicMock()),
+        ):
+            mock_settings.return_value.database_url.get_secret_value.return_value = (
+                "postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub"
+            )
+            with self.assertRaises(RuntimeError):
+                async with lifespan(test_app):
+                    pass
+
+        mock_client.close.assert_awaited_once()
+        mock_file_client.close.assert_awaited_once()
+        mock_engine.dispose.assert_awaited_once()

@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     system_grpc_ca_file: Path
     permission_timeout_seconds: float = Field(default=3.0)
     database_url: SecretStr
+    file_grpc_url: str
+    file_grpc_ca_file: Path
+    file_rpc_timeout_seconds: float = Field(default=10.0)
+    file_download_timeout_seconds: float = Field(default=60.0)
 
     @field_validator("jwt_key")
     @classmethod
@@ -133,4 +137,58 @@ class Settings(BaseSettings):
         db_name = parsed.path.lstrip("/")
         if db_name != "knowledgehub":
             raise ValueError("Database name must be exactly 'knowledgehub'")
+        return v
+
+    @field_validator("file_grpc_url")
+    @classmethod
+    def validate_file_grpc_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme != "https":
+            raise ValueError("Scheme must be https")
+        if not parsed.hostname:
+            raise ValueError("URL must include host")
+        try:
+            port = parsed.port
+        except ValueError:
+            raise ValueError("Invalid port")
+        if port is None or not (1 <= port <= 65535):
+            raise ValueError("URL must include a valid port (1-65535)")
+        if parsed.query or parsed.fragment or parsed.username or parsed.password:
+            raise ValueError("URL must not contain credentials, query, or fragment")
+        if parsed.path and parsed.path != "/":
+            raise ValueError("URL must not contain non-root path")
+        return v
+
+    @field_validator("file_grpc_ca_file")
+    @classmethod
+    def validate_file_grpc_ca_file(cls, v: Path) -> Path:
+        if not v.is_absolute() or not v.is_file() or not os.access(v, os.R_OK):
+            raise ValueError("FileService CA path must be an absolute readable file")
+
+        try:
+            content = v.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("FileService CA must be a UTF-8 PEM certificate")
+
+        if (
+            "-----BEGIN CERTIFICATE-----" not in content
+            or "-----END CERTIFICATE-----" not in content
+            or "PRIVATE KEY" in content
+        ):
+            raise ValueError(
+                "FileService CA must contain certificates and no private key"
+            )
+
+        try:
+            ssl._ssl._test_decode_cert(str(v))
+        except Exception:
+            raise ValueError("FileService CA must be a valid X.509 PEM certificate")
+
+        return v
+
+    @field_validator("file_rpc_timeout_seconds", "file_download_timeout_seconds")
+    @classmethod
+    def validate_file_timeouts(cls, v: float) -> float:
+        if not math.isfinite(v) or v <= 0 or v > 120:
+            raise ValueError("FileService timeout must be finite and in (0, 120]")
         return v

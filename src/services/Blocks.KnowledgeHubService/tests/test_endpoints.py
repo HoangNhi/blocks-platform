@@ -13,6 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from knowledgehub.config import Settings
 from knowledgehub.database import get_db_session
+from knowledgehub.file_service import get_file_service_client
 from knowledgehub.identity import get_settings
 from knowledgehub.main import app
 from knowledgehub.models import CollectionModel
@@ -33,10 +34,14 @@ class TestEndpoints(unittest.IsolatedAsyncioTestCase):
             jwt_audience="BlocksWeb",
             system_grpc_url="https://localhost:7073",
             system_grpc_ca_file=self.ca_file,
+            file_grpc_url="https://localhost:7074",
+            file_grpc_ca_file=self.ca_file,
             permission_timeout_seconds=3.0,
             database_url=SecretStr("postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub"),
         )
         self.mock_client = MagicMock()
+        self.mock_file_service = MagicMock()
+        self.mock_file_service.check_channel_health = AsyncMock(return_value=True)
         self.actor_id = uuid4()
 
         self.mock_session = AsyncMock()
@@ -44,12 +49,14 @@ class TestEndpoints(unittest.IsolatedAsyncioTestCase):
         self.mock_session.rollback = AsyncMock()
         self.mock_session.flush = AsyncMock()
         self.mock_session.add = MagicMock()
+        self.mock_session.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
 
         async def _override_get_db_session():
             yield self.mock_session
 
         app.dependency_overrides[get_settings] = lambda: self.mock_settings
         app.dependency_overrides[get_permission_client] = lambda: self.mock_client
+        app.dependency_overrides[get_file_service_client] = lambda: self.mock_file_service
         app.dependency_overrides[get_db_session] = _override_get_db_session
         self.settings_patcher = patch("knowledgehub.main.get_settings", return_value=self.mock_settings)
         self.settings_patcher.start()
@@ -222,7 +229,10 @@ class TestEndpoints(unittest.IsolatedAsyncioTestCase):
             async def close(self):
                 self.closed = True
 
-        with patch("knowledgehub.main.PermissionClient", FakeClient):
+        with (
+            patch("knowledgehub.main.PermissionClient", FakeClient),
+            patch("knowledgehub.main.FileServiceClient", lambda s: AsyncMock()),
+        ):
             # First run: clean exit
             async with app.router.lifespan_context(app):
                 self.assertEqual(len(created_clients), 1)

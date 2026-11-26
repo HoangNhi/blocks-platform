@@ -45,6 +45,8 @@ class TestPermissionClient(unittest.IsolatedAsyncioTestCase):
             jwt_audience="BlocksWeb",
             system_grpc_url="https://localhost:7073",
             system_grpc_ca_file=self.ca_file,
+            file_grpc_url="https://localhost:7074",
+            file_grpc_ca_file=self.ca_file,
             permission_timeout_seconds=3.0,
             database_url=SecretStr("postgresql+asyncpg://dev:secret@localhost:5432/knowledgehub"),
         )

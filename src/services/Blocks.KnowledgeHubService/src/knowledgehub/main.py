@@ -17,6 +17,9 @@ from knowledgehub.database import (
     create_session_factory,
     get_db_session,
 )
+from knowledgehub.document_routes import document_router
+from knowledgehub.documents import get_active_document_counts
+from knowledgehub.file_service import FileServiceClient, get_file_service_client
 from knowledgehub.identity import AuthenticatedUser, get_settings
 from knowledgehub.permission import (
     PermissionClient,
@@ -40,10 +43,12 @@ from knowledgehub.schemas import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    client = PermissionClient(settings)
-    app.state.permission_client = client
-
+    permission_client = PermissionClient(settings)
+    file_service_client = FileServiceClient(settings)
     engine = create_db_engine(settings.database_url.get_secret_value())
+
+    app.state.permission_client = permission_client
+    app.state.file_service_client = file_service_client
     app.state.db_engine = engine
     app.state.db_session_factory = create_session_factory(engine)
 
@@ -51,12 +56,16 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         try:
-            await client.close()
+            await permission_client.close()
         finally:
-            await engine.dispose()
-            app.state.permission_client = None
-            app.state.db_engine = None
-            app.state.db_session_factory = None
+            try:
+                await file_service_client.close()
+            finally:
+                await engine.dispose()
+                app.state.permission_client = None
+                app.state.file_service_client = None
+                app.state.db_engine = None
+                app.state.db_session_factory = None
 
 
 app = FastAPI(
@@ -79,6 +88,7 @@ async def alive():
 async def health(
     request: Request,
     permission_client: PermissionClient = Depends(get_permission_client),
+    file_service_client: FileServiceClient = Depends(get_file_service_client),
 ):
     rpc_ok = await permission_client.check_channel_health()
     if not rpc_ok:
@@ -86,6 +96,9 @@ async def health(
     engine = getattr(request.app.state, "db_engine", None)
     db_ok = await check_db_health(engine, timeout=2.0)
     if not db_ok:
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
+
+    if not await file_service_client.check_channel_health():
         return JSONResponse(status_code=503, content={"status": "unhealthy"})
 
     return {"status": "healthy"}
@@ -115,7 +128,15 @@ async def list_collections_endpoint(
     Lấy danh sách các bộ sưu tập còn hoạt động của actor, có phân trang.
     """
     items, total = await list_collections(session, user.actor_id, page_index, page_size)
-    data = [CollectionResponse.from_model(item) for item in items]
+    # data = [CollectionResponse.from_model(item) for item in items]
+    counts = await get_active_document_counts(
+        session,
+        user.actor_id,
+        [item.id for item in items],
+    )
+    data = [
+        CollectionResponse.from_model(item, counts.get(item.id, 0)) for item in items
+    ]
     list_resp = CollectionListResponse(
         Data=data,
         TotalRow=total,
@@ -142,8 +163,14 @@ async def get_collection_endpoint(
     item = await get_collection(session, col_id, user.actor_id)
     if item is None:
         return error_response(404, "Không tìm thấy tài nguyên")
-    return success_response(data=CollectionResponse.from_model(item).model_dump())
+    counts = await get_active_document_counts(session, user.actor_id, [item.id])
 
+    return success_response(
+        data=CollectionResponse.from_model(
+            item,
+            document_count=counts.get(item.id, 0),
+        ).model_dump()
+    )
 
 @api_router.post("/collections")
 async def create_collection_endpoint(
@@ -204,3 +231,4 @@ async def delete_collection_endpoint(
 
 
 app.include_router(api_router)
+app.include_router(document_router)

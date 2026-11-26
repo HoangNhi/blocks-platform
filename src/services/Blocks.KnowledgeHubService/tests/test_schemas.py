@@ -4,13 +4,18 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
-from knowledgehub.models import CollectionModel
+from knowledgehub.models import CollectionModel, DocumentModel
 from knowledgehub.schemas import (
+    MAX_DOCUMENT_BYTES,
     CollectionCreateRequest,
     CollectionListQuery,
     CollectionListResponse,
     CollectionResponse,
     CollectionUpdateRequest,
+    DocumentDeleteResponse,
+    DocumentPageResponse,
+    DocumentResponse,
+    DocumentUploadIntentRequest,
     validate_nonzero_uuid,
 )
 
@@ -196,3 +201,71 @@ class TestSchemas(unittest.TestCase):
         cols = {c.name for c in CollectionModel.__table__.columns}
         expected = {"id", "owner_id", "name", "description", "created_at", "updated_at", "deleted_at"}
         self.assertEqual(cols, expected)
+
+    def test_document_upload_intent_request_valid_types(self):
+        for ext in (".pdf", ".md", ".txt"):
+            req = DocumentUploadIntentRequest(
+                UploadSessionId=uuid4(),
+                OriginalFileName=f"guide{ext}",
+                DeclaredSizeBytes=1024,
+            )
+            self.assertEqual(req.OriginalFileName, f"guide{ext}")
+
+    def test_document_upload_intent_request_rejects_invalid_inputs(self):
+        valid_session = uuid4()
+        invalid_cases = [
+            {"UploadSessionId": "00000000-0000-0000-0000-000000000000", "OriginalFileName": "a.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "dir/a.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "dir\\a.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "C:a.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "../a.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "a\x00.pdf", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "a.docx", "DeclaredSizeBytes": 10},
+            {"UploadSessionId": valid_session, "OriginalFileName": "a.pdf", "DeclaredSizeBytes": 0},
+            {"UploadSessionId": valid_session, "OriginalFileName": "a.pdf", "DeclaredSizeBytes": MAX_DOCUMENT_BYTES + 1},
+            {"UploadSessionId": valid_session, "OriginalFileName": "a.pdf", "DeclaredSizeBytes": 10, "StorageKey": "x"},
+        ]
+        for payload in invalid_cases:
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValidationError):
+                    DocumentUploadIntentRequest(**payload)
+
+    def test_document_response_hides_internal_storage_fields(self):
+        now = datetime(2026, 11, 21, 10, 0, 0, tzinfo=timezone.utc)
+        doc_id = uuid4()
+        col_id = uuid4()
+
+        class FakeDoc:
+            id = doc_id
+            collection_id = col_id
+            title = "spec"
+            original_filename = "spec.pdf"
+            file_extension = ".pdf"
+            content_type = "application/pdf"
+            declared_size_bytes = 100
+            size_bytes = 100
+            file_id = uuid4()
+            storage_key = "KnowledgeHub/Documents/x/y.pdf"
+            source_sha256 = "a" * 64
+            registration_status = "REGISTERED"
+            created_at = now
+            updated_at = now
+            registered_at = now
+
+        resp = DocumentResponse.from_model(FakeDoc())
+        dumped = resp.model_dump()
+        self.assertEqual(dumped["Id"], str(doc_id))
+        self.assertEqual(dumped["OriginalFileName"], "spec.pdf")
+        for secret_key in ("file_id", "FileId", "storage_key", "StorageKey", "source_sha256", "SourceSha256"):
+            self.assertNotIn(secret_key, dumped)
+
+        page = DocumentPageResponse(Data=[resp], TotalRow=1, PageIndex=1, PageSize=20)
+        self.assertEqual(page.TotalRow, 1)
+        deleted = DocumentDeleteResponse(Id=str(doc_id), CleanupStatus="COMPLETED")
+        self.assertEqual(deleted.CleanupStatus, "COMPLETED")
+
+    def test_document_model_mapping(self):
+        self.assertEqual(DocumentModel.__tablename__, "documents")
+        self.assertEqual(DocumentModel.__table_args__, {"schema": "public"})
+        cols = {c.name for c in DocumentModel.__table__.columns}
+        self.assertTrue({"id", "collection_id", "upload_session_id", "file_id", "storage_key", "source_sha256", "registration_status", "cleanup_status"}.issubset(cols))

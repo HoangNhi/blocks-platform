@@ -6,11 +6,14 @@ var systemService = builder
     .AddProject<Projects.Blocks_SystemService>("SystemService")
     .WithReference(fileService);
 
-fileService.WithReference(systemService).WithEnvironment("GrpcClients__SystemService", systemService.GetEndpoint("https"));
+fileService.WithReference(systemService);
+fileService.WithEnvironment("GrpcClients__SystemService", systemService.GetEndpoint("https"));
 
 var catalogService = builder.AddProject<Projects.Blocks_CatalogService>("CatalogService")
     .WithReference(systemService)
     .WithReference(fileService);
+
+var knowledgeHubGrpcCaFile = builder.AddParameter("knowledgehub-grpc-ca-file");
 
 var knowledgeHub = builder.AddUvicornApp(
         "knowledgehubservice",
@@ -21,8 +24,11 @@ var knowledgeHub = builder.AddUvicornApp(
     .WithEnvironment("KNOWLEDGEHUB_JWT_ISSUER", builder.AddParameter("knowledgehub-jwt-issuer"))
     .WithEnvironment("KNOWLEDGEHUB_JWT_AUDIENCE", builder.AddParameter("knowledgehub-jwt-audience"))
     .WithEnvironment("KNOWLEDGEHUB_SYSTEM_GRPC_URL", systemService.GetEndpoint("https"))
-    .WithEnvironment("KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE", builder.AddParameter("knowledgehub-grpc-ca-file"))
-    .WithEnvironment("KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS", "3.0");
+    .WithEnvironment("KNOWLEDGEHUB_SYSTEM_GRPC_CA_FILE", knowledgeHubGrpcCaFile)
+    .WithEnvironment("KNOWLEDGEHUB_PERMISSION_TIMEOUT_SECONDS", "3.0")
+    .WithReference(fileService)
+    .WithEnvironment("KNOWLEDGEHUB_FILE_GRPC_URL", fileService.GetEndpoint("https"))
+    .WithEnvironment("KNOWLEDGEHUB_FILE_GRPC_CA_FILE", knowledgeHubGrpcCaFile);
 
 var gateway = builder.AddProject<Projects.Blocks_ApiGateway>("ApiGateway")
     .WithReference(systemService)

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -90,14 +91,18 @@ class CollectionResponse(BaseModel):
     DocumentCount: int = 0
 
     @classmethod
-    def from_model(cls, m: Any) -> "CollectionResponse":
+    def from_model(cls, m: Any, document_count: int = 0) -> "CollectionResponse":
         return cls(
             Id=str(m.id),
             Name=m.name,
             Description=m.description,
-            CreatedAt=m.created_at.isoformat() if hasattr(m.created_at, "isoformat") else str(m.created_at),
-            UpdatedAt=m.updated_at.isoformat() if hasattr(m.updated_at, "isoformat") else str(m.updated_at),
-            DocumentCount=0,
+            CreatedAt=m.created_at.isoformat()
+            if hasattr(m.created_at, "isoformat")
+            else str(m.created_at),
+            UpdatedAt=m.updated_at.isoformat()
+            if hasattr(m.updated_at, "isoformat")
+            else str(m.updated_at),
+            DocumentCount=document_count,
         )
 
 
@@ -111,3 +116,108 @@ class CollectionListResponse(BaseModel):
 class CollectionListQuery(BaseModel):
     page_index: int = Field(default=1, ge=1, description="Số trang")
     page_size: int = Field(default=50, ge=1, le=100, description="Kích thước trang")
+
+
+MAX_DOCUMENT_BYTES = 52_428_800  # 50MB
+DOCUMENT_MIME_TYPES = {
+    ".pdf": "application/pdf",
+    ".md": "text/markdown",
+    ".txt": "text/plain",
+}
+DOCUMENT_REGISTRATION_STATUSES = {
+    "AWAITING_UPLOAD",
+    "REGISTERING",
+    "REGISTRATION_FAILED",
+    "REGISTERED",
+}
+
+
+class DocumentUploadIntentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    UploadSessionId: UUID
+    OriginalFileName: str
+    DeclaredSizeBytes: int = Field(gt=0, le=MAX_DOCUMENT_BYTES)
+
+    @field_validator("UploadSessionId")
+    @classmethod
+    def validate_session_id(cls, v: str) -> UUID:
+        return validate_nonzero_uuid(v)
+
+    @field_validator("OriginalFileName")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        name = v.strip()
+        if not name or len(name) > 255:
+            raise ValueError("Tên tệp phải có từ 1 đến 255 ký tự")
+
+        if (
+            "/" in name
+            or chr(92) in name
+            or ":" in name
+            or ".." in name
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in name)
+        ):
+            raise ValueError("Tên tệp không được chứa đường dẫn hoặc ký tự điều khiển")
+
+        extension = Path(name).suffix.lower()
+        if extension not in DOCUMENT_MIME_TYPES:
+            raise ValueError("Chỉ chấp nhận PDF, Markdown và TXT")
+
+        if Path(name).name != name:
+            raise ValueError("Tên tệp phải là basename")
+
+        return name
+
+
+class DocumentUploadIntentResponse(BaseModel):
+    DocumentId: str
+    UploadSessionId: str
+    RegistrationStatus: str
+
+
+class DocumentResponse(BaseModel):
+    Id: str
+    CollectionId: str
+    Title: str
+    OriginalFileName: str
+    FileExtension: str
+    ContentType: str
+    SizeBytes: int
+    RegistrationStatus: str
+    CreatedAt: str
+    UpdatedAt: str
+    RegisteredAt: str | None = None
+
+    @classmethod
+    def from_model(cls, document: Any) -> "DocumentResponse":
+        size = document.size_bytes or document.declared_size_bytes
+        return cls(
+            Id=str(document.id),
+            CollectionId=str(document.collection_id),
+            Title=document.title,
+            OriginalFileName=document.original_filename,
+            FileExtension=document.file_extension,
+            ContentType=document.content_type,
+            SizeBytes=int(size),
+            RegistrationStatus=document.registration_status,
+            CreatedAt=document.created_at.isoformat(),
+            UpdatedAt=document.updated_at.isoformat(),
+            RegisteredAt=(
+                document.registered_at.isoformat()
+                if document.registered_at is not None
+                else None
+            ),
+        )
+
+
+class DocumentPageResponse(BaseModel):
+    Data: list[DocumentResponse]
+    TotalRow: int
+    PageIndex: int
+    PageSize: int
+
+
+class DocumentDeleteResponse(BaseModel):
+    Id: str
+    CleanupStatus: str
